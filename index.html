@@ -1,11 +1,8 @@
-Here’s the full updated index with guaranteed line breaks on Enter and respecting indents inside your editable boxes:
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Editable Boxes with Line Breaks + Drag + Floating Go to Center</title>
+  <title>Editable Boxes Drag Anywhere + Line Breaks + Floating Go to Center</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -15,7 +12,7 @@ Here’s the full updated index with guaranteed line breaks on Enter and respect
     #viewport {
       width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
       overflow: hidden;
-      padding-bottom: 0; /* no menu bar padding now */
+      padding-bottom: 0;
       box-sizing: border-box;
     }
     #canvas {
@@ -43,7 +40,7 @@ Here’s the full updated index with guaranteed line breaks on Enter and respect
       font-family: monospace, monospace;
       user-select: text;
       cursor: text;
-      /* allow Enter to create line breaks */
+      /* We disable contenteditable while dragging, enabled again after */
     }
     .box > span.delete-btn {
       position: absolute;
@@ -53,6 +50,7 @@ Here’s the full updated index with guaranteed line breaks on Enter and respect
       font-weight: bold;
       user-select: none;
       pointer-events: auto;
+      z-index: 10;
     }
 
     /* Floating "Go to Center" button */
@@ -184,13 +182,6 @@ Here’s the full updated index with guaranteed line breaks on Enter and respect
       content.style.userSelect = 'text';
       content.style.cursor = 'text';
 
-      // Ensure Enter key inserts line breaks normally (default behavior)
-      content.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
-          // do nothing special, allow default line break
-        }
-      });
-
       const delBtn = document.createElement('span');
       delBtn.className = 'delete-btn';
       delBtn.textContent = '×';
@@ -202,15 +193,16 @@ Here’s the full updated index with guaranteed line breaks on Enter and respect
       let offsetX = 0;
       let offsetY = 0;
 
-      // Only start drag if pointerdown is NOT inside contenteditable (text area)
+      // Start drag on pointerdown anywhere inside box (including editable)
       box.addEventListener('pointerdown', e => {
         if (e.target === delBtn) return; // ignore delete button
-        if (e.target === content) return;  // clicking inside text => no drag, editing enabled
-        e.preventDefault(); // prevent text selection / cursor placement on drag start
+
+        e.preventDefault(); // prevent text cursor & selection during drag start
         dragging = true;
         offsetX = e.clientX - box.getBoundingClientRect().left;
         offsetY = e.clientY - box.getBoundingClientRect().top;
-        content.blur(); // blur to stop editing during drag
+        // disable editing while dragging
+        content.contentEditable = false;
         box.setPointerCapture(e.pointerId);
       });
 
@@ -224,8 +216,11 @@ Here’s the full updated index with guaranteed line breaks on Enter and respect
       });
 
       box.addEventListener('pointerup', e => {
+        if (!dragging) return;
         dragging = false;
         box.releasePointerCapture(e.pointerId);
+        // re-enable editing when drag ends
+        content.contentEditable = true;
       });
 
       delBtn.addEventListener('click', e => {
@@ -284,10 +279,3 @@ Here’s the full updated index with guaranteed line breaks on Enter and respect
   </script>
 </body>
 </html>
-```
-
----
-
-Now pressing Enter inside a box will create line breaks, and indentation spaces or tabs will be preserved thanks to `white-space: pre-wrap`.
-
-Try it out and lemme know!
