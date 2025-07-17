@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Infinite Canvas with Indent-Respecting Boxes</title>
+  <title>Infinite Canvas Fixed: Indents, Drag & Delete</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -11,7 +11,6 @@
       overflow: hidden;
       touch-action: none;
       font-family: monospace, monospace;
-      /* monospace font helps see indents clearly */
     }
     #viewport {
       width: 100%;
@@ -36,7 +35,7 @@
       touch-action: none;
       min-width: 80px;
       min-height: 24px;
-      white-space: pre-wrap; /* preserve line breaks and spaces */
+      white-space: pre-wrap;
       overflow-wrap: break-word;
       font-family: monospace, monospace;
     }
@@ -187,10 +186,6 @@
       });
 
       content.addEventListener('input', () => {
-        // Replace tabs with 4 spaces and preserve leading spaces with &nbsp;
-        content.innerHTML = content.innerHTML
-          .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
-          .replace(/^( +)/gm, (match) => match.replace(/ /g, '&nbsp;'));
         saveBox();
       });
 
@@ -201,17 +196,15 @@
       });
 
       function saveBox() {
-        // Save as plain text with tabs restored for storage
-        let rawText = content.textContent.replace(/\u00A0/g, ' '); // convert &nbsp; to space
-        dbData = {
+        const data = {
           x: parseFloat(box.style.left),
           y: parseFloat(box.style.top),
-          text: rawText
+          text: content.textContent
         };
         if (id) {
-          boxesCollection.doc(id).set(dbData);
+          boxesCollection.doc(id).set(data);
         } else {
-          boxesCollection.add(dbData).then(docRef => {
+          boxesCollection.add(data).then(docRef => {
             id = docRef.id;
           });
         }
