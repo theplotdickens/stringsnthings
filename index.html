@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Infinite Canvas with Firebase Save</title>
+  <title>Infinite Canvas with Firebase Save & Delete</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -51,7 +51,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 
   <script>
-    // Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyCpp42OH-1mTZxu5iq44dmMQc8ahQdvnL0",
       authDomain: "stringsnthings-65aa0.firebaseapp.com",
@@ -61,7 +60,6 @@
       appId: "1:35780192306:web:80aedf9ba9e2ffac0cf42b"
     };
 
-    // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
@@ -70,7 +68,6 @@
     let scale = 1, panX = 0, panY = 0;
     let isPanning = false, startX, startY;
 
-    // Pan & zoom handlers
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
@@ -110,7 +107,6 @@
       canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     }
 
-    // Double tap or double click to add box
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
       const now = Date.now();
@@ -122,10 +118,8 @@
       lastTap = now;
     });
 
-    // Boxes stored in Firestore collection 'boxes'
     const boxesCollection = db.collection('boxes');
 
-    // Add box with optional id and text
     function addBox(x, y, text = 'Text box', id = null) {
       const box = document.createElement('div');
       box.className = 'box';
@@ -135,26 +129,30 @@
       box.style.top = `${y}px`;
       box.textContent = text;
 
+      // Delete button
+      const delBtn = document.createElement('span');
+      delBtn.textContent = '×';
+      delBtn.style.cssText = `
+        position: absolute;
+        top: 2px;
+        right: 4px;
+        cursor: pointer;
+        color: red;
+        font-weight: bold;
+        user-select: none;
+      `;
+      box.appendChild(delBtn);
+
+      delBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        box.remove();
+        if (id) boxesCollection.doc(id).delete();
+      });
+
       let dragging = false, offsetX = 0, offsetY = 0;
 
-      // Save box data (create or update)
-      function saveBox() {
-        const data = {
-          x: parseFloat(box.style.left),
-          y: parseFloat(box.style.top),
-          text: box.textContent
-        };
-        if (id) {
-          boxesCollection.doc(id).set(data);
-        } else {
-          boxesCollection.add(data).then(docRef => {
-            id = docRef.id;
-          });
-        }
-      }
-
       box.addEventListener('pointerdown', e => {
-        if (e.target !== document.activeElement) {
+        if (e.target !== document.activeElement && e.target !== delBtn) {
           dragging = true;
           offsetX = e.offsetX;
           offsetY = e.offsetY;
@@ -180,15 +178,28 @@
         saveBox();
       });
 
+      function saveBox() {
+        const data = {
+          x: parseFloat(box.style.left),
+          y: parseFloat(box.style.top),
+          text: box.textContent.replace('×', '').trim()
+        };
+        if (id) {
+          boxesCollection.doc(id).set(data);
+        } else {
+          boxesCollection.add(data).then(docRef => {
+            id = docRef.id;
+          });
+        }
+      }
+
       canvas.appendChild(box);
 
-      // Save new box on creation
       if (!id) saveBox();
 
       return box;
     }
 
-    // Load all boxes from Firestore on startup
     function loadBoxes() {
       boxesCollection.get().then(snapshot => {
         snapshot.forEach(doc => {
