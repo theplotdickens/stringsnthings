@@ -58,23 +58,20 @@
       pointer-events: auto;
       z-index: 10;
     }
-    /* Resize handles */
+    /* Invisible resize handles */
     .resize-handle {
-      width: 12px;
-      height: 12px;
-      background: rgba(0,0,0,0.3);
+      width: 16px;
+      height: 16px;
+      background: transparent;
       position: absolute;
       z-index: 20;
       touch-action: none;
-      border-radius: 2px;
+      /* cursor stays visible */
     }
-    .resize-handle:hover {
-      background: rgba(0,0,0,0.6);
-    }
-    .resize-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
-    .resize-handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
-    .resize-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
-    .resize-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+    .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
+    .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
+    .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
+    .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
 
     /* Floating buttons container */
     #buttonContainer {
