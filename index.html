@@ -30,6 +30,8 @@
       user-select: text;
       touch-action: none;
       cursor: text;
+      box-sizing: border-box;
+      overflow-wrap: break-word;
     }
     .box > div[contenteditable="true"] {
       outline: none;
@@ -40,6 +42,11 @@
       font-family: monospace, monospace;
       user-select: text;
       cursor: text;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      font-size: 16px;
+      line-height: 1.2;
     }
     .box > span.delete-btn {
       position: absolute;
@@ -51,6 +58,23 @@
       pointer-events: auto;
       z-index: 10;
     }
+    /* Resize handles */
+    .resize-handle {
+      width: 12px;
+      height: 12px;
+      background: rgba(0,0,0,0.3);
+      position: absolute;
+      z-index: 20;
+      touch-action: none;
+      border-radius: 2px;
+    }
+    .resize-handle:hover {
+      background: rgba(0,0,0,0.6);
+    }
+    .resize-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
+    .resize-handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+    .resize-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+    .resize-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
 
     /* Floating buttons container */
     #buttonContainer {
@@ -62,7 +86,6 @@
       gap: 12px;
       z-index: 1000;
     }
-
     .floatingBtn {
       background: rgba(100, 100, 100, 0.5);
       color: #eee;
@@ -186,6 +209,8 @@
       box.className = 'box';
       box.style.left = `${x}px`;
       box.style.top = `${y}px`;
+      box.style.width = '150px';
+      box.style.height = '60px';
       box.spellcheck = false;
 
       const content = document.createElement('div');
@@ -199,6 +224,9 @@
       content.textContent = text;
       content.style.userSelect = 'text';
       content.style.cursor = 'text';
+      content.style.fontSize = '16px';
+      content.style.height = '100%';
+      content.style.width = '100%';
 
       content.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
@@ -214,13 +242,26 @@
       box.appendChild(content);
       box.appendChild(delBtn);
 
+      // Add resize handles
+      const handles = {};
+      ['nw', 'ne', 'sw', 'se'].forEach(pos => {
+        const h = document.createElement('div');
+        h.className = 'resize-handle ' + pos;
+        box.appendChild(h);
+        handles[pos] = h;
+      });
+
       let dragging = false;
+      let resizing = false;
       let offsetX = 0;
       let offsetY = 0;
       let moved = false;
+      let resizeDir = null;
+      let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
 
       box.addEventListener('pointerdown', e => {
         if (e.target === delBtn) return;
+        if (e.target.classList.contains('resize-handle')) return; // handled separately
         moved = false;
         offsetX = e.clientX - box.getBoundingClientRect().left;
         offsetY = e.clientY - box.getBoundingClientRect().top;
@@ -228,7 +269,7 @@
       });
 
       box.addEventListener('pointermove', e => {
-        if (!box.hasPointerCapture(e.pointerId)) return;
+        if (!box.hasPointerCapture(e.pointerId) || resizing) return;
         const dx = e.clientX - (offsetX + box.getBoundingClientRect().left);
         const dy = e.clientY - (offsetY + box.getBoundingClientRect().top);
         if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
@@ -260,11 +301,74 @@
         }
       });
 
+      // Resize handlers
+      for (const pos in handles) {
+        const handle = handles[pos];
+        handle.addEventListener('pointerdown', e => {
+          e.stopPropagation();
+          resizing = true;
+          resizeDir = pos;
+          startWidth = box.offsetWidth;
+          startHeight = box.offsetHeight;
+          startXpos = box.offsetLeft;
+          startYpos = box.offsetTop;
+          startClientX = e.clientX;
+          startClientY = e.clientY;
+          handle.setPointerCapture(e.pointerId);
+        });
+
+        handle.addEventListener('pointermove', e => {
+          if (!resizing || !handle.hasPointerCapture(e.pointerId)) return;
+          e.preventDefault();
+
+          const dx = (e.clientX - startClientX) / scale;
+          const dy = (e.clientY - startClientY) / scale;
+
+          let newWidth = startWidth;
+          let newHeight = startHeight;
+          let newLeft = startXpos;
+          let newTop = startYpos;
+
+          if (resizeDir.includes('e')) {
+            newWidth = Math.max(80, startWidth + dx);
+          }
+          if (resizeDir.includes('w')) {
+            newWidth = Math.max(80, startWidth - dx);
+            newLeft = startXpos + dx;
+            if (newWidth === 80) newLeft = startXpos + (startWidth - 80);
+          }
+          if (resizeDir.includes('s')) {
+            newHeight = Math.max(24, startHeight + dy);
+          }
+          if (resizeDir.includes('n')) {
+            newHeight = Math.max(24, startHeight - dy);
+            newTop = startYpos + dy;
+            if (newHeight === 24) newTop = startYpos + (startHeight - 24);
+          }
+
+          box.style.width = `${newWidth}px`;
+          box.style.height = `${newHeight}px`;
+          box.style.left = `${newLeft}px`;
+          box.style.top = `${newTop}px`;
+
+          // Adjust font size based on height (between 12 and 32 px)
+          const fontSize = Math.min(32, Math.max(12, newHeight / 3.5));
+          content.style.fontSize = fontSize + 'px';
+
+          saveBox();
+        });
+
+        handle.addEventListener('pointerup', e => {
+          if (!handle.hasPointerCapture(e.pointerId)) return;
+          handle.releasePointerCapture(e.pointerId);
+          resizing = false;
+        });
+      }
+
       delBtn.addEventListener('click', e => {
         e.stopPropagation();
-        // Push to undo stack
-        undoStack.push({ x: parseFloat(box.style.left), y: parseFloat(box.style.top), text: content.textContent, id: id });
-        if (undoStack.length > 5) undoStack.shift(); // keep max 5
+        undoStack.push({ x: parseFloat(box.style.left), y: parseFloat(box.style.top), text: content.textContent, width: box.offsetWidth, height: box.offsetHeight, fontSize: content.style.fontSize, id: id });
+        if (undoStack.length > 5) undoStack.shift();
         undoBtn.disabled = false;
         box.remove();
         if (id) boxesCollection.doc(id).delete();
@@ -278,7 +382,10 @@
         const data = {
           x: parseFloat(box.style.left),
           y: parseFloat(box.style.top),
-          text: content.textContent
+          width: box.offsetWidth,
+          height: box.offsetHeight,
+          text: content.textContent,
+          fontSize: content.style.fontSize || '16px'
         };
         if (id) {
           boxesCollection.doc(id).set(data);
@@ -299,7 +406,11 @@
     undoBtn.addEventListener('click', () => {
       if (undoStack.length === 0) return;
       const lastBox = undoStack.pop();
-      addBox(lastBox.x, lastBox.y, lastBox.text);
+      const box = addBox(lastBox.x, lastBox.y, lastBox.text);
+      box.style.width = lastBox.width + 'px';
+      box.style.height = lastBox.height + 'px';
+      box.querySelector('div[contenteditable]').style.fontSize = lastBox.fontSize || '16px';
+
       if (undoStack.length === 0) undoBtn.disabled = true;
     });
 
@@ -318,7 +429,10 @@
       boxesCollection.get().then(snapshot => {
         snapshot.forEach(doc => {
           const data = doc.data();
-          addBox(data.x, data.y, data.text, doc.id);
+          const box = addBox(data.x, data.y, data.text, doc.id);
+          if (data.width) box.style.width = data.width + 'px';
+          if (data.height) box.style.height = data.height + 'px';
+          if (data.fontSize) box.querySelector('div[contenteditable]').style.fontSize = data.fontSize;
         });
       });
     }
