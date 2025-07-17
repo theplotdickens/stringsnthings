@@ -108,13 +108,12 @@
     let scale = 1, panX = 0, panY = 0;
     let isPanning = false, startX, startY;
 
-    // Panning viewport code
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
     }
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn) return; // no pan if interacting with box or button
+      if (e.target.closest('.box') || e.target === goCenterBtn) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -147,7 +146,6 @@
       canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     }
 
-    // Double click / tap to add new box
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
       if (e.target === goCenterBtn) return;
@@ -181,6 +179,14 @@
       content.style.userSelect = 'text';
       content.style.cursor = 'text';
 
+      // THIS ADDED BLOCK MAKES ENTER INSERT A LINE BREAK
+      content.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          document.execCommand('insertHTML', false, '\n');
+        }
+      });
+
       const delBtn = document.createElement('span');
       delBtn.className = 'delete-btn';
       delBtn.textContent = '×';
@@ -193,9 +199,8 @@
       let offsetY = 0;
       let moved = false;
 
-      // Dragging starts if pointer moves enough distance
       box.addEventListener('pointerdown', e => {
-        if (e.target === delBtn) return; // ignore delete button
+        if (e.target === delBtn) return;
         moved = false;
         offsetX = e.clientX - box.getBoundingClientRect().left;
         offsetY = e.clientY - box.getBoundingClientRect().top;
@@ -208,7 +213,7 @@
         const dy = e.clientY - (offsetY + box.getBoundingClientRect().top);
         if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
           dragging = true;
-          content.blur(); // stop editing when drag starts
+          content.blur();
           box.style.cursor = 'grabbing';
           box.style.userSelect = 'none';
         }
@@ -231,7 +236,6 @@
           box.style.userSelect = 'text';
           content.focus();
         } else if (!moved) {
-          // Just a click: focus editable content
           content.focus();
         }
       });
@@ -268,16 +272,6 @@
       return box;
     }
 
-    function loadBoxes() {
-      boxesCollection.get().then(snapshot => {
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          addBox(data.x, data.y, data.text, doc.id);
-        });
-      });
-    }
-
-    // Go to Center button
     const goCenterBtn = document.getElementById('goCenterBtn');
     goCenterBtn.addEventListener('click', () => {
       panX = 0;
@@ -289,6 +283,15 @@
       updateTransform();
       loadBoxes();
     });
+
+    function loadBoxes() {
+      boxesCollection.get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          addBox(data.x, data.y, data.text, doc.id);
+        });
+      });
+    }
   </script>
 </body>
 </html>
