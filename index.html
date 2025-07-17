@@ -2,41 +2,31 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Infinite Canvas Drag Anywhere + Delete Fix</title>
+  <title>Instant Drag Anywhere + Delete Fix</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
-      margin: 0;
-      height: 100%;
-      overflow: hidden;
+      margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
       touch-action: none;
-      font-family: monospace, monospace;
     }
     #viewport {
-      width: 100%;
-      height: 100%;
+      width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
       overflow: hidden;
-      position: relative;
-      background: #f0f0f0;
-      cursor: grab;
     }
     #canvas {
-      position: absolute;
-      top: 0; left: 0;
-      transform-origin: 0 0;
+      position: absolute; top: 0; left: 0; transform-origin: 0 0;
     }
     .box {
       position: absolute;
       background: white;
       border: 1px solid black;
       padding: 4px 8px;
-      user-select: none; /* prevent selection during drag */
-      touch-action: none;
       min-width: 80px;
       min-height: 24px;
       white-space: pre-wrap;
-      overflow-wrap: break-word;
       font-family: monospace, monospace;
+      user-select: none; /* disable text selection on container */
+      touch-action: none;
       cursor: grab;
     }
     .box > div[contenteditable="true"] {
@@ -45,13 +35,12 @@
       min-width: 80px;
       min-height: 24px;
       font-family: monospace, monospace;
-      user-select: text; /* allow text selection */
+      user-select: text; /* allow text selection in text */
       cursor: text;
     }
     .box > span.delete-btn {
       position: absolute;
-      top: 2px;
-      right: 4px;
+      top: 2px; right: 4px;
       cursor: pointer;
       color: red;
       font-weight: bold;
@@ -84,22 +73,23 @@
 
     const canvas = document.getElementById('canvas');
     const viewport = document.getElementById('viewport');
+
     let scale = 1, panX = 0, panY = 0;
     let isPanning = false, startX, startY;
 
+    // Panning viewport code
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
     }
-
     viewport.addEventListener('pointerdown', e => {
+      if (e.target.closest('.box')) return; // don't pan if pointer down inside a box
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
       startY = coords.y;
       viewport.setPointerCapture(e.pointerId);
     });
-
     viewport.addEventListener('pointermove', e => {
       if (!isPanning) return;
       const coords = getClientCoords(e);
@@ -109,9 +99,9 @@
       startY = coords.y;
       updateTransform();
     });
-
-    viewport.addEventListener('pointerup', () => {
+    viewport.addEventListener('pointerup', e => {
       isPanning = false;
+      viewport.releasePointerCapture(e.pointerId);
     });
 
     viewport.addEventListener('wheel', e => {
@@ -126,10 +116,11 @@
       canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     }
 
+    // Double click / tap to add new box
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
       const now = Date.now();
-      if (now - lastTap < 400) {
+      if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
         const y = (e.clientY - panY) / scale;
         addBox(x, y);
@@ -146,7 +137,6 @@
       box.style.top = `${y}px`;
       box.spellcheck = false;
 
-      // Editable content div
       const content = document.createElement('div');
       content.contentEditable = true;
       content.style.minWidth = '80px';
@@ -158,7 +148,6 @@
       content.style.userSelect = 'text';
       content.style.cursor = 'text';
 
-      // Delete button
       const delBtn = document.createElement('span');
       delBtn.className = 'delete-btn';
       delBtn.textContent = '×';
@@ -166,18 +155,18 @@
       box.appendChild(content);
       box.appendChild(delBtn);
 
-      let dragging = false, offsetX = 0, offsetY = 0;
+      let dragging = false;
+      let offsetX = 0;
+      let offsetY = 0;
 
-      box.style.userSelect = 'none'; // prevent selection on the box container
-
-      // Drag start on pointerdown anywhere except delete button
+      // Dragging from anywhere inside the box, including contenteditable
       box.addEventListener('pointerdown', e => {
-        if (e.target === delBtn) return;
-        e.preventDefault(); // prevent text cursor change so drag works
+        if (e.target === delBtn) return; // ignore delete button
+        e.preventDefault(); // prevent placing cursor / text selection start
         dragging = true;
         offsetX = e.clientX - box.getBoundingClientRect().left;
         offsetY = e.clientY - box.getBoundingClientRect().top;
-        content.blur(); // blur to end editing on drag start
+        content.blur(); // blur to stop editing during drag
         box.setPointerCapture(e.pointerId);
       });
 
