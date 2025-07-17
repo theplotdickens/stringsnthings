@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Infinite Canvas</title>
+  <title>Infinite Canvas with Firebase Save</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -33,6 +33,10 @@
       cursor: move;
       user-select: none;
       touch-action: none;
+      min-width: 80px;
+      min-height: 24px;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
     }
   </style>
 </head>
@@ -41,13 +45,32 @@
     <div id="canvas"></div>
   </div>
 
+  <!-- Firebase App (the core Firebase SDK) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <!-- Firebase Firestore -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+
   <script>
+    // Your Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyCpp42OH-1mTZxu5iq44dmMQc8ahQdvnL0",
+      authDomain: "stringsnthings-65aa0.firebaseapp.com",
+      projectId: "stringsnthings-65aa0",
+      storageBucket: "stringsnthings-65aa0.firebasestorage.app",
+      messagingSenderId: "35780192306",
+      appId: "1:35780192306:web:80aedf9ba9e2ffac0cf42b"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
     const canvas = document.getElementById('canvas');
     const viewport = document.getElementById('viewport');
     let scale = 1, panX = 0, panY = 0;
     let isPanning = false, startX, startY;
 
-    // Touch and mouse panning
+    // Pan & zoom handlers
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
@@ -75,7 +98,6 @@
       isPanning = false;
     });
 
-    // Zooming
     viewport.addEventListener('wheel', e => {
       e.preventDefault();
       const zoomFactor = 1.1;
@@ -88,7 +110,7 @@
       canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     }
 
-    // Double tap or double click to add a box
+    // Double tap or double click to add box
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
       const now = Date.now();
@@ -100,37 +122,86 @@
       lastTap = now;
     });
 
-    function addBox(x, y) {
+    // Boxes stored in Firestore collection 'boxes'
+    const boxesCollection = db.collection('boxes');
+
+    // Add box with optional id and text
+    function addBox(x, y, text = 'Text box', id = null) {
       const box = document.createElement('div');
       box.className = 'box';
-      box.textContent = 'Text box';
+      box.contentEditable = true;
+      box.spellcheck = false;
       box.style.left = `${x}px`;
       box.style.top = `${y}px`;
+      box.textContent = text;
 
       let dragging = false, offsetX = 0, offsetY = 0;
 
+      // Save box data (create or update)
+      function saveBox() {
+        const data = {
+          x: parseFloat(box.style.left),
+          y: parseFloat(box.style.top),
+          text: box.textContent
+        };
+        if (id) {
+          boxesCollection.doc(id).set(data);
+        } else {
+          boxesCollection.add(data).then(docRef => {
+            id = docRef.id;
+          });
+        }
+      }
+
       box.addEventListener('pointerdown', e => {
-        dragging = true;
-        offsetX = e.offsetX;
-        offsetY = e.offsetY;
-        e.stopPropagation();
-        box.setPointerCapture(e.pointerId);
+        if (e.target !== document.activeElement) {
+          dragging = true;
+          offsetX = e.offsetX;
+          offsetY = e.offsetY;
+          e.stopPropagation();
+          box.setPointerCapture(e.pointerId);
+        }
       });
 
       box.addEventListener('pointermove', e => {
         if (!dragging) return;
-        const x = (e.clientX - panX) / scale - offsetX;
-        const y = (e.clientY - panY) / scale - offsetY;
-        box.style.left = `${x}px`;
-        box.style.top = `${y}px`;
+        const newX = (e.clientX - panX) / scale - offsetX;
+        const newY = (e.clientY - panY) / scale - offsetY;
+        box.style.left = `${newX}px`;
+        box.style.top = `${newY}px`;
+        saveBox();
       });
 
       box.addEventListener('pointerup', () => {
         dragging = false;
       });
 
+      box.addEventListener('input', () => {
+        saveBox();
+      });
+
       canvas.appendChild(box);
+
+      // Save new box on creation
+      if (!id) saveBox();
+
+      return box;
     }
+
+    // Load all boxes from Firestore on startup
+    function loadBoxes() {
+      boxesCollection.get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          addBox(data.x, data.y, data.text, doc.id);
+        });
+      });
+    }
+
+    window.addEventListener('load', () => {
+      updateTransform();
+      loadBoxes();
+    });
   </script>
 </body>
 </html>
