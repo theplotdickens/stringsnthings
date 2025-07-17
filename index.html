@@ -12,7 +12,6 @@
     #viewport {
       width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
       overflow: hidden;
-      padding-bottom: 0;
       box-sizing: border-box;
     }
     #canvas {
@@ -22,17 +21,16 @@
       position: absolute;
       background: white;
       border: 1px solid black;
-      padding: 8px 12px; /* more padding for nicer text */
+      padding: 8px; /* padding for text */
       min-width: 80px;
-      min-height: 40px; /* taller min height */
+      min-height: 40px;
       white-space: pre-wrap;
       font-family: monospace, monospace;
       user-select: text;
       touch-action: none;
       cursor: text;
       box-sizing: border-box;
-      overflow-wrap: break-word;
-      word-break: break-word;
+      overflow: hidden; /* prevent scrollbars */
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
@@ -41,18 +39,15 @@
       outline: none;
       white-space: pre-wrap;
       word-break: break-word;
-      min-width: 80px;
-      min-height: 24px;
       font-family: monospace, monospace;
       user-select: text;
       cursor: text;
       width: 100%;
       height: 100%;
       box-sizing: border-box;
-      font-size: 16px;
-      line-height: 1.3; /* consistent line height */
-      overflow-wrap: break-word;
-      overflow-y: auto;
+      padding: 0;
+      margin: 0;
+      overflow: visible;
     }
     .box > span.delete-btn {
       position: absolute;
@@ -205,13 +200,39 @@
 
     const boxesCollection = db.collection('boxes');
 
-    function addBox(x, y, text = 'Text box', id = null) {
+    function adjustFontSizeToFit(contentDiv, box) {
+      const padding = 8; // padding in px inside box
+      const maxFontSize = 100;
+      const minFontSize = 8;
+
+      // Reset font size to max to start measurement
+      contentDiv.style.fontSize = maxFontSize + 'px';
+
+      const boxWidth = box.clientWidth - padding * 2;
+      const boxHeight = box.clientHeight - padding * 2;
+
+      let fontSize = maxFontSize;
+
+      while (fontSize >= minFontSize) {
+        contentDiv.style.fontSize = fontSize + 'px';
+        // Measure scroll sizes to detect overflow
+        if (contentDiv.scrollWidth <= boxWidth && contentDiv.scrollHeight <= boxHeight) {
+          break;
+        }
+        fontSize -= 1;
+      }
+      // Keep font size at least minFontSize
+      if (fontSize < minFontSize) fontSize = minFontSize;
+      contentDiv.style.fontSize = fontSize + 'px';
+    }
+
+    function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px') {
       const box = document.createElement('div');
       box.className = 'box';
       box.style.left = `${x}px`;
       box.style.top = `${y}px`;
-      box.style.width = '180px';
-      box.style.height = '80px';
+      box.style.width = width + 'px';
+      box.style.height = height + 'px';
       box.spellcheck = false;
 
       const content = document.createElement('div');
@@ -225,12 +246,17 @@
       content.textContent = text;
       content.style.userSelect = 'text';
       content.style.cursor = 'text';
-      content.style.fontSize = '16px';
-      content.style.lineHeight = '1.3';
       content.style.height = '100%';
       content.style.width = '100%';
       content.style.boxSizing = 'border-box';
-      content.style.overflowY = 'auto';
+      content.style.padding = '0';
+      content.style.margin = '0';
+      content.style.overflow = 'visible';
+      content.style.fontSize = fontSize;
+      content.style.lineHeight = '1.2';
+
+      // Initial font size adjust
+      adjustFontSizeToFit(content, box);
 
       content.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
@@ -273,8 +299,8 @@
 
       box.addEventListener('pointermove', e => {
         if (!box.hasPointerCapture(e.pointerId) || resizing) return;
-        const dx = e.clientX - (offsetX + box.getBoundingClientRect().left);
-        const dy = e.clientY - (offsetY + box.getBoundingClientRect().top);
+        const dx = e.clientX - offsetX - box.getBoundingClientRect().left;
+        const dy = e.clientY - offsetY - box.getBoundingClientRect().top;
         if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
           dragging = true;
           content.blur();
@@ -353,14 +379,7 @@
           box.style.left = `${newLeft}px`;
           box.style.top = `${newTop}px`;
 
-          // Smooth font size scaling based on height with clamping
-          // Avoid big jumps, keep between 12px and 24px
-          const minFont = 12;
-          const maxFont = 24;
-          // Map box height from 40-200 px to font size range
-          const mappedFontSize = minFont + ((newHeight - 40) / 160) * (maxFont - minFont);
-          const fontSize = Math.min(maxFont, Math.max(minFont, mappedFontSize));
-          content.style.fontSize = fontSize + 'px';
+          adjustFontSizeToFit(content, box);
 
           saveBox();
         });
@@ -390,6 +409,7 @@
       });
 
       content.addEventListener('input', () => {
+        adjustFontSizeToFit(content, box);
         saveBox();
       });
 
@@ -421,10 +441,7 @@
     undoBtn.addEventListener('click', () => {
       if (undoStack.length === 0) return;
       const lastBox = undoStack.pop();
-      const box = addBox(lastBox.x, lastBox.y, lastBox.text);
-      box.style.width = lastBox.width + 'px';
-      box.style.height = lastBox.height + 'px';
-      box.querySelector('div[contenteditable]').style.fontSize = lastBox.fontSize || '16px';
+      const box = addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize);
 
       if (undoStack.length === 0) undoBtn.disabled = true;
     });
@@ -444,10 +461,7 @@
       boxesCollection.get().then(snapshot => {
         snapshot.forEach(doc => {
           const data = doc.data();
-          const box = addBox(data.x, data.y, data.text, doc.id);
-          if (data.width) box.style.width = data.width + 'px';
-          if (data.height) box.style.height = data.height + 'px';
-          if (data.fontSize) box.querySelector('div[contenteditable]').style.fontSize = data.fontSize;
+          addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize);
         });
       });
     }
