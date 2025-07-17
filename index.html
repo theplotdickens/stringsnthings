@@ -27,9 +27,9 @@
       min-height: 24px;
       white-space: pre-wrap;
       font-family: monospace, monospace;
-      user-select: none;
+      user-select: text;
       touch-action: none;
-      cursor: grab;
+      cursor: text;
     }
     .box > div[contenteditable="true"] {
       outline: none;
@@ -40,7 +40,6 @@
       font-family: monospace, monospace;
       user-select: text;
       cursor: text;
-      /* We disable contenteditable while dragging, enabled again after */
     }
     .box > span.delete-btn {
       position: absolute;
@@ -192,35 +191,49 @@
       let dragging = false;
       let offsetX = 0;
       let offsetY = 0;
+      let moved = false;
 
-      // Start drag on pointerdown anywhere inside box (including editable)
+      // Dragging starts if pointer moves enough distance
       box.addEventListener('pointerdown', e => {
         if (e.target === delBtn) return; // ignore delete button
-
-        e.preventDefault(); // prevent text cursor & selection during drag start
-        dragging = true;
+        moved = false;
         offsetX = e.clientX - box.getBoundingClientRect().left;
         offsetY = e.clientY - box.getBoundingClientRect().top;
-        // disable editing while dragging
-        content.contentEditable = false;
         box.setPointerCapture(e.pointerId);
       });
 
       box.addEventListener('pointermove', e => {
-        if (!dragging) return;
-        const newX = (e.clientX - offsetX - panX) / scale;
-        const newY = (e.clientY - offsetY - panY) / scale;
-        box.style.left = `${newX}px`;
-        box.style.top = `${newY}px`;
-        saveBox();
+        if (!box.hasPointerCapture(e.pointerId)) return;
+        const dx = e.clientX - (offsetX + box.getBoundingClientRect().left);
+        const dy = e.clientY - (offsetY + box.getBoundingClientRect().top);
+        if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+          dragging = true;
+          content.blur(); // stop editing when drag starts
+          box.style.cursor = 'grabbing';
+          box.style.userSelect = 'none';
+        }
+        if (dragging) {
+          const newX = (e.clientX - offsetX - panX) / scale;
+          const newY = (e.clientY - offsetY - panY) / scale;
+          box.style.left = `${newX}px`;
+          box.style.top = `${newY}px`;
+          saveBox();
+          moved = true;
+        }
       });
 
       box.addEventListener('pointerup', e => {
-        if (!dragging) return;
-        dragging = false;
+        if (!box.hasPointerCapture(e.pointerId)) return;
         box.releasePointerCapture(e.pointerId);
-        // re-enable editing when drag ends
-        content.contentEditable = true;
+        if (dragging) {
+          dragging = false;
+          box.style.cursor = 'grab';
+          box.style.userSelect = 'text';
+          content.focus();
+        } else if (!moved) {
+          // Just a click: focus editable content
+          content.focus();
+        }
       });
 
       delBtn.addEventListener('click', e => {
