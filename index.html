@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Instant Drag Anywhere + Delete Fix</title>
+  <title>Editable Boxes + Drag + Bottom Menu</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -12,6 +12,8 @@
     #viewport {
       width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
       overflow: hidden;
+      padding-bottom: 48px; /* space for bottom menu */
+      box-sizing: border-box;
     }
     #canvas {
       position: absolute; top: 0; left: 0; transform-origin: 0 0;
@@ -25,7 +27,7 @@
       min-height: 24px;
       white-space: pre-wrap;
       font-family: monospace, monospace;
-      user-select: none; /* disable text selection on container */
+      user-select: none; /* prevent accidental text select on box container */
       touch-action: none;
       cursor: grab;
     }
@@ -35,7 +37,7 @@
       min-width: 80px;
       min-height: 24px;
       font-family: monospace, monospace;
-      user-select: text; /* allow text selection in text */
+      user-select: text;
       cursor: text;
     }
     .box > span.delete-btn {
@@ -47,11 +49,44 @@
       user-select: none;
       pointer-events: auto;
     }
+
+    /* Bottom menu bar */
+    #menuBar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 48px;
+      background: #222;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      user-select: none;
+    }
+    #menuBar button {
+      background: #09f;
+      border: none;
+      color: white;
+      font-size: 18px;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation;
+    }
+    #menuBar button:active {
+      background: #06c;
+    }
   </style>
 </head>
 <body>
   <div id="viewport">
     <div id="canvas"></div>
+  </div>
+
+  <div id="menuBar">
+    <button id="goCenterBtn">Go to Center</button>
   </div>
 
   <!-- Firebase -->
@@ -83,7 +118,7 @@
       return { x: e.clientX, y: e.clientY };
     }
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box')) return; // don't pan if pointer down inside a box
+      if (e.target.closest('.box') || e.target.closest('#menuBar')) return; // no panning if interacting with box or menu
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -119,6 +154,7 @@
     // Double click / tap to add new box
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
+      if (e.target.closest('#menuBar')) return;
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -159,10 +195,11 @@
       let offsetX = 0;
       let offsetY = 0;
 
-      // Dragging from anywhere inside the box, including contenteditable
+      // Only start drag if pointerdown is NOT inside contenteditable (text area)
       box.addEventListener('pointerdown', e => {
         if (e.target === delBtn) return; // ignore delete button
-        e.preventDefault(); // prevent placing cursor / text selection start
+        if (e.target === content) return;  // clicking inside text => no drag, editing enabled
+        e.preventDefault(); // prevent text selection / cursor placement on drag start
         dragging = true;
         offsetX = e.clientX - box.getBoundingClientRect().left;
         offsetY = e.clientY - box.getBoundingClientRect().top;
@@ -224,6 +261,14 @@
         });
       });
     }
+
+    // Go to Center button
+    const goCenterBtn = document.getElementById('goCenterBtn');
+    goCenterBtn.addEventListener('click', () => {
+      panX = 0;
+      panY = 0;
+      updateTransform();
+    });
 
     window.addEventListener('load', () => {
       updateTransform();
