@@ -22,9 +22,9 @@
       position: absolute;
       background: white;
       border: 1px solid black;
-      padding: 4px 8px;
+      padding: 8px 12px; /* more padding for nicer text */
       min-width: 80px;
-      min-height: 24px;
+      min-height: 40px; /* taller min height */
       white-space: pre-wrap;
       font-family: monospace, monospace;
       user-select: text;
@@ -32,6 +32,10 @@
       cursor: text;
       box-sizing: border-box;
       overflow-wrap: break-word;
+      word-break: break-word;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
     }
     .box > div[contenteditable="true"] {
       outline: none;
@@ -46,7 +50,9 @@
       height: 100%;
       box-sizing: border-box;
       font-size: 16px;
-      line-height: 1.2;
+      line-height: 1.3; /* consistent line height */
+      overflow-wrap: break-word;
+      overflow-y: auto;
     }
     .box > span.delete-btn {
       position: absolute;
@@ -66,7 +72,6 @@
       position: absolute;
       z-index: 20;
       touch-action: none;
-      /* cursor stays visible */
     }
     .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
     .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
@@ -146,7 +151,6 @@
     let scale = 1, panX = 0, panY = 0;
     let isPanning = false, startX, startY;
 
-    // Undo stack (max 5)
     const undoStack = [];
 
     function getClientCoords(e) {
@@ -206,8 +210,8 @@
       box.className = 'box';
       box.style.left = `${x}px`;
       box.style.top = `${y}px`;
-      box.style.width = '150px';
-      box.style.height = '60px';
+      box.style.width = '180px';
+      box.style.height = '80px';
       box.spellcheck = false;
 
       const content = document.createElement('div');
@@ -222,8 +226,11 @@
       content.style.userSelect = 'text';
       content.style.cursor = 'text';
       content.style.fontSize = '16px';
+      content.style.lineHeight = '1.3';
       content.style.height = '100%';
       content.style.width = '100%';
+      content.style.boxSizing = 'border-box';
+      content.style.overflowY = 'auto';
 
       content.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
@@ -239,7 +246,6 @@
       box.appendChild(content);
       box.appendChild(delBtn);
 
-      // Add resize handles
       const handles = {};
       ['nw', 'ne', 'sw', 'se'].forEach(pos => {
         const h = document.createElement('div');
@@ -258,7 +264,7 @@
 
       box.addEventListener('pointerdown', e => {
         if (e.target === delBtn) return;
-        if (e.target.classList.contains('resize-handle')) return; // handled separately
+        if (e.target.classList.contains('resize-handle')) return;
         moved = false;
         offsetX = e.clientX - box.getBoundingClientRect().left;
         offsetY = e.clientY - box.getBoundingClientRect().top;
@@ -298,7 +304,6 @@
         }
       });
 
-      // Resize handlers
       for (const pos in handles) {
         const handle = handles[pos];
         handle.addEventListener('pointerdown', e => {
@@ -335,12 +340,12 @@
             if (newWidth === 80) newLeft = startXpos + (startWidth - 80);
           }
           if (resizeDir.includes('s')) {
-            newHeight = Math.max(24, startHeight + dy);
+            newHeight = Math.max(40, startHeight + dy);
           }
           if (resizeDir.includes('n')) {
-            newHeight = Math.max(24, startHeight - dy);
+            newHeight = Math.max(40, startHeight - dy);
             newTop = startYpos + dy;
-            if (newHeight === 24) newTop = startYpos + (startHeight - 24);
+            if (newHeight === 40) newTop = startYpos + (startHeight - 40);
           }
 
           box.style.width = `${newWidth}px`;
@@ -348,8 +353,13 @@
           box.style.left = `${newLeft}px`;
           box.style.top = `${newTop}px`;
 
-          // Adjust font size based on height (between 12 and 32 px)
-          const fontSize = Math.min(32, Math.max(12, newHeight / 3.5));
+          // Smooth font size scaling based on height with clamping
+          // Avoid big jumps, keep between 12px and 24px
+          const minFont = 12;
+          const maxFont = 24;
+          // Map box height from 40-200 px to font size range
+          const mappedFontSize = minFont + ((newHeight - 40) / 160) * (maxFont - minFont);
+          const fontSize = Math.min(maxFont, Math.max(minFont, mappedFontSize));
           content.style.fontSize = fontSize + 'px';
 
           saveBox();
@@ -364,7 +374,15 @@
 
       delBtn.addEventListener('click', e => {
         e.stopPropagation();
-        undoStack.push({ x: parseFloat(box.style.left), y: parseFloat(box.style.top), text: content.textContent, width: box.offsetWidth, height: box.offsetHeight, fontSize: content.style.fontSize, id: id });
+        undoStack.push({
+          x: parseFloat(box.style.left),
+          y: parseFloat(box.style.top),
+          text: content.textContent,
+          width: box.offsetWidth,
+          height: box.offsetHeight,
+          fontSize: content.style.fontSize,
+          id: id
+        });
         if (undoStack.length > 5) undoStack.shift();
         undoBtn.disabled = false;
         box.remove();
