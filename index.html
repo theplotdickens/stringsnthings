@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Infinite Canvas with Firebase Save & Delete</title>
+  <title>Infinite Canvas with Indent-Respecting Boxes</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -10,7 +10,8 @@
       height: 100%;
       overflow: hidden;
       touch-action: none;
-      font-family: sans-serif;
+      font-family: monospace, monospace;
+      /* monospace font helps see indents clearly */
     }
     #viewport {
       width: 100%;
@@ -35,8 +36,16 @@
       touch-action: none;
       min-width: 80px;
       min-height: 24px;
-      white-space: pre-wrap;
+      white-space: pre-wrap; /* preserve line breaks and spaces */
       overflow-wrap: break-word;
+      font-family: monospace, monospace;
+    }
+    .box > div[contenteditable="true"] {
+      outline: none;
+      white-space: pre-wrap;
+      min-width: 80px;
+      min-height: 24px;
+      font-family: monospace, monospace;
     }
   </style>
 </head>
@@ -45,9 +54,8 @@
     <div id="canvas"></div>
   </div>
 
-  <!-- Firebase App (the core Firebase SDK) -->
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <!-- Firebase Firestore -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 
   <script>
@@ -123,11 +131,19 @@
     function addBox(x, y, text = 'Text box', id = null) {
       const box = document.createElement('div');
       box.className = 'box';
-      box.contentEditable = true;
-      box.spellcheck = false;
       box.style.left = `${x}px`;
       box.style.top = `${y}px`;
-      box.textContent = text;
+      box.spellcheck = false;
+
+      // Editable content div
+      const content = document.createElement('div');
+      content.contentEditable = true;
+      content.style.minWidth = '80px';
+      content.style.minHeight = '24px';
+      content.style.whiteSpace = 'pre-wrap';
+      content.style.outline = 'none';
+      content.style.fontFamily = 'monospace, monospace';
+      content.textContent = text;
 
       // Delete button
       const delBtn = document.createElement('span');
@@ -141,18 +157,14 @@
         font-weight: bold;
         user-select: none;
       `;
-      box.appendChild(delBtn);
 
-      delBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        box.remove();
-        if (id) boxesCollection.doc(id).delete();
-      });
+      box.appendChild(content);
+      box.appendChild(delBtn);
 
       let dragging = false, offsetX = 0, offsetY = 0;
 
       box.addEventListener('pointerdown', e => {
-        if (e.target !== document.activeElement && e.target !== delBtn) {
+        if (e.target !== content && e.target !== delBtn) {
           dragging = true;
           offsetX = e.offsetX;
           offsetY = e.offsetY;
@@ -174,20 +186,32 @@
         dragging = false;
       });
 
-      box.addEventListener('input', () => {
+      content.addEventListener('input', () => {
+        // Replace tabs with 4 spaces and preserve leading spaces with &nbsp;
+        content.innerHTML = content.innerHTML
+          .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
+          .replace(/^( +)/gm, (match) => match.replace(/ /g, '&nbsp;'));
         saveBox();
       });
 
+      delBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        box.remove();
+        if (id) boxesCollection.doc(id).delete();
+      });
+
       function saveBox() {
-        const data = {
+        // Save as plain text with tabs restored for storage
+        let rawText = content.textContent.replace(/\u00A0/g, ' '); // convert &nbsp; to space
+        dbData = {
           x: parseFloat(box.style.left),
           y: parseFloat(box.style.top),
-          text: box.textContent.replace('×', '').trim()
+          text: rawText
         };
         if (id) {
-          boxesCollection.doc(id).set(data);
+          boxesCollection.doc(id).set(dbData);
         } else {
-          boxesCollection.add(data).then(docRef => {
+          boxesCollection.add(dbData).then(docRef => {
             id = docRef.id;
           });
         }
