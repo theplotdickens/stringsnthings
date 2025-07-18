@@ -214,6 +214,7 @@
       startX = coords.x;
       startY = coords.y;
       updateTransform();
+      renderConnections();
     });
 
     viewport.addEventListener('pointerup', e => {
@@ -245,6 +246,7 @@
       panY = mouseY - wy * scale;
 
       updateTransform();
+      renderConnections();
     });
 
     function updateTransform() {
@@ -280,6 +282,7 @@
       panX = markedCenter.panX;
       panY = markedCenter.panY;
       updateTransform();
+      renderConnections();
     });
 
     // --- Boxes ---
@@ -307,17 +310,15 @@
       contentDiv.style.fontSize = fontSize + 'px';
     }
 
-    // Create box, save to DB, then add element with correct ID (for new boxes)
-    function createBoxInDBThenAdd(x, y) {
-      boxesCollection.add({
+    async function createBoxInDBThenAdd(x, y) {
+      const docRef = await boxesCollection.add({
         x, y,
         width: 180,
         height: 80,
         text: 'Text box',
         fontSize: '16px'
-      }).then(docRef => {
-        addBox(x, y, 'Text box', docRef.id, 180, 80, '16px');
       });
+      addBox(x, y, 'Text box', docRef.id, 180, 80, '16px');
     }
 
     function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px') {
@@ -328,7 +329,7 @@
       box.style.width = width + 'px';
       box.style.height = height + 'px';
       box.spellcheck = false;
-      box.id = id; // Firestore doc id
+      box.id = id;
 
       const content = document.createElement('div');
       content.contentEditable = true;
@@ -476,12 +477,10 @@
             if (newHeight === 40) newTop = startYpos + (startHeight - 40);
           }
 
-          box.style.width = `${newWidth}px`;
-          box.style.height = `${newHeight}px`;
-          box.style.left = `${newLeft}px`;
-          box.style.top = `${newTop}px`;
-
-          adjustFontSizeToFit(content, box);
+          box.style.width = newWidth + 'px';
+          box.style.height = newHeight + 'px';
+          box.style.left = newLeft + 'px';
+          box.style.top = newTop + 'px';
 
           saveBox();
           renderConnections();
@@ -491,177 +490,269 @@
           if (!handle.hasPointerCapture(e.pointerId)) return;
           handle.releasePointerCapture(e.pointerId);
           resizing = false;
+          resizeDir = null;
         });
       }
 
-      delBtn.addEventListener('click', e => {
-        e.stopPropagation();
+      delBtn.addEventListener('click', () => {
         undoStack.push({
-          x: parseFloat(box.style.left),
-          y: parseFloat(box.style.top),
-          text: content.textContent,
-          width: box.offsetWidth,
-          height: box.offsetHeight,
-          fontSize: content.style.fontSize,
-          id: id
+          type: 'box',
+          data: {
+            id: box.id,
+            x: parseFloat(box.style.left),
+            y: parseFloat(box.style.top),
+            width: box.offsetWidth,
+            height: box.offsetHeight,
+            text: content.textContent,
+            fontSize: content.style.fontSize
+          }
         });
-        if (undoStack.length > 100) undoStack.shift();
         undoBtn.disabled = false;
 
-        // Remove any connections involving this box
-        const boxId = box.id;
-        const affectedConnections = connections.filter(c => c.from === boxId || c.to === boxId);
-        affectedConnections.forEach(c => {
-          connectionsCollection.doc(c.id).delete();
-          connections = connections.filter(conn => conn.id !== c.id);
-          undoConnectionStack.push(c);
-          undoConnectionBtn.disabled = false;
+        // Remove connected connections from undoConnectionStack
+        const connsToRemove = connections.filter(c => c.from === box.id || c.to === box.id);
+        connsToRemove.forEach(conn => {
+          undoConnectionStack.push({type: 'connection', data: {...conn}});
         });
-        renderConnections();
+        undoConnectionBtn.disabled = false;
 
+        // Delete connections related to box from Firebase & memory
+        connsToRemove.forEach(conn => {
+          connectionsCollection.doc(conn.id).delete().catch(() => {});
+          connections = connections.filter(c => c.id !== conn.id);
+        });
+
+        boxesCollection.doc(box.id).delete();
         box.remove();
-        if (id) boxesCollection.doc(id).delete();
+        renderConnections();
       });
 
-      connectToggle.addEventListener('click', e => {
-        e.stopPropagation();
+      connectToggle.addEventListener('click', () => {
         if (selectedConnectBox === box) {
+          // Deselect
           selectedConnectBox = null;
           connectToggle.classList.remove('selected');
-        } else if (!selectedConnectBox) {
+        } else if (selectedConnectBox === null) {
+          // Select this box
           selectedConnectBox = box;
           connectToggle.classList.add('selected');
-        } else if (selectedConnectBox && selectedConnectBox !== box) {
-          // Create connection from selectedConnectBox to this box
-          const fromId = selectedConnectBox.id;
-          const toId = box.id;
-          if (fromId && toId && fromId !== toId) {
-            connectionsCollection.add({ from: fromId, to: toId }).then(docRef => {
-              connections.push({ id: docRef.id, from: fromId, to: toId });
-              renderConnections();
-              undoConnectionStack.push({ id: docRef.id, from: fromId, to: toId });
-              undoConnectionBtn.disabled = false;
-            });
+        } else {
+          // Connect selectedConnectBox to this box
+          if (selectedConnectBox.id !== box.id) {
+            // Save connection
+            createConnectionInDB(selectedConnectBox.id, box.id);
           }
-          // Clear selection on both toggles
-          document.querySelectorAll('.connect-toggle.selected').forEach(el => el.classList.remove('selected'));
+          // Clear selections
+          clearAllConnectToggles();
           selectedConnectBox = null;
         }
       });
 
       content.addEventListener('input', () => {
-        adjustFontSizeToFit(content, box);
         saveBox();
       });
 
-      function saveBox() {
-        const data = {
+      canvas.appendChild(box);
+      return box;
+    }
+
+    function clearAllConnectToggles() {
+      const toggles = document.querySelectorAll('.connect-toggle.selected');
+      toggles.forEach(t => t.classList.remove('selected'));
+    }
+
+    async function saveBox() {
+      const boxes = document.querySelectorAll('.box');
+      for (const box of boxes) {
+        if (!box.id) continue;
+        const content = box.querySelector('div[contenteditable]');
+        await boxesCollection.doc(box.id).set({
           x: parseFloat(box.style.left),
           y: parseFloat(box.style.top),
           width: box.offsetWidth,
           height: box.offsetHeight,
           text: content.textContent,
-          fontSize: content.style.fontSize || '16px'
-        };
-        if (id) {
-          boxesCollection.doc(id).set(data);
-        }
+          fontSize: content.style.fontSize
+        });
       }
-
-      canvas.appendChild(box);
-
-      if (!id) saveBox();
-
-      return box;
     }
 
-    undoBtn.addEventListener('click', () => {
-      if (undoStack.length === 0) return;
-      const lastBox = undoStack.pop();
-      addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize);
-      if (undoStack.length === 0) undoBtn.disabled = true;
-    });
+    async function createConnectionInDB(fromId, toId) {
+      // Avoid duplicate connections
+      if (connections.some(c => (c.from === fromId && c.to === toId) || (c.from === toId && c.to === fromId))) return;
 
-    undoConnectionBtn.addEventListener('click', () => {
-      if (undoConnectionStack.length === 0) return;
-      const lastConn = undoConnectionStack.pop();
-      if (lastConn.id) {
-        connectionsCollection.doc(lastConn.id).delete();
-        connections = connections.filter(c => c.id !== lastConn.id);
-      }
+      const docRef = await connectionsCollection.add({from: fromId, to: toId});
+      connections.push({id: docRef.id, from: fromId, to: toId});
+      undoConnectionStack.push({type: 'connection', data: {id: docRef.id, from: fromId, to: toId}});
+      undoConnectionBtn.disabled = false;
       renderConnections();
-      if (undoConnectionStack.length === 0) undoConnectionBtn.disabled = true;
-    });
+    }
 
-    // --- Connections ---
+    function removeConnection(id) {
+      connectionsCollection.doc(id).delete();
+      connections = connections.filter(c => c.id !== id);
+      renderConnections();
+    }
 
     function renderConnections() {
-      // Clear all lines first
+      // Clear SVG
       while (connectionsSVG.firstChild) connectionsSVG.removeChild(connectionsSVG.firstChild);
 
+      const boxesById = {};
+      document.querySelectorAll('.box').forEach(box => boxesById[box.id] = box);
+
       connections.forEach(conn => {
-        const fromBox = document.getElementById(conn.from);
-        const toBox = document.getElementById(conn.to);
+        const fromBox = boxesById[conn.from];
+        const toBox = boxesById[conn.to];
         if (!fromBox || !toBox) return;
 
-        // Calculate center points in box local coords
         const fromRect = fromBox.getBoundingClientRect();
         const toRect = toBox.getBoundingClientRect();
-        const viewportRect = viewport.getBoundingClientRect();
+        const vpRect = viewport.getBoundingClientRect();
 
-        // Convert screen coords to canvas coords (taking pan/scale into account)
-        const fromCenterX = (fromRect.left + fromRect.right) / 2 - viewportRect.left - panX;
-        const fromCenterY = (fromRect.top + fromRect.bottom) / 2 - viewportRect.top - panY;
-        const toCenterX = (toRect.left + toRect.right) / 2 - viewportRect.left - panX;
-        const toCenterY = (toRect.top + toRect.bottom) / 2 - viewportRect.top - panY;
+        // Calculate center coords in canvas space
+        const fromX = (fromRect.left - vpRect.left - panX) / scale + fromRect.width/2;
+        const fromY = (fromRect.top - vpRect.top - panY) / scale + fromRect.height/2;
+        const toX = (toRect.left - vpRect.left - panX) / scale + toRect.width/2;
+        const toY = (toRect.top - vpRect.top - panY) / scale + toRect.height/2;
 
-        // Now scale coords back to unscaled canvas space:
-        const fromX = fromCenterX / scale;
-        const fromY = fromCenterY / scale;
-        const toX = toCenterX / scale;
-        const toY = toCenterY / scale;
+        // Calculate closest edge points for connection line to avoid lines crossing box interiors
+        const fromEdge = getClosestEdgePoint(fromBox, toX, toY);
+        const toEdge = getClosestEdgePoint(toBox, fromX, fromY);
 
-        // Draw line as SVG path for smoother lines:
         const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute('x1', fromX);
-        line.setAttribute('y1', fromY);
-        line.setAttribute('x2', toX);
-        line.setAttribute('y2', toY);
-        line.setAttribute('stroke', 'black');
-        line.setAttribute('stroke-width', '2');
-        line.setAttribute('pointer-events', 'none');
+        line.setAttribute("x1", fromEdge.x);
+        line.setAttribute("y1", fromEdge.y);
+        line.setAttribute("x2", toEdge.x);
+        line.setAttribute("y2", toEdge.y);
+        line.setAttribute("stroke", "black");
+        line.setAttribute("stroke-width", "2");
         connectionsSVG.appendChild(line);
       });
     }
 
-    // --- Load boxes and connections ---
+    // Find closest point on box edge to (x,y) in canvas coords
+    function getClosestEdgePoint(box, x, y) {
+      const rect = box.getBoundingClientRect();
+      const vpRect = viewport.getBoundingClientRect();
 
-    function loadBoxes() {
-      boxesCollection.get().then(snapshot => {
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize || '16px');
-        });
-      });
+      // Convert box rect to canvas coordinates (top-left)
+      const boxLeft = (rect.left - vpRect.left - panX) / scale;
+      const boxTop = (rect.top - vpRect.top - panY) / scale;
+      const boxRight = boxLeft + box.offsetWidth;
+      const boxBottom = boxTop + box.offsetHeight;
+
+      // Clamp x,y to box edges horizontally and vertically
+      const cx = Math.min(Math.max(x, boxLeft), boxRight);
+      const cy = Math.min(Math.max(y, boxTop), boxBottom);
+
+      // Distances to edges
+      const distLeft = Math.abs(cx - boxLeft);
+      const distRight = Math.abs(cx - boxRight);
+      const distTop = Math.abs(cy - boxTop);
+      const distBottom = Math.abs(cy - boxBottom);
+
+      const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+      if (minDist === distLeft) return {x: boxLeft, y: cy};
+      if (minDist === distRight) return {x: boxRight, y: cy};
+      if (minDist === distTop) return {x: cx, y: boxTop};
+      return {x: cx, y: boxBottom};
     }
 
-    function loadConnections() {
-      connectionsCollection.get().then(snapshot => {
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          if (data.from && data.to) {
-            connections.push({ id: doc.id, from: data.from, to: data.to });
-          }
-        });
-        renderConnections();
-      });
-    }
-
-    window.addEventListener('load', () => {
-      updateTransform();
-      loadBoxes();
-      loadConnections();
+    // Undo box delete
+    undoBtn.addEventListener('click', async () => {
+      if (!undoStack.length) return;
+      const last = undoStack.pop();
+      if (last.type === 'box') {
+        const data = last.data;
+        const docRef = await boxesCollection.doc(data.id).get();
+        if (!docRef.exists) {
+          await boxesCollection.doc(data.id).set({
+            x: data.x,
+            y: data.y,
+            width: data.width,
+            height: data.height,
+            text: data.text,
+            fontSize: data.fontSize
+          });
+          addBox(data.x, data.y, data.text, data.id, data.width, data.height, data.fontSize);
+          renderConnections();
+        }
+      }
+      undoBtn.disabled = undoStack.length === 0;
     });
+
+    // Undo connection delete
+    undoConnectionBtn.addEventListener('click', async () => {
+      if (!undoConnectionStack.length) return;
+      const last = undoConnectionStack.pop();
+      if (last.type === 'connection') {
+        const data = last.data;
+        const docRef = await connectionsCollection.doc(data.id).get();
+        if (!docRef.exists) {
+          await connectionsCollection.doc(data.id).set({
+            from: data.from,
+            to: data.to
+          });
+          connections.push(data);
+          renderConnections();
+        }
+      }
+      undoConnectionBtn.disabled = undoConnectionStack.length === 0;
+    });
+
+    // --- Firestore sync ---
+
+    // Load boxes initially and listen for changes
+    boxesCollection.onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(change => {
+        const doc = change.doc;
+        const data = doc.data();
+        if (change.type === 'added') {
+          if (!document.getElementById(doc.id)) {
+            addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize);
+            renderConnections();
+          }
+        } else if (change.type === 'modified') {
+          const box = document.getElementById(doc.id);
+          if (box) {
+            box.style.left = data.x + 'px';
+            box.style.top = data.y + 'px';
+            box.style.width = data.width + 'px';
+            box.style.height = data.height + 'px';
+            const content = box.querySelector('div[contenteditable]');
+            if (content.textContent !== data.text) content.textContent = data.text;
+            content.style.fontSize = data.fontSize;
+            renderConnections();
+          }
+        } else if (change.type === 'removed') {
+          const box = document.getElementById(doc.id);
+          if (box) box.remove();
+          renderConnections();
+        }
+      });
+    });
+
+    // Load connections initially and listen for changes
+    connectionsCollection.onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(change => {
+        const doc = change.doc;
+        const data = doc.data();
+        if (change.type === 'added') {
+          if (!connections.some(c => c.id === doc.id)) {
+            connections.push({id: doc.id, from: data.from, to: data.to});
+            renderConnections();
+          }
+        } else if (change.type === 'removed') {
+          connections = connections.filter(c => c.id !== doc.id);
+          renderConnections();
+        }
+      });
+    });
+
+    // Initial transform update
+    updateTransform();
 
   </script>
 </body>
