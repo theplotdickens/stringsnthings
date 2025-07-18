@@ -21,7 +21,7 @@
       position: absolute;
       background: white;
       border: 1px solid black;
-      padding: 8px; /* padding for text */
+      padding: 8px;
       min-width: 80px;
       min-height: 40px;
       white-space: pre-wrap;
@@ -30,7 +30,7 @@
       touch-action: none;
       cursor: text;
       box-sizing: border-box;
-      overflow: hidden; /* prevent scrollbars */
+      overflow: hidden;
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
@@ -48,6 +48,7 @@
       padding: 0;
       margin: 0;
       overflow: visible;
+      line-height: 1.2;
     }
     .box > span.delete-btn {
       position: absolute;
@@ -59,7 +60,6 @@
       pointer-events: auto;
       z-index: 10;
     }
-    /* Invisible resize handles */
     .resize-handle {
       width: 16px;
       height: 16px;
@@ -73,7 +73,6 @@
     .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
     .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
 
-    /* Floating buttons container */
     #buttonContainer {
       position: fixed;
       bottom: 12px;
@@ -215,13 +214,11 @@
 
       while (fontSize >= minFontSize) {
         contentDiv.style.fontSize = fontSize + 'px';
-        // Measure scroll sizes to detect overflow
         if (contentDiv.scrollWidth <= boxWidth && contentDiv.scrollHeight <= boxHeight) {
           break;
         }
         fontSize -= 1;
       }
-      // Keep font size at least minFontSize
       if (fontSize < minFontSize) fontSize = minFontSize;
       contentDiv.style.fontSize = fontSize + 'px';
     }
@@ -254,9 +251,12 @@
       content.style.overflow = 'visible';
       content.style.lineHeight = '1.2';
 
-      // Set font size from param or default
       content.style.fontSize = fontSize || '16px';
-      adjustFontSizeToFit(content, box);
+
+      // Only adjust font size to fit if fontSize is default or not saved
+      if (fontSize === '16px' || !fontSize) {
+        adjustFontSizeToFit(content, box);
+      }
 
       content.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
@@ -381,6 +381,7 @@
 
           adjustFontSizeToFit(content, box);
 
+          // Save current font size and box size/pos
           saveBox();
         });
 
