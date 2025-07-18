@@ -159,7 +159,7 @@
 </head>
 <body>
   <div id="viewport">
-    <svg class="connection-layer"></svg>
+    <svg class="connection-layer" viewBox="0 0 3000 3000" preserveAspectRatio="xMinYMin meet"></svg>
     <div id="canvas"></div>
   </div>
 
@@ -477,18 +477,22 @@
       if (!box) return;
       const el = box.element;
       const content = el.querySelector('div[contenteditable]');
-      box.data.x = parseFloat(el.style.left);
-      box.data.y = parseFloat(el.style.top);
-      box.data.width = el.offsetWidth;
-      box.data.height = el.offsetHeight;
-      box.data.text = content.textContent;
-      box.data.fontSize = content.style.fontSize || '16px';
+      const rect = el.getBoundingClientRect();
+      // Calculate position relative to canvas top-left accounting for pan and scale
+      const x = parseFloat(el.style.left);
+      const y = parseFloat(el.style.top);
+      const width = el.offsetWidth;
+      const height = el.offsetHeight;
+      const text = content.textContent;
+      const fontSize = content.style.fontSize;
+      box.data = { id, x, y, width, height, text, fontSize };
       db.collection('boxes').doc(id).set(box.data);
+      redrawConnections();
     }
 
     function addConnection(fromId, toId) {
       if (fromId === toId) return;
-      // Check existing connection in either direction
+      // Check if connection exists
       for (const [key, conn] of connections) {
         if ((conn.from === fromId && conn.to === toId) || (conn.from === toId && conn.to === fromId)) return;
       }
@@ -529,32 +533,45 @@
         line.dataset.id = conn.id;
         connectionLayer.appendChild(line);
 
-        // Calculate positions center of boxes
-        const fromRect = fromBox.element.getBoundingClientRect();
-        const toRect = toBox.element.getBoundingClientRect();
+        // Calculate positions center of boxes in canvas coords (data.x, data.y)
+        const fromCenterX = fromBox.data.x + fromBox.data.width / 2;
+        const fromCenterY = fromBox.data.y + fromBox.data.height / 2;
+        const toCenterX = toBox.data.x + toBox.data.width / 2;
+        const toCenterY = toBox.data.y + toBox.data.height / 2;
 
-        // Convert viewport coords to canvas coords (account pan and scale)
-        function viewportToCanvas(x, y) {
-          const rect = viewport.getBoundingClientRect();
+        // ** Because svg connectionLayer is not scaled or translated,
+        //    positions must be transformed to screen coords adjusted by pan & scale,
+        //    then mapped back to SVG coordinates for stable lines **
+
+        // Convert canvas coords (box coords) to screen coords
+        function canvasToScreen(x, y) {
           return {
-            x: (x - rect.left - panX) / scale,
-            y: (y - rect.top - panY) / scale
+            x: x * scale + panX,
+            y: y * scale + panY
           };
         }
 
-        const fromCenter = {
-          x: fromBox.data.x + fromBox.data.width / 2,
-          y: fromBox.data.y + fromBox.data.height / 2
-        };
-        const toCenter = {
-          x: toBox.data.x + toBox.data.width / 2,
-          y: toBox.data.y + toBox.data.height / 2
-        };
+        // Convert screen coords back to SVG coords
+        // Since svg has viewBox=0 0 3000 3000 and width/height 3000px (no scaling)
+        // SVG coords = screen coords relative to viewport
+        const fromScreen = canvasToScreen(fromCenterX, fromCenterY);
+        const toScreen = canvasToScreen(toCenterX, toCenterY);
 
-        line.setAttribute('x1', fromCenter.x);
-        line.setAttribute('y1', fromCenter.y);
-        line.setAttribute('x2', toCenter.x);
-        line.setAttribute('y2', toCenter.y);
+        // We want SVG coordinates relative to svg top-left
+        const svgRect = connectionLayer.getBoundingClientRect();
+        const viewportRect = viewport.getBoundingClientRect();
+
+        // Because svg positioned absolutely with top:0,left:0 inside viewport,
+        // svg coords relative to viewport top-left = fromScreen - viewport top-left
+        const fromSvgX = fromScreen.x - viewportRect.left;
+        const fromSvgY = fromScreen.y - viewportRect.top;
+        const toSvgX = toScreen.x - viewportRect.left;
+        const toSvgY = toScreen.y - viewportRect.top;
+
+        line.setAttribute('x1', fromSvgX);
+        line.setAttribute('y1', fromSvgY);
+        line.setAttribute('x2', toSvgX);
+        line.setAttribute('y2', toSvgY);
 
         line.addEventListener('click', e => {
           e.stopPropagation();
@@ -644,7 +661,8 @@
 
     function applyTransform() {
       canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-      connectionLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      // Keep connectionLayer fixed, since line coords are in screen space
+      connectionLayer.style.transform = `translate(0,0) scale(1)`;
     }
 
     function updateZoomDisplay() {
@@ -686,9 +704,6 @@
         deleteConnectionBtn.disabled = true;
       }
     });
-
-    // Save box positions when user stops dragging (debounced)
-    // Already saved on move with saveBox()
 
     // Load from firebase
     function loadAll() {
