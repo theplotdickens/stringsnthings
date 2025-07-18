@@ -35,7 +35,6 @@
       flex-direction: column;
       justify-content: flex-start;
       transform-origin: center center;
-      transition: transform 0.1s ease-out;
     }
     .box > div[contenteditable="true"] {
       outline: none;
@@ -51,8 +50,9 @@
       margin: 0;
       overflow: visible;
       line-height: 1.2;
-      /* Keep text upright */
+      /* Fix so inner text is never rotated */
       transform-origin: center center;
+      transform: rotate(calc(var(--box-rotation, 0deg) * -1));
     }
     .box > span.delete-btn {
       position: absolute;
@@ -76,31 +76,21 @@
     .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
     .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
     .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
-
-    /* Rotation handle */
     .rotate-handle {
       width: 16px;
       height: 16px;
-      background: #666;
+      background: transparent;
       border-radius: 50%;
+      border: 2px solid black;
       position: absolute;
       top: -30px;
-      left: 50%;
-      margin-left: -8px;
+      right: 50%;
+      margin-right: -8px;
       cursor: grab;
-      z-index: 25;
-      display: none; /* hidden by default */
+      z-index: 30;
+      display: none;
+      touch-action: none;
     }
-
-    .rotate-handle.grabbing {
-      cursor: grabbing;
-    }
-
-    /* Show rotate handle when rotate mode enabled */
-    .rotate-mode .rotate-handle {
-      display: block;
-    }
-
     #buttonContainer {
       position: fixed;
       bottom: 12px;
@@ -146,7 +136,8 @@
   <div id="buttonContainer">
     <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
-    <button id="rotateToggleBtn" class="floatingBtn">Rotate Box: Off</button>
+    <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
+    <button id="toggleRotateBtn" class="floatingBtn">Toggle Rotate</button>
   </div>
 
   <!-- Firebase -->
@@ -160,7 +151,7 @@
       projectId: "stringsnthings-65aa0",
       storageBucket: "stringsnthings-65aa0.firebasestorage.app",
       messagingSenderId: "35780192306",
-      appId: "1:35780192306:web:80aedf9ba9e2ffac0cf42b"
+      appId: "1:35780192306:web:80aedfba9e2ffac0cf42b"
     };
 
     firebase.initializeApp(firebaseConfig);
@@ -170,23 +161,26 @@
     const viewport = document.getElementById('viewport');
     const undoBtn = document.getElementById('undoBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
-    const rotateToggleBtn = document.getElementById('rotateToggleBtn');
+    const markCenterBtn = document.getElementById('markCenterBtn');
+    const toggleRotateBtn = document.getElementById('toggleRotateBtn');
 
     let scale = 1, panX = 0, panY = 0;
     let isPanning = false, startX, startY;
 
+    let rotationEnabled = false;
+
     const undoStack = [];
 
-    // Rotation mode flag
-    let rotateMode = false;
+    // Center coordinates for "mark center"
+    let centerX = 0;
+    let centerY = 0;
 
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
     }
-
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === rotateToggleBtn) return;
+      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn || e.target === toggleRotateBtn) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -221,7 +215,7 @@
 
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
-      if (e.target === goCenterBtn || e.target === undoBtn || e.target === rotateToggleBtn) return;
+      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn || e.target === toggleRotateBtn) return;
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -258,13 +252,16 @@
     }
 
     function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px', rotation = 0) {
+      let currentRotation = rotation || 0;
+
       const box = document.createElement('div');
       box.className = 'box';
       box.style.left = `${x}px`;
       box.style.top = `${y}px`;
       box.style.width = width + 'px';
       box.style.height = height + 'px';
-      box.style.transform = `rotate(${rotation}deg)`;
+      box.style.setProperty('--box-rotation', currentRotation + 'deg');
+      box.style.transform = `rotate(${currentRotation}deg)`;
       box.spellcheck = false;
 
       const content = document.createElement('div');
@@ -288,10 +285,6 @@
 
       content.style.fontSize = fontSize || '16px';
 
-      // Keep text upright inside rotated box by applying inverse rotation
-      content.style.transform = `rotate(${-rotation}deg)`;
-
-      // Only adjust font size to fit if fontSize is default or not saved
       if (fontSize === '16px' || !fontSize) {
         adjustFontSizeToFit(content, box);
       }
@@ -331,12 +324,13 @@
       let moved = false;
       let resizeDir = null;
       let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
-      let startRotateAngle, startPointerAngle;
+      let startAngle = 0;
+      let centerBox = {x: 0, y:0};
 
       box.addEventListener('pointerdown', e => {
         if (e.target === delBtn) return;
         if (e.target.classList.contains('resize-handle')) return;
-        if (rotateMode && e.target === rotateHandle) return;
+        if (e.target === rotateHandle) return;
         moved = false;
         offsetX = e.clientX - box.getBoundingClientRect().left;
         offsetY = e.clientY - box.getBoundingClientRect().top;
@@ -427,7 +421,6 @@
 
           adjustFontSizeToFit(content, box);
 
-          // Save current font size and box size/pos
           saveBox();
         });
 
@@ -438,41 +431,46 @@
         });
       }
 
-      // Rotation handle events
       rotateHandle.addEventListener('pointerdown', e => {
         e.stopPropagation();
         rotating = true;
-        rotateHandle.classList.add('grabbing');
+
         const rect = box.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        startRotateAngle = rotation;
-        startPointerAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+        centerBox.x = rect.left + rect.width / 2;
+        centerBox.y = rect.top + rect.height / 2;
+
+        startClientX = e.clientX;
+        startClientY = e.clientY;
+
+        // Calculate initial angle between mouse and box center
+        startAngle = Math.atan2(e.clientY - centerBox.y, e.clientX - centerBox.x) * 180 / Math.PI;
+
         rotateHandle.setPointerCapture(e.pointerId);
       });
 
       rotateHandle.addEventListener('pointermove', e => {
         if (!rotating || !rotateHandle.hasPointerCapture(e.pointerId)) return;
         e.preventDefault();
-        const rect = box.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        const currentPointerAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
-        let deltaAngle = currentPointerAngle - startPointerAngle;
-        let newRotation = startRotateAngle + deltaAngle * (180 / Math.PI);
-        // Normalize angle between -180 and 180
-        if (newRotation > 180) newRotation -= 360;
-        if (newRotation < -180) newRotation += 360;
-        box.style.transform = `rotate(${newRotation}deg)`;
-        content.style.transform = `rotate(${-newRotation}deg)`;
-        saveBox(newRotation);
+
+        // Calculate current angle relative to box center
+        const currentAngle = Math.atan2(e.clientY - centerBox.y, e.clientX - centerBox.x) * 180 / Math.PI;
+        const deltaAngle = currentAngle - startAngle;
+
+        currentRotation += deltaAngle;
+        currentRotation = currentRotation % 360;
+
+        box.style.setProperty('--box-rotation', currentRotation + 'deg');
+        box.style.transform = `rotate(${currentRotation}deg)`;
+
+        startAngle = currentAngle;
+
+        saveBox();
       });
 
       rotateHandle.addEventListener('pointerup', e => {
         if (!rotateHandle.hasPointerCapture(e.pointerId)) return;
         rotateHandle.releasePointerCapture(e.pointerId);
         rotating = false;
-        rotateHandle.classList.remove('grabbing');
       });
 
       delBtn.addEventListener('click', e => {
@@ -484,5 +482,103 @@
           width: box.offsetWidth,
           height: box.offsetHeight,
           fontSize: content.style.fontSize,
-          id: id,
-          rotation:
+          rotation: currentRotation,
+          id: id
+        });
+        if (undoStack.length > 5) undoStack.shift();
+        undoBtn.disabled = false;
+        box.remove();
+        if (id) boxesCollection.doc(id).delete();
+      });
+
+      content.addEventListener('input', () => {
+        adjustFontSizeToFit(content, box);
+        saveBox();
+      });
+
+      function saveBox() {
+        const data = {
+          x: parseFloat(box.style.left),
+          y: parseFloat(box.style.top),
+          width: box.offsetWidth,
+          height: box.offsetHeight,
+          text: content.textContent,
+          fontSize: content.style.fontSize || '16px',
+          rotation: currentRotation
+        };
+        if (id) {
+          boxesCollection.doc(id).set(data);
+        } else {
+          boxesCollection.add(data).then(docRef => {
+            id = docRef.id;
+          });
+        }
+      }
+
+      canvas.appendChild(box);
+
+      if (!id) saveBox();
+
+      // Show/hide rotate handle based on rotation mode toggle
+      function updateRotateHandleVisibility() {
+        rotateHandle.style.display = rotationEnabled ? 'block' : 'none';
+      }
+      updateRotateHandleVisibility();
+
+      return box;
+    }
+
+    undoBtn.addEventListener('click', () => {
+      if (undoStack.length === 0) return;
+      const lastBox = undoStack.pop();
+      const box = addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize, lastBox.rotation);
+
+      if (undoStack.length === 0) undoBtn.disabled = true;
+    });
+
+    goCenterBtn.addEventListener('click', () => {
+      panX = 0;
+      panY = 0;
+      updateTransform();
+    });
+
+    markCenterBtn.addEventListener('click', () => {
+      centerX = -panX / scale;
+      centerY = -panY / scale;
+      alert(`Center marked at: x=${centerX.toFixed(2)}, y=${centerY.toFixed(2)}`);
+    });
+
+    toggleRotateBtn.addEventListener('click', () => {
+      rotationEnabled = !rotationEnabled;
+      const rotateHandles = document.querySelectorAll('.rotate-handle');
+      rotateHandles.forEach(handle => {
+        handle.style.display = rotationEnabled ? 'block' : 'none';
+      });
+      toggleRotateBtn.textContent = rotationEnabled ? 'Rotate: ON' : 'Rotate: OFF';
+    });
+
+    window.addEventListener('load', () => {
+      updateTransform();
+      loadBoxes();
+    });
+
+    function loadBoxes() {
+      boxesCollection.get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          addBox(
+            data.x,
+            data.y,
+            data.text,
+            doc.id,
+            data.width,
+            data.height,
+            data.fontSize || '16px',
+            data.rotation || 0
+          );
+        });
+      });
+    }
+  </script>
+</body>
+</html>
