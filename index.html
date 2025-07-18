@@ -16,7 +16,13 @@
     }
     #canvas {
       position: absolute; top: 0; left: 0; transform-origin: 0 0;
-      width: 10000px; height: 10000px; /* large for lines */
+    }
+    svg#connectionsSVG {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 5;
     }
     .box {
       position: absolute;
@@ -35,12 +41,7 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
-      transition: box-shadow 0.2s;
-    }
-    .box.selected {
-      box-shadow: 0 0 8px 3px rgba(0, 120, 255, 0.7);
-      border-color: #0078ff;
-      z-index: 50;
+      position: relative;
     }
     .box > div[contenteditable="true"] {
       outline: none;
@@ -66,6 +67,28 @@
       user-select: none;
       pointer-events: auto;
       z-index: 10;
+    }
+    .box > span.connect-toggle {
+      position: absolute;
+      top: 26px; /* below delete button */
+      right: 4px;
+      cursor: pointer;
+      color: white;
+      background: blue;
+      font-weight: bold;
+      user-select: none;
+      pointer-events: auto;
+      z-index: 10;
+      width: 18px;
+      height: 18px;
+      line-height: 18px;
+      text-align: center;
+      border-radius: 3px;
+      font-size: 14px;
+      transition: background 0.2s ease;
+    }
+    .box > span.connect-toggle.selected {
+      background: darkblue;
     }
     .resize-handle {
       width: 16px;
@@ -121,34 +144,18 @@
       padding: 4px 8px; border-radius: 4px;
       user-select: none; pointer-events: none; z-index: 1001;
     }
-    svg {
-      position: absolute;
-      top: 0;
-      left: 0;
-      pointer-events: none;
-      overflow: visible;
-      width: 10000px;
-      height: 10000px;
-      z-index: 5;
-    }
-    line {
-      stroke: black;
-      stroke-width: 2;
-    }
   </style>
 </head>
 <body>
   <div id="viewport">
-    <div id="canvas">
-      <svg id="connectionsSVG"></svg>
-    </div>
+    <div id="canvas"></div>
+    <svg id="connectionsSVG"></svg>
   </div>
 
   <div id="buttonContainer">
     <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
     <button id="undoConnectionBtn" class="floatingBtn" disabled>Undo Connection</button>
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
-    <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
   </div>
 
   <div id="zoomDisplay">Zoom: 100%</div>
@@ -175,7 +182,6 @@
     const undoBtn = document.getElementById('undoBtn');
     const undoConnectionBtn = document.getElementById('undoConnectionBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
-    const markCenterBtn = document.getElementById('markCenterBtn');
     const zoomDisplay = document.getElementById('zoomDisplay');
     const connectionsSVG = document.getElementById('connectionsSVG');
 
@@ -184,15 +190,16 @@
 
     const undoStack = [];
     let connections = [];
-    let selectedBox = null;
-    let markedCenter = null;
+
+    let selectedConnectBox = null; // For connect toggle selection
 
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
     }
+
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === undoConnectionBtn || e.target === markCenterBtn) return;
+      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === undoConnectionBtn) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -241,39 +248,11 @@
 
     function updateTransform() {
       canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      connectionsSVG.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
       const zoomPercent = Math.round(scale * 100);
       zoomDisplay.textContent = `Zoom: ${zoomPercent}%`;
       updateConnections();
     }
-
-    let lastTap = 0;
-    viewport.addEventListener('pointerdown', e => {
-      if (e.target === goCenterBtn || e.target === undoBtn || e.target === undoConnectionBtn || e.target === markCenterBtn) return;
-      const now = Date.now();
-      if (now - lastTap < 400 && !e.target.closest('.box')) {
-        const x = (e.clientX - panX) / scale;
-        const y = (e.clientY - panY) / scale;
-        addBox(x, y);
-      }
-      lastTap = now;
-    });
-
-    markCenterBtn.addEventListener('click', () => {
-      const rect = viewport.getBoundingClientRect();
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      markedCenter = {
-        x: (centerX - panX) / scale,
-        y: (centerY - panY) / scale
-      };
-    });
-
-    goCenterBtn.addEventListener('click', () => {
-      if (!markedCenter) return;
-      panX = viewport.clientWidth / 2 - markedCenter.x * scale;
-      panY = viewport.clientHeight / 2 - markedCenter.y * scale;
-      updateTransform();
-    });
 
     function adjustFontSizeToFit(contentDiv, box) {
       const padding = 8;
@@ -332,19 +311,19 @@
         adjustFontSizeToFit(content, box);
       }
 
-      content.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          document.execCommand('insertHTML', false, '\n');
-        }
-      });
-
+      // Delete button
       const delBtn = document.createElement('span');
       delBtn.className = 'delete-btn';
       delBtn.textContent = '×';
 
+      // Connect toggle button
+      const connectToggle = document.createElement('span');
+      connectToggle.className = 'connect-toggle';
+      connectToggle.textContent = '+';
+
       box.appendChild(content);
       box.appendChild(delBtn);
+      box.appendChild(connectToggle);
 
       const handles = {};
       ['nw', 'ne', 'sw', 'se'].forEach(pos => {
@@ -363,7 +342,7 @@
       let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
 
       box.addEventListener('pointerdown', e => {
-        if (e.target === delBtn) return;
+        if (e.target === delBtn || e.target === connectToggle) return;
         if (e.target.classList.contains('resize-handle')) return;
         moved = false;
         offsetX = e.clientX - box.getBoundingClientRect().left;
@@ -478,29 +457,72 @@
           fontSize: content.style.fontSize,
           id: id
         });
+        if (undoStack.length > 5) undoStack.shift();
         undoBtn.disabled = false;
+
         removeConnectionsForBox(box);
-        if (id) boxesCollection.doc(id).delete();
+        if (selectedConnectBox === box) {
+          selectedConnectBox = null;
+        }
         box.remove();
-        if (selectedBox === box) selectedBox = null;
+        if (id) boxesCollection.doc(id).delete();
+      });
+
+      // Connect toggle button logic
+      connectToggle.addEventListener('click', e => {
+        e.stopPropagation();
+        if (selectedConnectBox === box) {
+          // Deselect if clicked again
+          connectToggle.classList.remove('selected');
+          selectedConnectBox = null;
+        } else {
+          // Clear old selection
+          if (selectedConnectBox) {
+            const oldToggle = selectedConnectBox.querySelector('.connect-toggle');
+            if (oldToggle) oldToggle.classList.remove('selected');
+          }
+          selectedConnectBox = box;
+          connectToggle.classList.add('selected');
+          return;
+        }
+      });
+
+      // Listen for second toggle click to connect boxes
+      connectToggle.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!selectedConnectBox) {
+          selectedConnectBox = box;
+          connectToggle.classList.add('selected');
+          return;
+        }
+        if (selectedConnectBox === box) {
+          connectToggle.classList.remove('selected');
+          selectedConnectBox = null;
+          return;
+        }
+        // Connect selectedConnectBox to this box:
+        const boxA = selectedConnectBox;
+        const boxB = box;
+
+        // Remove selected style from old toggle
+        const oldToggle = boxA.querySelector('.connect-toggle');
+        if (oldToggle) oldToggle.classList.remove('selected');
+
+        selectedConnectBox = null;
+
+        // Create line
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute('stroke', 'black');
+        line.setAttribute('stroke-width', '2');
+        connectionsSVG.appendChild(line);
+        connections.push({ boxA, boxB, line });
+        updateConnections();
+        updateUndoConnectionBtn();
       });
 
       content.addEventListener('input', () => {
         adjustFontSizeToFit(content, box);
         saveBox();
-      });
-
-      box.addEventListener('click', e => {
-        e.stopPropagation();
-        if (selectedBox === box) {
-          // deselect on second click
-          selectedBox.classList.remove('selected');
-          selectedBox = null;
-        } else {
-          if (selectedBox) selectedBox.classList.remove('selected');
-          selectedBox = box;
-          selectedBox.classList.add('selected');
-        }
       });
 
       function saveBox() {
@@ -528,49 +550,28 @@
       return box;
     }
 
-    undoBtn.addEventListener('click', () => {
-      if (undoStack.length === 0) return;
-      const lastBox = undoStack.pop();
-      const box = addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize);
-      undoBtn.disabled = undoStack.length === 0;
-    });
-
-    undoConnectionBtn.addEventListener('click', () => {
-      if (connections.length === 0) return;
-      const lastConn = connections.pop();
-      lastConn.line.remove();
-      undoConnectionBtn.disabled = connections.length === 0;
-    });
-
-    function updateUndoConnectionBtn() {
-      undoConnectionBtn.disabled = connections.length === 0;
-    }
-
-    goCenterBtn.addEventListener('click', () => {
-      if (!markedCenter) return;
-      panX = viewport.clientWidth / 2 - markedCenter.x * scale;
-      panY = viewport.clientHeight / 2 - markedCenter.y * scale;
-      updateTransform();
-    });
-
     function updateConnections() {
       connections.forEach(({ boxA, boxB, line }) => {
-        const ax = boxA.offsetLeft + boxA.offsetWidth / 2;
-        const ay = boxA.offsetTop + boxA.offsetHeight / 2;
-        const bx = boxB.offsetLeft + boxB.offsetWidth / 2;
-        const by = boxB.offsetTop + boxB.offsetHeight / 2;
-        line.setAttribute('x1', ax);
-        line.setAttribute('y1', ay);
-        line.setAttribute('x2', bx);
-        line.setAttribute('y2', by);
+        const rectA = boxA.getBoundingClientRect();
+        const rectB = boxB.getBoundingClientRect();
+        const parentRect = canvas.getBoundingClientRect();
+
+        const x1 = (rectA.left + rectA.width / 2 - parentRect.left) / scale;
+        const y1 = (rectA.top + rectA.height / 2 - parentRect.top) / scale;
+        const x2 = (rectB.left + rectB.width / 2 - parentRect.left) / scale;
+        const y2 = (rectB.top + rectB.height / 2 - parentRect.top) / scale;
+
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y2);
       });
-      updateUndoConnectionBtn();
     }
 
     function removeConnectionsForBox(box) {
-      connections = connections.filter(conn => {
-        if (conn.boxA === box || conn.boxB === box) {
-          conn.line.remove();
+      connections = connections.filter(({ boxA, boxB, line }) => {
+        if (boxA === box || boxB === box) {
+          line.remove();
           return false;
         }
         return true;
@@ -578,47 +579,65 @@
       updateUndoConnectionBtn();
     }
 
-    // Connection drawing logic
-    let connectionStartBox = null;
-    canvas.addEventListener('click', e => {
-      if (!e.target.classList.contains('box')) return;
-
-      if (!connectionStartBox) {
-        connectionStartBox = e.target;
-        connectionStartBox.classList.add('selected');
-      } else if (connectionStartBox === e.target) {
-        connectionStartBox.classList.remove('selected');
-        connectionStartBox = null;
-      } else {
-        const boxA = connectionStartBox;
-        const boxB = e.target;
-
-        connectionStartBox.classList.remove('selected');
-        connectionStartBox = null;
-
-        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        connectionsSVG.appendChild(line);
-        connections.push({ boxA, boxB, line });
-        updateConnections();
-        updateUndoConnectionBtn();
-      }
-    });
-
-    const boxesCollection = db.collection('boxes');
-
-    window.addEventListener('load', () => {
-      updateTransform();
-      loadBoxes();
-    });
-
-    function loadBoxes() {
-      boxesCollection.get().then(snapshot => {
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize || '16px');
-        });
-      });
+    function undoDelete() {
+      if (undoStack.length === 0) return;
+      const data = undoStack.pop();
+      addBox(data.x, data.y, data.text, data.id, data.width, data.height, data.fontSize);
+      if (undoStack.length === 0) undoBtn.disabled = true;
     }
+
+    undoBtn.addEventListener('click', undoDelete);
+
+    // Undo connection stack & logic
+    const undoConnectionStack = [];
+    function undoLastConnection() {
+      if (connections.length === 0) return;
+      const last = connections.pop();
+      undoConnectionStack.push(last);
+      last.line.remove();
+      updateUndoConnectionBtn();
+    }
+    undoConnectionBtn.addEventListener('click', undoLastConnection);
+
+    function updateUndoConnectionBtn() {
+      undoConnectionBtn.disabled = connections.length === 0;
+    }
+
+    goCenterBtn.addEventListener('click', () => {
+      panX = 0;
+      panY = 0;
+      scale = 1;
+      updateTransform();
+    });
+
+    // Add box on double click on canvas
+    viewport.addEventListener('dblclick', e => {
+      if (e.target !== viewport && !e.target.classList.contains('box') && !e.target.closest('.box')) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left - panX) / scale - 90;
+      const y = (e.clientY - rect.top - panY) / scale - 40;
+      addBox(x, y);
+    });
+
+    // Load boxes from Firebase
+    const boxesCollection = db.collection('boxes');
+    boxesCollection.onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const d = change.doc.data();
+          addBox(d.x, d.y, d.text, change.doc.id, d.width, d.height, d.fontSize);
+        }
+        if (change.type === 'modified') {
+          // You can implement modification updates here if you want
+        }
+        if (change.type === 'removed') {
+          // You can implement removal updates here if you want
+        }
+      });
+    });
+
+    updateTransform();
+
   </script>
 </body>
 </html>
