@@ -34,6 +34,8 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
+      transform-origin: center center;
+      transition: transform 0.1s ease-out;
     }
     .box > div[contenteditable="true"] {
       outline: none;
@@ -49,6 +51,8 @@
       margin: 0;
       overflow: visible;
       line-height: 1.2;
+      /* Keep text upright */
+      transform-origin: center center;
     }
     .box > span.delete-btn {
       position: absolute;
@@ -72,6 +76,30 @@
     .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
     .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
     .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
+
+    /* Rotation handle */
+    .rotate-handle {
+      width: 16px;
+      height: 16px;
+      background: #666;
+      border-radius: 50%;
+      position: absolute;
+      top: -30px;
+      left: 50%;
+      margin-left: -8px;
+      cursor: grab;
+      z-index: 25;
+      display: none; /* hidden by default */
+    }
+
+    .rotate-handle.grabbing {
+      cursor: grabbing;
+    }
+
+    /* Show rotate handle when rotate mode enabled */
+    .rotate-mode .rotate-handle {
+      display: block;
+    }
 
     #buttonContainer {
       position: fixed;
@@ -108,12 +136,6 @@
       border-color: #999;
       box-shadow: none;
     }
-    #zoomDisplay {
-      position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.5); color: white; font-family: monospace;
-      padding: 4px 8px; border-radius: 4px;
-      user-select: none; pointer-events: none; z-index: 1001;
-    }
   </style>
 </head>
 <body>
@@ -124,9 +146,8 @@
   <div id="buttonContainer">
     <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
+    <button id="rotateToggleBtn" class="floatingBtn">Rotate Box: Off</button>
   </div>
-
-  <div id="zoomDisplay">Zoom: 100%</div>
 
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
@@ -149,19 +170,23 @@
     const viewport = document.getElementById('viewport');
     const undoBtn = document.getElementById('undoBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
-    const zoomDisplay = document.getElementById('zoomDisplay');
+    const rotateToggleBtn = document.getElementById('rotateToggleBtn');
 
     let scale = 1, panX = 0, panY = 0;
     let isPanning = false, startX, startY;
 
     const undoStack = [];
 
+    // Rotation mode flag
+    let rotateMode = false;
+
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
     }
+
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn) return;
+      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === rotateToggleBtn) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -182,41 +207,21 @@
       viewport.releasePointerCapture(e.pointerId);
     });
 
-    const MIN_SCALE = 0.2;
-    const MAX_SCALE = 5;
-
     viewport.addEventListener('wheel', e => {
       e.preventDefault();
       const zoomFactor = 1.1;
       const dir = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
-
-      let newScale = scale * dir;
-      newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, newScale));
-
-      const rect = viewport.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const wx = (mouseX - panX) / scale;
-      const wy = (mouseY - panY) / scale;
-
-      scale = newScale;
-
-      panX = mouseX - wx * scale;
-      panY = mouseY - wy * scale;
-
+      scale *= dir;
       updateTransform();
     });
 
     function updateTransform() {
       canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-      const zoomPercent = Math.round(scale * 100);
-      zoomDisplay.textContent = `Zoom: ${zoomPercent}%`;
     }
 
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
-      if (e.target === goCenterBtn || e.target === undoBtn) return;
+      if (e.target === goCenterBtn || e.target === undoBtn || e.target === rotateToggleBtn) return;
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -252,13 +257,14 @@
       contentDiv.style.fontSize = fontSize + 'px';
     }
 
-    function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px') {
+    function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px', rotation = 0) {
       const box = document.createElement('div');
       box.className = 'box';
       box.style.left = `${x}px`;
       box.style.top = `${y}px`;
       box.style.width = width + 'px';
       box.style.height = height + 'px';
+      box.style.transform = `rotate(${rotation}deg)`;
       box.spellcheck = false;
 
       const content = document.createElement('div');
@@ -282,6 +288,10 @@
 
       content.style.fontSize = fontSize || '16px';
 
+      // Keep text upright inside rotated box by applying inverse rotation
+      content.style.transform = `rotate(${-rotation}deg)`;
+
+      // Only adjust font size to fit if fontSize is default or not saved
       if (fontSize === '16px' || !fontSize) {
         adjustFontSizeToFit(content, box);
       }
@@ -308,17 +318,25 @@
         handles[pos] = h;
       });
 
+      // Rotation handle
+      const rotateHandle = document.createElement('div');
+      rotateHandle.className = 'rotate-handle';
+      box.appendChild(rotateHandle);
+
       let dragging = false;
       let resizing = false;
+      let rotating = false;
       let offsetX = 0;
       let offsetY = 0;
       let moved = false;
       let resizeDir = null;
       let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
+      let startRotateAngle, startPointerAngle;
 
       box.addEventListener('pointerdown', e => {
         if (e.target === delBtn) return;
         if (e.target.classList.contains('resize-handle')) return;
+        if (rotateMode && e.target === rotateHandle) return;
         moved = false;
         offsetX = e.clientX - box.getBoundingClientRect().left;
         offsetY = e.clientY - box.getBoundingClientRect().top;
@@ -326,7 +344,7 @@
       });
 
       box.addEventListener('pointermove', e => {
-        if (!box.hasPointerCapture(e.pointerId) || resizing) return;
+        if (!box.hasPointerCapture(e.pointerId) || resizing || rotating) return;
         const dx = e.clientX - offsetX - box.getBoundingClientRect().left;
         const dy = e.clientY - offsetY - box.getBoundingClientRect().top;
         if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
@@ -409,6 +427,7 @@
 
           adjustFontSizeToFit(content, box);
 
+          // Save current font size and box size/pos
           saveBox();
         });
 
@@ -419,6 +438,43 @@
         });
       }
 
+      // Rotation handle events
+      rotateHandle.addEventListener('pointerdown', e => {
+        e.stopPropagation();
+        rotating = true;
+        rotateHandle.classList.add('grabbing');
+        const rect = box.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        startRotateAngle = rotation;
+        startPointerAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+        rotateHandle.setPointerCapture(e.pointerId);
+      });
+
+      rotateHandle.addEventListener('pointermove', e => {
+        if (!rotating || !rotateHandle.hasPointerCapture(e.pointerId)) return;
+        e.preventDefault();
+        const rect = box.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const currentPointerAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+        let deltaAngle = currentPointerAngle - startPointerAngle;
+        let newRotation = startRotateAngle + deltaAngle * (180 / Math.PI);
+        // Normalize angle between -180 and 180
+        if (newRotation > 180) newRotation -= 360;
+        if (newRotation < -180) newRotation += 360;
+        box.style.transform = `rotate(${newRotation}deg)`;
+        content.style.transform = `rotate(${-newRotation}deg)`;
+        saveBox(newRotation);
+      });
+
+      rotateHandle.addEventListener('pointerup', e => {
+        if (!rotateHandle.hasPointerCapture(e.pointerId)) return;
+        rotateHandle.releasePointerCapture(e.pointerId);
+        rotating = false;
+        rotateHandle.classList.remove('grabbing');
+      });
+
       delBtn.addEventListener('click', e => {
         e.stopPropagation();
         undoStack.push({
@@ -428,71 +484,5 @@
           width: box.offsetWidth,
           height: box.offsetHeight,
           fontSize: content.style.fontSize,
-          id: id
-        });
-        if (undoStack.length > 5) undoStack.shift();
-        undoBtn.disabled = false;
-        box.remove();
-        if (id) boxesCollection.doc(id).delete();
-      });
-
-      content.addEventListener('input', () => {
-        adjustFontSizeToFit(content, box);
-        saveBox();
-      });
-
-      function saveBox() {
-        const data = {
-          x: parseFloat(box.style.left),
-          y: parseFloat(box.style.top),
-          width: box.offsetWidth,
-          height: box.offsetHeight,
-          text: content.textContent,
-          fontSize: content.style.fontSize || '16px'
-        };
-        if (id) {
-          boxesCollection.doc(id).set(data);
-        } else {
-          boxesCollection.add(data).then(docRef => {
-            id = docRef.id;
-          });
-        }
-      }
-
-      canvas.appendChild(box);
-
-      if (!id) saveBox();
-
-      return box;
-    }
-
-    undoBtn.addEventListener('click', () => {
-      if (undoStack.length === 0) return;
-      const lastBox = undoStack.pop();
-      const box = addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize);
-
-      if (undoStack.length === 0) undoBtn.disabled = true;
-    });
-
-    goCenterBtn.addEventListener('click', () => {
-      panX = 0;
-      panY = 0;
-      updateTransform();
-    });
-
-    window.addEventListener('load', () => {
-      updateTransform();
-      loadBoxes();
-    });
-
-    function loadBoxes() {
-      boxesCollection.get().then(snapshot => {
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize || '16px');
-        });
-      });
-    }
-  </script>
-</body>
-</html>
+          id: id,
+          rotation:
