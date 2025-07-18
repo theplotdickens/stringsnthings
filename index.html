@@ -34,6 +34,7 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
+      z-index: 10; /* make sure boxes are above lines */
     }
     .box > div[contenteditable="true"] {
       outline: none;
@@ -58,7 +59,7 @@
       font-weight: bold;
       user-select: none;
       pointer-events: auto;
-      z-index: 10;
+      z-index: 11;
     }
     .resize-handle {
       width: 16px;
@@ -114,10 +115,19 @@
       padding: 4px 8px; border-radius: 4px;
       user-select: none; pointer-events: none; z-index: 1001;
     }
+    svg#connections {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 5; /* behind boxes */
+      overflow: visible;
+    }
   </style>
 </head>
 <body>
   <div id="viewport">
+    <svg id="connections"></svg>
     <div id="canvas"></div>
   </div>
 
@@ -150,11 +160,16 @@
     const undoBtn = document.getElementById('undoBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
     const zoomDisplay = document.getElementById('zoomDisplay');
+    const connectionsSVG = document.getElementById('connections');
 
     let scale = 1, panX = 0, panY = 0;
     let isPanning = false, startX, startY;
 
     const undoStack = [];
+
+    // For connecting boxes
+    let selectedBox = null;
+    const connections = [];
 
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -210,13 +225,66 @@
 
     function updateTransform() {
       canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      connectionsSVG.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
       const zoomPercent = Math.round(scale * 100);
       zoomDisplay.textContent = `Zoom: ${zoomPercent}%`;
+      updateConnections();
+    }
+
+    // Draw line between two boxes (center points)
+    function drawConnection(boxA, boxB) {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('stroke', 'black');
+      line.setAttribute('stroke-width', '2');
+      connectionsSVG.appendChild(line);
+      return { line, boxA, boxB };
+    }
+
+    // Update all lines positions
+    function updateConnections() {
+      connections.forEach(conn => {
+        const rectA = conn.boxA.getBoundingClientRect();
+        const rectB = conn.boxB.getBoundingClientRect();
+        const svgRect = connectionsSVG.getBoundingClientRect();
+
+        // Calculate center points relative to SVG container
+        const x1 = rectA.left + rectA.width / 2 - svgRect.left;
+        const y1 = rectA.top + rectA.height / 2 - svgRect.top;
+        const x2 = rectB.left + rectB.width / 2 - svgRect.left;
+        const y2 = rectB.top + rectB.height / 2 - svgRect.top;
+
+        conn.line.setAttribute('x1', x1);
+        conn.line.setAttribute('y1', y1);
+        conn.line.setAttribute('x2', x2);
+        conn.line.setAttribute('y2', y2);
+      });
+    }
+
+    // When a box is clicked: select or connect
+    function boxClickHandler(e) {
+      const box = e.currentTarget;
+      e.stopPropagation();
+
+      if (!selectedBox) {
+        selectedBox = box;
+        box.style.borderColor = 'blue';
+      } else if (selectedBox === box) {
+        // Same box clicked - deselect
+        selectedBox.style.borderColor = 'black';
+        selectedBox = null;
+      } else {
+        // Connect boxes
+        connections.push(drawConnection(selectedBox, box));
+        selectedBox.style.borderColor = 'black';
+        selectedBox = null;
+        updateConnections();
+      }
     }
 
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
       if (e.target === goCenterBtn || e.target === undoBtn) return;
+      if (e.target.closest('.box')) return; // prevent double-box creation on box clicks
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -224,12 +292,6 @@
         addBox(x, y);
       }
       lastTap = now;
-    });
-
-    goCenterBtn.addEventListener('click', () => {
-      panX = 0;
-      panY = 0;
-      updateTransform();
     });
 
     const boxesCollection = db.collection('boxes');
@@ -347,6 +409,7 @@
           box.style.top = `${newY}px`;
           saveBox();
           moved = true;
+          updateConnections(); // update lines on drag
         }
       });
 
@@ -413,8 +476,8 @@
           box.style.top = `${newTop}px`;
 
           adjustFontSizeToFit(content, box);
-
           saveBox();
+          updateConnections(); // update lines on resize
         });
 
         handle.addEventListener('pointerup', e => {
@@ -439,12 +502,22 @@
         undoBtn.disabled = false;
         box.remove();
         if (id) boxesCollection.doc(id).delete();
+
+        // Remove connections involving this box
+        for (let i = connections.length -1; i >= 0; i--) {
+          if (connections[i].boxA === box || connections[i].boxB === box) {
+            connectionsSVG.removeChild(connections[i].line);
+            connections.splice(i, 1);
+          }
+        }
       });
 
       content.addEventListener('input', () => {
         adjustFontSizeToFit(content, box);
         saveBox();
       });
+
+      box.addEventListener('click', boxClickHandler);
 
       function saveBox() {
         const data = {
