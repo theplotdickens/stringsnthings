@@ -228,16 +228,23 @@
       lastTap = now;
     });
 
+    let savedCenter = null;
+
     markCenterBtn.addEventListener('click', () => {
-      // Calculate the center point of the viewport in world coords
       const rect = viewport.getBoundingClientRect();
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
+      // Calculate world coords of viewport center
+      const centerX = (rect.width / 2 - panX) / scale;
+      const centerY = (rect.height / 2 - panY) / scale;
+      savedCenter = { x: centerX, y: centerY };
+      markCenterBtn.textContent = 'Center Marked';
+      setTimeout(() => { markCenterBtn.textContent = 'Mark Center'; }, 1000);
+    });
 
-      // New panX and panY so that current center becomes (0,0)
-      panX = centerX;
-      panY = centerY;
-
+    goCenterBtn.addEventListener('click', () => {
+      if (!savedCenter) return;
+      const rect = viewport.getBoundingClientRect();
+      panX = rect.width / 2 - savedCenter.x * scale;
+      panY = rect.height / 2 - savedCenter.y * scale;
       updateTransform();
     });
 
@@ -248,7 +255,6 @@
       const maxFontSize = 100;
       const minFontSize = 8;
 
-      // Reset font size to max to start measurement
       contentDiv.style.fontSize = maxFontSize + 'px';
 
       const boxWidth = box.clientWidth - padding * 2;
@@ -486,28 +492,4 @@
       const lastBox = undoStack.pop();
       const box = addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize);
 
-      if (undoStack.length === 0) undoBtn.disabled = true;
-    });
-
-    goCenterBtn.addEventListener('click', () => {
-      panX = 0;
-      panY = 0;
-      updateTransform();
-    });
-
-    window.addEventListener('load', () => {
-      updateTransform();
-      loadBoxes();
-    });
-
-    function loadBoxes() {
-      boxesCollection.get().then(snapshot => {
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize || '16px');
-        });
-      });
-    }
-  </script>
-</body>
-</html>
+      if (undoStack
