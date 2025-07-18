@@ -26,46 +26,47 @@
       min-height: 40px;
       user-select: none;
       box-sizing: border-box;
-      overflow: hidden;
       display: flex;
       flex-direction: column;
       cursor: text;
-      transition: width 0.3s ease, height 0.3s ease;
+      overflow: hidden;
+      transition: width 0.1s ease, height 0.1s ease;
     }
     .box-header {
       background: #ddd;
-      padding: 1px 2px;
+      padding: 1px 4px;
       display: flex;
       justify-content: flex-end;
       align-items: center;
-      gap: 2px;
+      gap: 4px;
       user-select: none;
       cursor: default;
       border-bottom: 1px solid #bbb;
       font-size: 12px;
       height: 18px;
       box-sizing: border-box;
+      flex-shrink: 0;
     }
     .delete-btn {
       color: red;
       font-weight: bold;
       cursor: pointer;
-      font-size: 10px;
+      font-size: 14px;
       line-height: 1;
       user-select: none;
       padding: 0;
       margin: 0;
       border: none;
       background: transparent;
-      width: 14px;
-      height: 14px;
+      width: 18px;
+      height: 18px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
     .connect-toggle {
-      width: 14px;
-      height: 14px;
+      width: 18px;
+      height: 18px;
       border-radius: 50%;
       border: none;
       background-color: blue;
@@ -74,13 +75,14 @@
       transition: background-color 0.25s ease;
       padding: 0;
       margin: 0;
+      flex-shrink: 0;
     }
     .connect-toggle.active {
       background-color: green;
     }
     .box-content {
       flex: 1;
-      padding: 6px 10px;
+      padding: 6px 8px;
       white-space: pre-wrap;
       font-family: monospace, monospace;
       overflow: auto;
@@ -291,27 +293,24 @@
     const boxesCollection = db.collection('boxes');
     const connectionsCollection = db.collection('connections');
 
-    function adjustFontSizeToFit(contentDiv, box) {
-      const padding = 12;
-
-      let fontSize = 100;
-      const minFontSize = 8;
-
-      contentDiv.style.fontSize = fontSize + 'px';
-
+    function smoothAdjustFontSize(contentDiv, box) {
+      // Faster, smoother font scaling by binary search on font size
+      const padding = 14;
       const maxWidth = box.clientWidth - padding;
       const maxHeight = box.clientHeight - padding;
-
-      while (fontSize >= minFontSize) {
-        contentDiv.style.fontSize = fontSize + 'px';
-
+      let minSize = 8;
+      let maxSize = 72;
+      let fontSize = 16;
+      while (minSize <= maxSize) {
+        const mid = Math.floor((minSize + maxSize) / 2);
+        contentDiv.style.fontSize = mid + 'px';
         if (contentDiv.scrollWidth <= maxWidth && contentDiv.scrollHeight <= maxHeight) {
-          break;
+          fontSize = mid;
+          minSize = mid + 1;
+        } else {
+          maxSize = mid - 1;
         }
-        fontSize -= 1;
       }
-      if (fontSize < minFontSize) fontSize = minFontSize;
-
       contentDiv.style.fontSize = fontSize + 'px';
     }
 
@@ -340,23 +339,30 @@
         const endY = by * scale + panY;
 
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        // Quadratic bezier curve with control point offset perpendicular to line
         const dx = endX - startX;
         const dy = endY - startY;
+        const distance = Math.sqrt(dx*dx + dy*dy);
+        const normX = dx / distance;
+        const normY = dy / distance;
+        const cpOffset = 40; // curve bend amount
 
-        const cx = (startX + endX) / 2 - dy * 0.3;
-        const cy = (startY + endY) / 2 + dx * 0.3;
+        // Perpendicular vector
+        const cpX = (startX + endX) / 2 - normY * cpOffset;
+        const cpY = (startY + endY) / 2 + normX * cpOffset;
 
-        path.setAttribute('d', `M${startX},${startY} Q${cx},${cy} ${endX},${endY}`);
+        path.setAttribute('d', `M${startX},${startY} Q${cpX},${cpY} ${endX},${endY}`);
         path.setAttribute('stroke', 'black');
         path.setAttribute('stroke-width', '2');
         path.setAttribute('fill', 'none');
         path.style.cursor = 'pointer';
 
-        path.addEventListener('click', () => {
+        path.addEventListener('click', async () => {
           const idx = connections.findIndex(c => c.fromId === fromId && c.toId === toId);
           if (idx !== -1) {
             connections.splice(idx, 1);
-            saveConnections().then(drawConnections);
+            await saveConnections();
+            drawConnections();
           }
         });
 
@@ -443,13 +449,15 @@
 
       box.addEventListener('pointermove', e => {
         if (!box.hasPointerCapture(e.pointerId) || resizing) return;
-        const dx = e.clientX - offsetX - box.getBoundingClientRect().left;
-        const dy = e.clientY - offsetY - box.getBoundingClientRect().top;
-        if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
-          dragging = true;
-          content.blur();
-          box.style.cursor = 'grabbing';
-          box.style.userSelect = 'none';
+        if (!dragging) {
+          const dx = e.clientX - offsetX - box.getBoundingClientRect().left;
+          const dy = e.clientY - offsetY - box.getBoundingClientRect().top;
+          if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+            dragging = true;
+            content.blur();
+            box.style.cursor = 'grabbing';
+            box.style.userSelect = 'none';
+          }
         }
         if (dragging) {
           const newX = (e.clientX - offsetX - panX) / scale;
@@ -484,8 +492,8 @@
           resizeDir = pos;
           startWidth = box.offsetWidth;
           startHeight = box.offsetHeight;
-          startXpos = box.offsetLeft;
-          startYpos = box.offsetTop;
+          startXpos = parseFloat(box.style.left);
+          startYpos = parseFloat(box.style.top);
           startClientX = e.clientX;
           startClientY = e.clientY;
           handle.setPointerCapture(e.pointerId);
@@ -518,7 +526,7 @@
           box.style.left = newLeft + 'px';
           box.style.top = newTop + 'px';
 
-          adjustFontSizeToFit(content, box);
+          smoothAdjustFontSize(content, box);
           drawConnections();
         });
 
@@ -532,7 +540,7 @@
         });
       }
 
-      connectToggle.addEventListener('click', () => {
+      connectToggle.addEventListener('click', async () => {
         if (connectToggle.classList.contains('active')) {
           connectToggle.classList.remove('active');
           selectedBoxForConnection = null;
@@ -544,44 +552,57 @@
       });
 
       delBtn.addEventListener('click', async () => {
-        if (box.dataset.id) {
-          undoStack.push({
-            box: {
-              id: box.dataset.id,
-              x: parseFloat(box.style.left),
-              y: parseFloat(box.style.top),
-              text: content.textContent,
-              width: box.offsetWidth,
-              height: box.offsetHeight,
-              fontSize: content.style.fontSize
-            },
-            connections: connections.filter(c => c.fromId === box.dataset.id || c.toId === box.dataset.id)
-          });
-          undoBtn.disabled = false;
+        if (!box.dataset.id) return;
+        undoStack.push({
+          box: {
+            id: box.dataset.id,
+            x: parseFloat(box.style.left),
+            y: parseFloat(box.style.top),
+            text: content.textContent,
+            width: box.offsetWidth,
+            height: box.offsetHeight,
+            fontSize: content.style.fontSize
+          },
+          connections: connections.filter(c => c.fromId === box.dataset.id || c.toId === box.dataset.id)
+        });
+        undoBtn.disabled = false;
 
-          // Delete connections related
-          for (let i = connections.length - 1; i >= 0; i--) {
-            if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
-              connections.splice(i, 1);
-            }
+        for (let i = connections.length - 1; i >= 0; i--) {
+          if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
+            connections.splice(i, 1);
           }
-          await saveConnections();
-          await boxesCollection.doc(box.dataset.id).delete();
-          box.remove();
-          drawConnections();
         }
+        await saveConnections();
+        await boxesCollection.doc(box.dataset.id).delete();
+        box.remove();
+        drawConnections();
       });
 
       content.addEventListener('input', async () => {
-        adjustFontSizeToFit(content, box);
+        smoothAdjustFontSize(content, box);
         await saveBox(box, content);
         drawConnections();
       });
 
+      // Connect second box click to create connection
+      box.addEventListener('click', async e => {
+        if (selectedBoxForConnection && selectedBoxForConnection !== box) {
+          const fromId = selectedBoxForConnection.dataset.id;
+          const toId = box.dataset.id;
+          if (fromId && toId && !connections.some(c => (c.fromId === fromId && c.toId === toId) || (c.fromId === toId && c.toId === fromId))) {
+            connections.push({ fromId, toId });
+            await saveConnections();
+            drawConnections();
+          }
+          resetAllToggles();
+          selectedBoxForConnection = null;
+        }
+      }, true);
+
       if (id) box.dataset.id = id;
 
       canvas.appendChild(box);
-      adjustFontSizeToFit(content, box);
+      smoothAdjustFontSize(content, box);
 
       if (!id) {
         await saveBox(box, content);
@@ -631,7 +652,9 @@
       await addBox(boxData.x, boxData.y, boxData.text, boxData.id, boxData.width, boxData.height, boxData.fontSize);
 
       last.connections.forEach(conn => {
-        connections.push(conn);
+        if (!connections.some(c => c.fromId === conn.fromId && c.toId === conn.toId)) {
+          connections.push(conn);
+        }
       });
       await saveConnections();
       drawConnections();
@@ -646,7 +669,7 @@
 
     loadBoxes();
     loadConnections();
-
+    updateTransform();
   </script>
 </body>
 </html>
