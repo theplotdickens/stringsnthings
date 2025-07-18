@@ -108,6 +108,12 @@
       border-color: #999;
       box-shadow: none;
     }
+    #zoomDisplay {
+      position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.5); color: white; font-family: monospace;
+      padding: 4px 8px; border-radius: 4px;
+      user-select: none; pointer-events: none; z-index: 1001;
+    }
   </style>
 </head>
 <body>
@@ -118,8 +124,9 @@
   <div id="buttonContainer">
     <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
-    <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
   </div>
+
+  <div id="zoomDisplay">Zoom: 100%</div>
 
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
@@ -142,7 +149,7 @@
     const viewport = document.getElementById('viewport');
     const undoBtn = document.getElementById('undoBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
-    const markCenterBtn = document.getElementById('markCenterBtn');
+    const zoomDisplay = document.getElementById('zoomDisplay');
 
     let scale = 1, panX = 0, panY = 0;
     let isPanning = false, startX, startY;
@@ -154,7 +161,7 @@
       return { x: e.clientX, y: e.clientY };
     }
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
+      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -175,21 +182,41 @@
       viewport.releasePointerCapture(e.pointerId);
     });
 
+    const MIN_SCALE = 0.2;
+    const MAX_SCALE = 5;
+
     viewport.addEventListener('wheel', e => {
       e.preventDefault();
       const zoomFactor = 1.1;
       const dir = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
-      scale *= dir;
+
+      let newScale = scale * dir;
+      newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, newScale));
+
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const wx = (mouseX - panX) / scale;
+      const wy = (mouseY - panY) / scale;
+
+      scale = newScale;
+
+      panX = mouseX - wx * scale;
+      panY = mouseY - wy * scale;
+
       updateTransform();
     });
 
     function updateTransform() {
       canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      const zoomPercent = Math.round(scale * 100);
+      zoomDisplay.textContent = `Zoom: ${zoomPercent}%`;
     }
 
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
-      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
+      if (e.target === goCenterBtn || e.target === undoBtn) return;
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -255,7 +282,6 @@
 
       content.style.fontSize = fontSize || '16px';
 
-      // Only adjust font size to fit if fontSize is default or not saved
       if (fontSize === '16px' || !fontSize) {
         adjustFontSizeToFit(content, box);
       }
@@ -383,7 +409,6 @@
 
           adjustFontSizeToFit(content, box);
 
-          // Save current font size and box size/pos
           saveBox();
         });
 
@@ -452,15 +477,6 @@
     goCenterBtn.addEventListener('click', () => {
       panX = 0;
       panY = 0;
-      updateTransform();
-    });
-
-    markCenterBtn.addEventListener('click', () => {
-      // Calculate the center point in canvas coordinates
-      centerX = -panX / scale + viewport.clientWidth / 2 / scale;
-      centerY = -panY / scale + viewport.clientHeight / 2 / scale;
-      panX = -(centerX * scale - viewport.clientWidth / 2);
-      panY = -(centerY * scale - viewport.clientHeight / 2);
       updateTransform();
     });
 
