@@ -41,7 +41,7 @@
     font-family: monospace, monospace;
     user-select: text;
     touch-action: none;
-    cursor: text;
+    cursor: move;
     box-sizing: border-box;
     overflow: hidden;
     display: flex;
@@ -68,46 +68,62 @@
     -moz-user-select: text;
     -ms-user-select: text;
     user-select: text;
+    pointer-events: none; /* Allow drag through content */
   }
-  .box > span.delete-btn {
+  .box > div[contenteditable="true"]:focus {
+    pointer-events: auto; /* Enable text editing when focused */
+  }
+  
+  /* Side menu for box controls */
+  .box-menu {
     position: absolute;
-    top: 2px; right: 4px;
-    cursor: pointer;
-    color: red;
-    font-weight: bold;
-    user-select: none;
+    right: -32px;
+    top: 0;
+    width: 28px;
+    background: rgba(240, 240, 240, 0.95);
+    border: 1px solid #ccc;
+    border-left: none;
+    border-radius: 0 4px 4px 0;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 12;
     pointer-events: auto;
-    z-index: 11;
-    font-size: 16px;
-    line-height: 18px;
-    width: 18px;
-    height: 18px;
-    text-align: center;
   }
-  .box > button.connect-toggle {
-    position: absolute;
-    top: 24px; right: 6px;
-    width: 18px;
-    height: 18px;
-    border: none;
-    background: #3399ff;
-    cursor: pointer;
-    border-radius: 3px;
-    opacity: 0.8;
-    user-select: none;
-    pointer-events: auto;
-    transition: opacity 0.2s ease, background-color 0.2s ease;
-    z-index: 11;
-    font-size: 16px;
-    line-height: 18px;
-    padding: 0;
-    text-align: center;
-    color: white;
-  }
-  .box > button.connect-toggle.active {
-    background: #33cc33;
+  .box:hover .box-menu {
     opacity: 1;
   }
+  .box-menu-btn {
+    width: 26px;
+    height: 26px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+    user-select: none;
+    margin: 1px;
+    border-radius: 2px;
+  }
+  .box-menu-btn:hover {
+    background: rgba(200, 200, 200, 0.8);
+  }
+  .box-menu-btn.delete {
+    color: #d32f2f;
+  }
+  .box-menu-btn.connect {
+    color: #1976d2;
+  }
+  .box-menu-btn.connect.active {
+    background: #1976d2;
+    color: white;
+  }
+
   .resize-handle {
     width: 16px;
     height: 16px;
@@ -260,20 +276,33 @@
     content.contentEditable = "true";
     content.textContent = data.text || '';
     content.spellcheck = false;
-    adjustFontSizeToFit(content, box);
+    
+    // Set saved font size if available
+    if (data.fontSize) {
+      content.style.fontSize = data.fontSize;
+    } else {
+      adjustFontSizeToFit(content, box);
+    }
 
-    const delBtn = document.createElement('span');
-    delBtn.className = 'delete-btn';
+    // Create side menu
+    const menu = document.createElement('div');
+    menu.className = 'box-menu';
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'box-menu-btn delete';
     delBtn.textContent = '×';
+    delBtn.title = 'Delete box';
 
     const connectToggle = document.createElement('button');
-    connectToggle.className = 'connect-toggle';
+    connectToggle.className = 'box-menu-btn connect';
     connectToggle.title = 'Toggle connect mode';
     connectToggle.textContent = '•';
 
+    menu.appendChild(delBtn);
+    menu.appendChild(connectToggle);
+
     box.appendChild(content);
-    box.appendChild(delBtn);
-    box.appendChild(connectToggle);
+    box.appendChild(menu);
     canvas.appendChild(box);
 
     boxes.set(id, { element: box, data: { ...data, id } });
@@ -296,9 +325,10 @@
     let resizeDir = null;
     let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
 
-    // Drag box
+    // Single-click drag box (anywhere in the box)
     box.addEventListener('pointerdown', e => {
-      if (e.target === delBtn || e.target === connectToggle || e.target.classList.contains('resize-handle') || e.target.isContentEditable) return;
+      if (e.target.classList.contains('resize-handle') || e.target.classList.contains('box-menu-btn')) return;
+      
       dragging = true;
       offsetX = e.clientX - box.getBoundingClientRect().left;
       offsetY = e.clientY - box.getBoundingClientRect().top;
@@ -407,7 +437,7 @@
         addConnection(activeConnectBoxId, id);
         const oldBox = boxes.get(activeConnectBoxId);
         if (oldBox) {
-          const oldToggle = oldBox.element.querySelector('button.connect-toggle');
+          const oldToggle = oldBox.element.querySelector('button.connect');
           oldToggle.classList.remove('active');
         }
         activeConnectBoxId = null;
@@ -421,7 +451,7 @@
     return { element: box, data };
   }
 
-  // Update box data & save
+  // Update box data & save (now includes fontSize)
   function updateBoxData(id) {
     const box = boxes.get(id);
     if (!box) return;
@@ -630,13 +660,13 @@
 
   // Click outside to clear connection selection
   document.body.addEventListener('click', e => {
-    if (!e.target.closest('.connection-line') && !e.target.closest('button.connect-toggle')) {
+    if (!e.target.closest('.connection-line') && !e.target.closest('button.connect')) {
       selectedConnectionId = null;
       deleteConnectionBtn.disabled = true;
       if (activeConnectBoxId) {
         const oldBox = boxes.get(activeConnectBoxId);
         if (oldBox) {
-          const oldToggle = oldBox.element.querySelector('button.connect-toggle');
+          const oldToggle = oldBox.element.querySelector('button.connect');
           oldToggle.classList.remove('active');
         }
         activeConnectBoxId = null;
