@@ -124,7 +124,6 @@
   <div id="buttonContainer">
     <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
-    <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
   </div>
 
   <div id="zoomDisplay">Zoom: 100%</div>
@@ -150,7 +149,6 @@
     const viewport = document.getElementById('viewport');
     const undoBtn = document.getElementById('undoBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
-    const markCenterBtn = document.getElementById('markCenterBtn');
     const zoomDisplay = document.getElementById('zoomDisplay');
 
     let scale = 1, panX = 0, panY = 0;
@@ -163,7 +161,7 @@
       return { x: e.clientX, y: e.clientY };
     }
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
+      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -218,7 +216,7 @@
 
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
-      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
+      if (e.target === goCenterBtn || e.target === undoBtn) return;
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -228,30 +226,16 @@
       lastTap = now;
     });
 
-    let savedCenter = null;
-
-    markCenterBtn.addEventListener('click', () => {
-      const rect = viewport.getBoundingClientRect();
-      // Calculate world coords of viewport center
-      const centerX = (rect.width / 2 - panX) / scale;
-      const centerY = (rect.height / 2 - panY) / scale;
-      savedCenter = { x: centerX, y: centerY };
-      markCenterBtn.textContent = 'Center Marked';
-      setTimeout(() => { markCenterBtn.textContent = 'Mark Center'; }, 1000);
-    });
-
     goCenterBtn.addEventListener('click', () => {
-      if (!savedCenter) return;
-      const rect = viewport.getBoundingClientRect();
-      panX = rect.width / 2 - savedCenter.x * scale;
-      panY = rect.height / 2 - savedCenter.y * scale;
+      panX = 0;
+      panY = 0;
       updateTransform();
     });
 
     const boxesCollection = db.collection('boxes');
 
     function adjustFontSizeToFit(contentDiv, box) {
-      const padding = 8; // padding in px inside box
+      const padding = 8;
       const maxFontSize = 100;
       const minFontSize = 8;
 
