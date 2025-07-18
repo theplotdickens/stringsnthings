@@ -16,8 +16,7 @@
     }
     #canvas {
       position: absolute; top: 0; left: 0; transform-origin: 0 0;
-      width: 10000px;  /* large area to allow movement */
-      height: 10000px;
+      width: 10000px; height: 10000px; /* large for lines */
     }
     .box {
       position: absolute;
@@ -36,11 +35,12 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
-      transition: box-shadow 0.15s ease;
+      transition: box-shadow 0.2s;
     }
     .box.selected {
-      box-shadow: 0 0 8px 2px #007bff;
-      border-color: #007bff;
+      box-shadow: 0 0 8px 3px rgba(0, 120, 255, 0.7);
+      border-color: #0078ff;
+      z-index: 50;
     }
     .box > div[contenteditable="true"] {
       outline: none;
@@ -121,16 +121,17 @@
       padding: 4px 8px; border-radius: 4px;
       user-select: none; pointer-events: none; z-index: 1001;
     }
-    svg.connections {
+    svg {
       position: absolute;
-      top: 0; left: 0;
+      top: 0;
+      left: 0;
       pointer-events: none;
+      overflow: visible;
       width: 10000px;
       height: 10000px;
-      overflow: visible;
-      z-index: 0;
+      z-index: 5;
     }
-    svg.connections line {
+    line {
       stroke: black;
       stroke-width: 2;
     }
@@ -139,12 +140,13 @@
 <body>
   <div id="viewport">
     <div id="canvas">
-      <svg class="connections"></svg>
+      <svg id="connectionsSVG"></svg>
     </div>
   </div>
 
   <div id="buttonContainer">
     <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
+    <button id="undoConnectionBtn" class="floatingBtn" disabled>Undo Connection</button>
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
     <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
   </div>
@@ -171,26 +173,26 @@
     const canvas = document.getElementById('canvas');
     const viewport = document.getElementById('viewport');
     const undoBtn = document.getElementById('undoBtn');
+    const undoConnectionBtn = document.getElementById('undoConnectionBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
     const markCenterBtn = document.getElementById('markCenterBtn');
     const zoomDisplay = document.getElementById('zoomDisplay');
-    const connectionsSVG = canvas.querySelector('svg.connections');
+    const connectionsSVG = document.getElementById('connectionsSVG');
 
     let scale = 1, panX = 0, panY = 0;
     let isPanning = false, startX, startY;
 
     const undoStack = [];
-
-    // Connections between boxes
     let connections = [];
     let selectedBox = null;
+    let markedCenter = null;
 
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
     }
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
+      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === undoConnectionBtn || e.target === markCenterBtn) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -246,7 +248,7 @@
 
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
-      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
+      if (e.target === goCenterBtn || e.target === undoBtn || e.target === undoConnectionBtn || e.target === markCenterBtn) return;
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -257,12 +259,13 @@
     });
 
     markCenterBtn.addEventListener('click', () => {
-      // Mark current center in world coordinates
       const rect = viewport.getBoundingClientRect();
-      const centerX = (rect.width / 2 - panX) / scale;
-      const centerY = (rect.height / 2 - panY) / scale;
-      markedCenter = { x: centerX, y: centerY };
-      alert(`Center marked at: (${Math.round(centerX)}, ${Math.round(centerY)})`);
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      markedCenter = {
+        x: (centerX - panX) / scale,
+        y: (centerY - panY) / scale
+      };
     });
 
     goCenterBtn.addEventListener('click', () => {
@@ -272,16 +275,11 @@
       updateTransform();
     });
 
-    let markedCenter = null;
-
-    const boxesCollection = db.collection('boxes');
-
     function adjustFontSizeToFit(contentDiv, box) {
-      const padding = 8; // padding in px inside box
+      const padding = 8;
       const maxFontSize = 100;
       const minFontSize = 8;
 
-      // Reset font size to max to start measurement
       contentDiv.style.fontSize = maxFontSize + 'px';
 
       const boxWidth = box.clientWidth - padding * 2;
@@ -364,18 +362,6 @@
       let resizeDir = null;
       let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
 
-      function boxClickHandler(e) {
-        if (e.target === delBtn || e.target.classList.contains('resize-handle')) return;
-        if (selectedBox === box) {
-          selectedBox.classList.remove('selected');
-          selectedBox = null;
-          return;
-        }
-        if (selectedBox) selectedBox.classList.remove('selected');
-        selectedBox = box;
-        selectedBox.classList.add('selected');
-      }
-
       box.addEventListener('pointerdown', e => {
         if (e.target === delBtn) return;
         if (e.target.classList.contains('resize-handle')) return;
@@ -415,7 +401,7 @@
           box.style.userSelect = 'text';
           content.focus();
         } else if (!moved) {
-          boxClickHandler(e);
+          content.focus();
         }
       });
 
@@ -469,6 +455,7 @@
           box.style.top = `${newTop}px`;
 
           adjustFontSizeToFit(content, box);
+
           saveBox();
           updateConnections();
         });
@@ -491,18 +478,29 @@
           fontSize: content.style.fontSize,
           id: id
         });
-        if (undoStack.length > 5) undoStack.shift();
         undoBtn.disabled = false;
-        box.remove();
         removeConnectionsForBox(box);
         if (id) boxesCollection.doc(id).delete();
-        updateConnections();
+        box.remove();
         if (selectedBox === box) selectedBox = null;
       });
 
       content.addEventListener('input', () => {
         adjustFontSizeToFit(content, box);
         saveBox();
+      });
+
+      box.addEventListener('click', e => {
+        e.stopPropagation();
+        if (selectedBox === box) {
+          // deselect on second click
+          selectedBox.classList.remove('selected');
+          selectedBox = null;
+        } else {
+          if (selectedBox) selectedBox.classList.remove('selected');
+          selectedBox = box;
+          selectedBox.classList.add('selected');
+        }
       });
 
       function saveBox() {
@@ -534,9 +532,19 @@
       if (undoStack.length === 0) return;
       const lastBox = undoStack.pop();
       const box = addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize);
-
-      if (undoStack.length === 0) undoBtn.disabled = true;
+      undoBtn.disabled = undoStack.length === 0;
     });
+
+    undoConnectionBtn.addEventListener('click', () => {
+      if (connections.length === 0) return;
+      const lastConn = connections.pop();
+      lastConn.line.remove();
+      undoConnectionBtn.disabled = connections.length === 0;
+    });
+
+    function updateUndoConnectionBtn() {
+      undoConnectionBtn.disabled = connections.length === 0;
+    }
 
     goCenterBtn.addEventListener('click', () => {
       if (!markedCenter) return;
@@ -544,6 +552,59 @@
       panY = viewport.clientHeight / 2 - markedCenter.y * scale;
       updateTransform();
     });
+
+    function updateConnections() {
+      connections.forEach(({ boxA, boxB, line }) => {
+        const ax = boxA.offsetLeft + boxA.offsetWidth / 2;
+        const ay = boxA.offsetTop + boxA.offsetHeight / 2;
+        const bx = boxB.offsetLeft + boxB.offsetWidth / 2;
+        const by = boxB.offsetTop + boxB.offsetHeight / 2;
+        line.setAttribute('x1', ax);
+        line.setAttribute('y1', ay);
+        line.setAttribute('x2', bx);
+        line.setAttribute('y2', by);
+      });
+      updateUndoConnectionBtn();
+    }
+
+    function removeConnectionsForBox(box) {
+      connections = connections.filter(conn => {
+        if (conn.boxA === box || conn.boxB === box) {
+          conn.line.remove();
+          return false;
+        }
+        return true;
+      });
+      updateUndoConnectionBtn();
+    }
+
+    // Connection drawing logic
+    let connectionStartBox = null;
+    canvas.addEventListener('click', e => {
+      if (!e.target.classList.contains('box')) return;
+
+      if (!connectionStartBox) {
+        connectionStartBox = e.target;
+        connectionStartBox.classList.add('selected');
+      } else if (connectionStartBox === e.target) {
+        connectionStartBox.classList.remove('selected');
+        connectionStartBox = null;
+      } else {
+        const boxA = connectionStartBox;
+        const boxB = e.target;
+
+        connectionStartBox.classList.remove('selected');
+        connectionStartBox = null;
+
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        connectionsSVG.appendChild(line);
+        connections.push({ boxA, boxB, line });
+        updateConnections();
+        updateUndoConnectionBtn();
+      }
+    });
+
+    const boxesCollection = db.collection('boxes');
 
     window.addEventListener('load', () => {
       updateTransform();
@@ -558,60 +619,6 @@
         });
       });
     }
-
-    // Connection logic
-
-    function updateConnections() {
-      connections.forEach(({ boxA, boxB, line }) => {
-        const ax = boxA.offsetLeft + boxA.offsetWidth / 2;
-        const ay = boxA.offsetTop + boxA.offsetHeight / 2;
-        const bx = boxB.offsetLeft + boxB.offsetWidth / 2;
-        const by = boxB.offsetTop + boxB.offsetHeight / 2;
-
-        line.setAttribute('x1', ax);
-        line.setAttribute('y1', ay);
-        line.setAttribute('x2', bx);
-        line.setAttribute('y2', by);
-      });
-    }
-
-    function removeConnectionsForBox(box) {
-      connections = connections.filter(conn => {
-        if (conn.boxA === box || conn.boxB === box) {
-          conn.line.remove();
-          return false;
-        }
-        return true;
-      });
-    }
-
-    // Clicking boxes to select and connect
-
-    viewport.addEventListener('click', e => {
-      if (!e.target.classList.contains('box')) return;
-      const clickedBox = e.target;
-
-      if (!selectedBox) {
-        selectedBox = clickedBox;
-        selectedBox.classList.add('selected');
-      } else if (selectedBox === clickedBox) {
-        // Deselect if clicking the same box
-        selectedBox.classList.remove('selected');
-        selectedBox = null;
-      } else {
-        // Create connection between selectedBox and clickedBox if not exists
-        if (!connections.some(conn =>
-          (conn.boxA === selectedBox && conn.boxB === clickedBox) ||
-          (conn.boxB === selectedBox && conn.boxA === clickedBox))) {
-          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-          connectionsSVG.appendChild(line);
-          connections.push({ boxA: selectedBox, boxB: clickedBox, line });
-          updateConnections();
-        }
-        selectedBox.classList.remove('selected');
-        selectedBox = null;
-      }
-    });
   </script>
 </body>
 </html>
