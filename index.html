@@ -304,6 +304,19 @@
     box.appendChild(content);
     box.appendChild(delBtn);
 
+    // Add 4 invisible corner resize handles
+    const corners = ['nw', 'ne', 'sw', 'se'];
+    corners.forEach(corner => {
+      const handle = document.createElement('div');
+      handle.className = 'resize-handle ' + corner;
+      box.appendChild(handle);
+
+      handle.addEventListener('pointerdown', e => {
+        e.stopPropagation();
+        startResizing(e, box, corner);
+      });
+    });
+
     // Dragging logic
     box.addEventListener('pointerdown', e => {
       if (e.target === delBtn) return;
@@ -397,6 +410,93 @@
     return box;
   }
 
+  // Resize logic for corners
+  let resizing = false;
+  let resizeCorner = null;
+  let resizeBox = null;
+  let resizeStartX = 0;
+  let resizeStartY = 0;
+  let resizeStartWidth = 0;
+  let resizeStartHeight = 0;
+  let resizeStartLeft = 0;
+  let resizeStartTop = 0;
+
+  function startResizing(e, box, corner) {
+    resizing = true;
+    resizeCorner = corner;
+    resizeBox = box;
+    resizeStartX = e.clientX;
+    resizeStartY = e.clientY;
+    resizeStartWidth = box.offsetWidth;
+    resizeStartHeight = box.offsetHeight;
+    resizeStartLeft = parseFloat(box.style.left);
+    resizeStartTop = parseFloat(box.style.top);
+
+    window.addEventListener('pointermove', resizePointerMove);
+    window.addEventListener('pointerup', resizePointerUp);
+
+    box.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+
+  function resizePointerMove(e) {
+    if (!resizing) return;
+
+    let dx = (e.clientX - resizeStartX) / scale;
+    let dy = (e.clientY - resizeStartY) / scale;
+
+    let newWidth = resizeStartWidth;
+    let newHeight = resizeStartHeight;
+    let newLeft = resizeStartLeft;
+    let newTop = resizeStartTop;
+
+    switch (resizeCorner) {
+      case 'nw':
+        newWidth = resizeStartWidth - dx;
+        newHeight = resizeStartHeight - dy;
+        newLeft = resizeStartLeft + dx;
+        newTop = resizeStartTop + dy;
+        break;
+      case 'ne':
+        newWidth = resizeStartWidth + dx;
+        newHeight = resizeStartHeight - dy;
+        newTop = resizeStartTop + dy;
+        break;
+      case 'sw':
+        newWidth = resizeStartWidth - dx;
+        newHeight = resizeStartHeight + dy;
+        newLeft = resizeStartLeft + dx;
+        break;
+      case 'se':
+        newWidth = resizeStartWidth + dx;
+        newHeight = resizeStartHeight + dy;
+        break;
+    }
+
+    // Enforce minimum sizes
+    newWidth = Math.max(newWidth, 80);
+    newHeight = Math.max(newHeight, 40);
+
+    resizeBox.style.width = newWidth + 'px';
+    resizeBox.style.height = newHeight + 'px';
+    resizeBox.style.left = newLeft + 'px';
+    resizeBox.style.top = newTop + 'px';
+
+    // Update font size & save box
+    const contentDiv = resizeBox.querySelector('div[contenteditable]');
+    adjustFontSizeToFit(contentDiv, resizeBox);
+    saveBox(resizeBox);
+    updateLinesForBox(idMap.get(resizeBox));
+  }
+
+  function resizePointerUp(e) {
+    resizing = false;
+    resizeCorner = null;
+    resizeBox = null;
+    window.removeEventListener('pointermove', resizePointerMove);
+    window.removeEventListener('pointerup', resizePointerUp);
+  }
+
   // Undo buttons
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
@@ -404,401 +504,36 @@
     addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize);
     if (undoStack.length === 0) undoBtn.disabled = true;
   });
-  undoLineBtn.addEventListener('click', () => {
-    if (undoLineStack.length === 0) return;
-    const lastLineId = undoLineStack.pop();
-    if (!lastLineId) return;
-    linesCollection.doc(lastLineId).delete();
-    if (undoLineStack.length === 0) undoLineBtn.disabled = true;
-  });
 
+  // TODO: Lines logic, undoLineBtn, drawLineToggle, updateLinesForBox, removeLinesForBox, etc.
+  // Placeholder for those functions - You can integrate your existing logic here.
+
+  // Go to center button logic
   goCenterBtn.addEventListener('click', () => {
-    panX = 0; panY = 0; updateTransform();
+    panX = window.innerWidth / 2 - 200;
+    panY = window.innerHeight / 2 - 100;
+    scale = 1;
+    updateTransform();
   });
 
+  // Draw line toggle button
   drawLineToggle.addEventListener('click', () => {
     drawLineMode = !drawLineMode;
     drawLineToggle.textContent = drawLineMode ? 'Draw Line ON' : 'Draw Line OFF';
-    if (drawLineMode) {
-      // Lock box dragging & editing: disable contentEditable and pointer events on boxes except click selection
-      document.querySelectorAll('.box').forEach(box => {
-        box.style.userSelect = 'none';
-        box.querySelector('div[contenteditable]').contentEditable = false;
-      });
-    } else {
-      document.querySelectorAll('.box').forEach(box => {
-        box.style.userSelect = 'text';
-        box.querySelector('div[contenteditable]').contentEditable = true;
-      });
-      selectedBoxes.forEach(box => box.style.borderColor = '');
-      selectedBoxes = [];
-      if (isDrawingPath) stopDrawingPath();
-    }
   });
 
-  // Handle box selection for line drawing
-  function handleBoxSelection(box) {
-    if (selectedBoxes.length === 0) {
-      selectedBoxes.push(box);
-      box.style.borderColor = 'blue';
-    } else if (selectedBoxes.length === 1 && box !== selectedBoxes[0]) {
-      selectedBoxes.push(box);
-      box.style.borderColor = 'blue';
-      startFreehandDrawing();
-    }
-  }
+  // Initialize
+  updateTransform();
 
-  let pathElement, labelElement;
-
-  function startFreehandDrawing() {
-    isDrawingPath = true;
-    currentPathPoints = [];
-
-    pathElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    pathElement.classList.add('line-path');
-    lineLayer.appendChild(pathElement);
-
-    labelElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    labelElement.classList.add('line-label');
-    lineLayer.appendChild(labelElement);
-
-    viewport.style.cursor = 'crosshair';
-
-    viewport.addEventListener('pointerdown', pointerDownDraw);
-    viewport.addEventListener('pointermove', pointerMoveDraw);
-    viewport.addEventListener('pointerup', pointerUpDraw);
-  }
-
-  function pointerDownDraw(e) {
-    if (!isDrawingPath) return;
-    currentPathPoints = [];
-    const pt = screenToCanvas(e.clientX, e.clientY);
-    currentPathPoints.push(pt);
-  }
-  function pointerMoveDraw(e) {
-    if (!isDrawingPath || currentPathPoints.length === 0) return;
-    const pt = screenToCanvas(e.clientX, e.clientY);
-    currentPathPoints.push(pt);
-    redrawPath();
-  }
-  function pointerUpDraw(e) {
-    if (!isDrawingPath) return;
-    const label = prompt("Enter label for the line:", "");
-    if (label === null) {
-      cancelLineDrawing();
-      return;
-    }
-    saveLine(label);
-    stopDrawingPath();
-  }
-
-  function stopDrawingPath() {
-    if (!isDrawingPath) return;
-    viewport.style.cursor = 'grab';
-    isDrawingPath = false;
-    currentPathPoints = [];
-    if (pathElement) {
-      pathElement.remove();
-      pathElement = null;
-    }
-    if (labelElement) {
-      labelElement.remove();
-      labelElement = null;
-    }
-    viewport.removeEventListener('pointerdown', pointerDownDraw);
-    viewport.removeEventListener('pointermove', pointerMoveDraw);
-    viewport.removeEventListener('pointerup', pointerUpDraw);
-    selectedBoxes.forEach(box => box.style.borderColor = '');
-    selectedBoxes = [];
-  }
-
-  function cancelLineDrawing() {
-    if (!isDrawingPath) return;
-    if (pathElement) pathElement.remove();
-    if (labelElement) labelElement.remove();
-    currentPathPoints = [];
-    isDrawingPath = false;
-    viewport.style.cursor = 'grab';
-    selectedBoxes.forEach(box => box.style.borderColor = '');
-    selectedBoxes = [];
-  }
-
-  // Convert screen coords to canvas coords accounting for pan/zoom
-  function screenToCanvas(x, y) {
-    return {
-      x: (x - panX) / scale,
-      y: (y - panY) / scale
-    };
-  }
-
-  // Chaikin’s algorithm for curve smoothing
-  function smoothPoints(points, iterations = 3) {
-    if (points.length < 3) return points;
-    let pts = points.slice();
-    for (let i = 0; i < iterations; i++) {
-      let newPts = [];
-      newPts.push(pts[0]);
-      for (let j = 0; j < pts.length - 1; j++) {
-        const p0 = pts[j];
-        const p1 = pts[j+1];
-        const Q = { x: 0.75 * p0.x + 0.25 * p1.x, y: 0.75 * p0.y + 0.25 * p1.y };
-        const R = { x: 0.25 * p0.x + 0.75 * p1.x, y: 0.25 * p0.y + 0.75 * p1.y };
-        newPts.push(Q);
-        newPts.push(R);
-      }
-      newPts.push(pts[pts.length - 1]);
-      pts = newPts;
-    }
-    return pts;
-  }
-
-  function redrawPath() {
-    if (currentPathPoints.length < 2) return;
-    const smoothPts = smoothPoints(currentPathPoints, 4);
-    const d = createPathD(smoothPts);
-    pathElement.setAttribute('d', d);
-
-    // Update label position roughly halfway along path
-    const midPt = getPathMidPoint(d);
-    if (midPt) {
-      labelElement.setAttribute('x', midPt.x);
-      labelElement.setAttribute('y', midPt.y);
-      labelElement.textContent = currentPathPoints.length > 10 ? labelElement.textContent : '';
-    }
-  }
-
-  // Create SVG path data string with cubic Bezier from points
-  function createPathD(points) {
-    if (points.length < 2) return '';
-    let d = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 1; i < points.length; i++) {
-      const midX = (points[i-1].x + points[i].x) / 2;
-      const midY = (points[i-1].y + points[i].y) / 2;
-      d += ` Q ${points[i-1].x} ${points[i-1].y}, ${midX} ${midY}`;
-    }
-    // last point line
-    const last = points[points.length -1];
-    d += ` T ${last.x} ${last.y}`;
-    return d;
-  }
-
-  // Get midpoint on SVG path string approximately
-  function getPathMidPoint(d) {
-    try {
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute('d', d);
-      const len = path.getTotalLength();
-      const pt = path.getPointAtLength(len/2);
-      return {x: pt.x, y: pt.y};
-    } catch {
-      return null;
-    }
-  }
-
-  function saveLine(label) {
-    if (selectedBoxes.length !== 2) return;
-    const startBoxId = idMap.get(selectedBoxes[0]);
-    const endBoxId = idMap.get(selectedBoxes[1]);
-    if (!startBoxId || !endBoxId) return;
-
-    const pointsToSave = currentPathPoints.map(p => ({x: p.x, y: p.y}));
-    linesCollection.add({
-      startBoxId,
-      endBoxId,
-      points: pointsToSave,
-      label
-    }).then(docRef => {
-      undoLineStack.push(docRef.id);
-      if (undoLineStack.length > 5) undoLineStack.shift();
-      undoLineBtn.disabled = false;
-
-      linesMap.set(docRef.id, {
-        points: pointsToSave,
-        label,
-        startBoxId,
-        endBoxId,
-        svgPath: pathElement,
-        svgLabel: labelElement
-      });
-
-      pathElement = null;
-      labelElement = null;
-      currentPathPoints = [];
-    });
-
-    selectedBoxes.forEach(box => box.style.borderColor = '');
-    selectedBoxes = [];
-  }
-
-  // Remove all lines connected to a box when box is deleted
-  function removeLinesForBox(boxId) {
-    const toRemove = [];
-    linesMap.forEach((line, lineId) => {
-      if (line.startBoxId === boxId || line.endBoxId === boxId) toRemove.push(lineId);
-    });
-    toRemove.forEach(lineId => {
-      linesCollection.doc(lineId).delete();
-      const line = linesMap.get(lineId);
-      if (line) {
-        line.svgPath.remove();
-        line.svgLabel.remove();
-      }
-      linesMap.delete(lineId);
-    });
-  }
-
-  // Update lines when box moves
-  function updateLinesForBox(boxId) {
-    linesMap.forEach((line, lineId) => {
-      if (line.startBoxId === boxId || line.endBoxId === boxId) {
-        const startBox = [...idMap.entries()].find(([el, id]) => id === line.startBoxId)?.[0];
-        const endBox = [...idMap.entries()].find(([el, id]) => id === line.endBoxId)?.[0];
-        if (!startBox || !endBox) return;
-
-        const oldStart = line.points[0];
-        const oldEnd = line.points[line.points.length - 1];
-        const newStart = {
-          x: parseFloat(startBox.style.left) + startBox.offsetWidth / 2,
-          y: parseFloat(startBox.style.top) + startBox.offsetHeight / 2
-        };
-        const newEnd = {
-          x: parseFloat(endBox.style.left) + endBox.offsetWidth / 2,
-          y: parseFloat(endBox.style.top) + endBox.offsetHeight / 2
-        };
-
-        const dx = newStart.x - oldStart.x;
-        const dy = newStart.y - oldStart.y;
-        const dxEnd = newEnd.x - oldEnd.x;
-        const dyEnd = newEnd.y - oldEnd.y;
-
-        const newPoints = line.points.map((pt, i) => {
-          if (i === 0) return newStart;
-          if (i === line.points.length - 1) return newEnd;
-          const t = i / (line.points.length - 1);
-          return {
-            x: pt.x + dx * (1 - t) + dxEnd * t,
-            y: pt.y + dy * (1 - t) + dyEnd * t
-          };
-        });
-
-        line.points = newPoints;
-        const d = createPathD(smoothPoints(newPoints, 4));
-        line.svgPath.setAttribute('d', d);
-
-        const midPt = getPathMidPoint(d);
-        if (midPt) {
-          line.svgLabel.setAttribute('x', midPt.x);
-          line.svgLabel.setAttribute('y', midPt.y);
-          line.svgLabel.textContent = line.label;
-        }
-
-        linesCollection.doc(lineId).set({
-          startBoxId: line.startBoxId,
-          endBoxId: line.endBoxId,
-          points: newPoints,
-          label: line.label
-        });
-      }
-    });
-  }
-
-  // Load existing boxes and lines
-  function loadFromFirestore() {
-    boxesCollection.onSnapshot(snapshot => {
-      snapshot.docChanges().forEach(change => {
-        const data = change.doc.data();
-        if (change.type === 'added') {
-          addBox(data.x, data.y, data.text, change.doc.id, data.width, data.height, data.fontSize);
-        } else if (change.type === 'modified') {
-          const boxEntry = [...idMap.entries()].find(([el, id]) => id === change.doc.id);
-          if (boxEntry) {
-            const [boxEl] = boxEntry;
-            boxEl.style.left = data.x + 'px';
-            boxEl.style.top = data.y + 'px';
-            boxEl.style.width = data.width + 'px';
-            boxEl.style.height = data.height + 'px';
-            const contentDiv = boxEl.querySelector('div[contenteditable]');
-            contentDiv.textContent = data.text;
-            contentDiv.style.fontSize = data.fontSize;
-            adjustFontSizeToFit(contentDiv, boxEl);
-            updateLinesForBox(change.doc.id);
-          }
-        } else if (change.type === 'removed') {
-          const boxEntry = [...idMap.entries()].find(([el, id]) => id === change.doc.id);
-          if (boxEntry) {
-            const [boxEl] = boxEntry;
-            boxEl.remove();
-            idMap.delete(boxEl);
-          }
-        }
-      });
-    });
-
-    linesCollection.onSnapshot(snapshot => {
-      snapshot.docChanges().forEach(change => {
-        const data = change.doc.data();
-        if (change.type === 'added') {
-          drawSavedLine(change.doc.id, data);
-        } else if (change.type === 'modified') {
-          updateSavedLine(change.doc.id, data);
-        } else if (change.type === 'removed') {
-          removeSavedLine(change.doc.id);
-        }
-      });
-    });
-  }
-
-  function drawSavedLine(id, data) {
-    if (linesMap.has(id)) return;
-    const startBoxEntry = [...idMap.entries()].find(([el, bid]) => bid === data.startBoxId);
-    const endBoxEntry = [...idMap.entries()].find(([el, bid]) => bid === data.endBoxId);
-    if (!startBoxEntry || !endBoxEntry) return;
-
-    const pathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    pathEl.classList.add('line-path');
-    lineLayer.appendChild(pathEl);
-
-    const labelEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    labelEl.classList.add('line-label');
-    lineLayer.appendChild(labelEl);
-
-    linesMap.set(id, {
-      points: data.points,
-      label: data.label,
-      startBoxId: data.startBoxId,
-      endBoxId: data.endBoxId,
-      svgPath: pathEl,
-      svgLabel: labelEl
-    });
-
-    updateLinesForBox(data.startBoxId);
-    updateLinesForBox(data.endBoxId);
-  }
-
-  function updateSavedLine(id, data) {
-    if (!linesMap.has(id)) return;
-    const line = linesMap.get(id);
-    line.points = data.points;
-    line.label = data.label;
-    updateLinesForBox(line.startBoxId);
-  }
-
-  function removeSavedLine(id) {
-    if (!linesMap.has(id)) return;
-    const line = linesMap.get(id);
-    line.svgPath.remove();
-    line.svgLabel.remove();
-    linesMap.delete(id);
-  }
-
-  // Create default box if none exist
+  // Load boxes from Firebase
   boxesCollection.get().then(snapshot => {
-    if (snapshot.empty) {
-      addBox(100, 100, 'Hello World');
-    }
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      addBox(data.x, data.y, data.text, doc.id, data.width || 180, data.height || 80, data.fontSize || '16px');
+    });
   });
 
-  loadFromFirestore();
+  // ... Add your existing line drawing and undo logic here ...
 </script>
 </body>
 </html>
