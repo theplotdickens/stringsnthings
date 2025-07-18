@@ -124,6 +124,7 @@
   <div id="buttonContainer">
     <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
+    <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
   </div>
 
   <div id="zoomDisplay">Zoom: 100%</div>
@@ -149,6 +150,7 @@
     const viewport = document.getElementById('viewport');
     const undoBtn = document.getElementById('undoBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
+    const markCenterBtn = document.getElementById('markCenterBtn');
     const zoomDisplay = document.getElementById('zoomDisplay');
 
     let scale = 1, panX = 0, panY = 0;
@@ -161,7 +163,7 @@
       return { x: e.clientX, y: e.clientY };
     }
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn) return;
+      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -182,8 +184,8 @@
       viewport.releasePointerCapture(e.pointerId);
     });
 
-    const MIN_SCALE = 0.2;
-    const MAX_SCALE = 5;
+    const MIN_SCALE = 0.5;
+    const MAX_SCALE = 3;
 
     viewport.addEventListener('wheel', e => {
       e.preventDefault();
@@ -216,7 +218,7 @@
 
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
-      if (e.target === goCenterBtn || e.target === undoBtn) return;
+      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -224,6 +226,19 @@
         addBox(x, y);
       }
       lastTap = now;
+    });
+
+    markCenterBtn.addEventListener('click', () => {
+      // Calculate the center point of the viewport in world coords
+      const rect = viewport.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+
+      // New panX and panY so that current center becomes (0,0)
+      panX = centerX;
+      panY = centerY;
+
+      updateTransform();
     });
 
     const boxesCollection = db.collection('boxes');
