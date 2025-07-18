@@ -2,10 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>stringsnthings with Curvy Lines</title>
+<title>stringsnthings with Curvy Lines + Undo</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
-  /* Keep your existing styles (boxes, viewport, buttons) unchanged */
   html, body {
     margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
     touch-action: none;
@@ -146,11 +145,11 @@
 
 <div id="buttonContainer">
   <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
+  <button id="undoLineBtn" class="floatingBtn" disabled>Undo Line</button>
   <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
   <button id="drawLineToggle" class="floatingBtn">Draw Line OFF</button>
 </div>
 
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 
@@ -172,20 +171,20 @@
   const lineLayer = document.getElementById('lineLayer');
 
   const undoBtn = document.getElementById('undoBtn');
+  const undoLineBtn = document.getElementById('undoLineBtn');
   const goCenterBtn = document.getElementById('goCenterBtn');
   const drawLineToggle = document.getElementById('drawLineToggle');
 
   let scale = 1, panX = 0, panY = 0;
   let isPanning = false, startX, startY;
   const undoStack = [];
+  const undoLineStack = [];
 
-  // For line drawing mode
   let drawLineMode = false;
-  let selectedBoxes = []; // Store start and end box elements for the line
-  let currentPathPoints = []; // Points while drawing freehand
+  let selectedBoxes = [];
+  let currentPathPoints = [];
   let isDrawingPath = false;
 
-  // Collection references
   const boxesCollection = db.collection('boxes');
   const linesCollection = db.collection('lines');
 
@@ -194,14 +193,14 @@
     lineLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
   }
 
-  // Panning & zooming
   function getClientCoords(e) {
     if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
     return { x: e.clientX, y: e.clientY };
   }
+
   viewport.addEventListener('pointerdown', e => {
-    if (drawLineMode) return; // disable pan in draw mode
-    if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === drawLineToggle) return;
+    if (drawLineMode) return; // no pan when drawing lines
+    if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === undoLineBtn || e.target === drawLineToggle) return;
     isPanning = true;
     const coords = getClientCoords(e);
     startX = coords.x;
@@ -229,24 +228,30 @@
     updateTransform();
   });
 
-  // Boxes code (simplified for brevity, use your last working version with resizing, dragging, saving, deleting)
+  // Box dragging variables
+  const draggingInfo = {
+    dragging: false,
+    offsetX: 0,
+    offsetY: 0,
+    currentBox: null,
+  };
+
+  // Map box element => firestore doc id
+  const idMap = new Map();
+  // Map line doc id => {path, label, startBoxId, endBoxId, svg elements}
+  const linesMap = new Map();
+
   function adjustFontSizeToFit(contentDiv, box) {
-    const padding = 8; // padding in px inside box
+    const padding = 8;
     const maxFontSize = 100;
     const minFontSize = 8;
-
     contentDiv.style.fontSize = maxFontSize + 'px';
-
     const boxWidth = box.clientWidth - padding * 2;
     const boxHeight = box.clientHeight - padding * 2;
-
     let fontSize = maxFontSize;
-
     while (fontSize >= minFontSize) {
       contentDiv.style.fontSize = fontSize + 'px';
-      if (contentDiv.scrollWidth <= boxWidth && contentDiv.scrollHeight <= boxHeight) {
-        break;
-      }
+      if (contentDiv.scrollWidth <= boxWidth && contentDiv.scrollHeight <= boxHeight) break;
       fontSize -= 1;
     }
     if (fontSize < minFontSize) fontSize = minFontSize;
@@ -299,39 +304,38 @@
     box.appendChild(content);
     box.appendChild(delBtn);
 
-    // skipping resize handles here for brevity, but you can add back your code from before
-
-    // Dragging logic simplified
-    let dragging = false;
-    let offsetX = 0, offsetY = 0;
-
+    // Dragging logic
     box.addEventListener('pointerdown', e => {
       if (e.target === delBtn) return;
       if (drawLineMode) {
-        // If drawLineMode is on, handle box selection for lines
         e.stopPropagation();
         handleBoxSelection(box);
         return;
       }
-      dragging = true;
-      offsetX = e.clientX - box.getBoundingClientRect().left;
-      offsetY = e.clientY - box.getBoundingClientRect().top;
+      if (drawLineMode) return; // no drag when drawing lines
+      draggingInfo.dragging = true;
+      draggingInfo.offsetX = e.clientX - box.getBoundingClientRect().left;
+      draggingInfo.offsetY = e.clientY - box.getBoundingClientRect().top;
+      draggingInfo.currentBox = box;
       box.setPointerCapture(e.pointerId);
       box.style.cursor = 'grabbing';
     });
     box.addEventListener('pointermove', e => {
-      if (!dragging) return;
-      const newX = (e.clientX - offsetX - panX) / scale;
-      const newY = (e.clientY - offsetY - panY) / scale;
+      if (!draggingInfo.dragging || draggingInfo.currentBox !== box) return;
+      const newX = (e.clientX - draggingInfo.offsetX - panX) / scale;
+      const newY = (e.clientY - draggingInfo.offsetY - panY) / scale;
       box.style.left = `${newX}px`;
       box.style.top = `${newY}px`;
-      saveBox();
+      saveBox(box);
       updateLinesForBox(idMap.get(box));
     });
     box.addEventListener('pointerup', e => {
-      dragging = false;
-      box.style.cursor = 'text';
-      box.releasePointerCapture(e.pointerId);
+      if (draggingInfo.currentBox === box) {
+        draggingInfo.dragging = false;
+        draggingInfo.currentBox.style.cursor = 'text';
+        draggingInfo.currentBox.releasePointerCapture(e.pointerId);
+        draggingInfo.currentBox = null;
+      }
     });
 
     delBtn.addEventListener('click', e => {
@@ -348,7 +352,7 @@
       if (undoStack.length > 5) undoStack.shift();
       undoBtn.disabled = false;
       if (idMap.has(box)) {
-        linesToRemoveForBox(idMap.get(box));
+        removeLinesForBox(idMap.get(box));
         boxesCollection.doc(idMap.get(box)).delete();
       }
       box.remove();
@@ -356,24 +360,24 @@
 
     content.addEventListener('input', () => {
       adjustFontSizeToFit(content, box);
-      saveBox();
+      saveBox(box);
     });
 
-    function saveBox() {
+    function saveBox(boxElement) {
       const data = {
-        x: parseFloat(box.style.left),
-        y: parseFloat(box.style.top),
-        width: box.offsetWidth,
-        height: box.offsetHeight,
-        text: content.textContent,
-        fontSize: content.style.fontSize || '16px'
+        x: parseFloat(boxElement.style.left),
+        y: parseFloat(boxElement.style.top),
+        width: boxElement.offsetWidth,
+        height: boxElement.offsetHeight,
+        text: boxElement.querySelector('div[contenteditable]').textContent,
+        fontSize: boxElement.querySelector('div[contenteditable]').style.fontSize || '16px'
       };
-      const boxId = idMap.get(box);
+      const boxId = idMap.get(boxElement);
       if (boxId) {
         boxesCollection.doc(boxId).set(data);
       } else {
         boxesCollection.add(data).then(docRef => {
-          idMap.set(box, docRef.id);
+          idMap.set(boxElement, docRef.id);
         });
       }
     }
@@ -393,17 +397,19 @@
     return box;
   }
 
-  // Map box element => firestore doc id
-  const idMap = new Map();
-  // Map line doc id => {path, label, startBoxId, endBoxId, svg elements}
-  const linesMap = new Map();
-
-  // Undo and go center buttons
+  // Undo buttons
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
     const lastBox = undoStack.pop();
-    const box = addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize);
+    addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize);
     if (undoStack.length === 0) undoBtn.disabled = true;
+  });
+  undoLineBtn.addEventListener('click', () => {
+    if (undoLineStack.length === 0) return;
+    const lastLineId = undoLineStack.pop();
+    if (!lastLineId) return;
+    linesCollection.doc(lastLineId).delete();
+    if (undoLineStack.length === 0) undoLineBtn.disabled = true;
   });
 
   goCenterBtn.addEventListener('click', () => {
@@ -413,15 +419,24 @@
   drawLineToggle.addEventListener('click', () => {
     drawLineMode = !drawLineMode;
     drawLineToggle.textContent = drawLineMode ? 'Draw Line ON' : 'Draw Line OFF';
-    if (!drawLineMode) {
+    if (drawLineMode) {
+      // Lock box dragging & editing: disable contentEditable and pointer events on boxes except click selection
+      document.querySelectorAll('.box').forEach(box => {
+        box.style.userSelect = 'none';
+        box.querySelector('div[contenteditable]').contentEditable = false;
+      });
+    } else {
+      document.querySelectorAll('.box').forEach(box => {
+        box.style.userSelect = 'text';
+        box.querySelector('div[contenteditable]').contentEditable = true;
+      });
+      selectedBoxes.forEach(box => box.style.borderColor = '');
       selectedBoxes = [];
-      if (isDrawingPath) {
-        stopDrawingPath();
-      }
+      if (isDrawingPath) stopDrawingPath();
     }
   });
 
-  // Box selection for line start/end
+  // Handle box selection for line drawing
   function handleBoxSelection(box) {
     if (selectedBoxes.length === 0) {
       selectedBoxes.push(box);
@@ -433,14 +448,12 @@
     }
   }
 
-  // Drawing freehand path variables
-  let pathSvg, pathElement, labelElement;
+  let pathElement, labelElement;
 
   function startFreehandDrawing() {
     isDrawingPath = true;
     currentPathPoints = [];
 
-    // Create SVG path & label elements
     pathElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
     pathElement.classList.add('line-path');
     lineLayer.appendChild(pathElement);
@@ -480,17 +493,37 @@
   }
 
   function stopDrawingPath() {
-    isDrawingPath = false;
+    if (!isDrawingPath) return;
     viewport.style.cursor = 'grab';
+    isDrawingPath = false;
+    currentPathPoints = [];
+    if (pathElement) {
+      pathElement.remove();
+      pathElement = null;
+    }
+    if (labelElement) {
+      labelElement.remove();
+      labelElement = null;
+    }
     viewport.removeEventListener('pointerdown', pointerDownDraw);
     viewport.removeEventListener('pointermove', pointerMoveDraw);
     viewport.removeEventListener('pointerup', pointerUpDraw);
-    // Reset box borders
     selectedBoxes.forEach(box => box.style.borderColor = '');
     selectedBoxes = [];
   }
 
-  // Convert screen coords to canvas coords (accounting pan/zoom)
+  function cancelLineDrawing() {
+    if (!isDrawingPath) return;
+    if (pathElement) pathElement.remove();
+    if (labelElement) labelElement.remove();
+    currentPathPoints = [];
+    isDrawingPath = false;
+    viewport.style.cursor = 'grab';
+    selectedBoxes.forEach(box => box.style.borderColor = '');
+    selectedBoxes = [];
+  }
+
+  // Convert screen coords to canvas coords accounting for pan/zoom
   function screenToCanvas(x, y) {
     return {
       x: (x - panX) / scale,
@@ -498,50 +531,66 @@
     };
   }
 
-  // Smooth path redraw using simple Catmull-Rom spline interpolation
+  // Chaikin’s algorithm for curve smoothing
+  function smoothPoints(points, iterations = 3) {
+    if (points.length < 3) return points;
+    let pts = points.slice();
+    for (let i = 0; i < iterations; i++) {
+      let newPts = [];
+      newPts.push(pts[0]);
+      for (let j = 0; j < pts.length - 1; j++) {
+        const p0 = pts[j];
+        const p1 = pts[j+1];
+        const Q = { x: 0.75 * p0.x + 0.25 * p1.x, y: 0.75 * p0.y + 0.25 * p1.y };
+        const R = { x: 0.25 * p0.x + 0.75 * p1.x, y: 0.25 * p0.y + 0.75 * p1.y };
+        newPts.push(Q);
+        newPts.push(R);
+      }
+      newPts.push(pts[pts.length - 1]);
+      pts = newPts;
+    }
+    return pts;
+  }
+
   function redrawPath() {
     if (currentPathPoints.length < 2) return;
-    const d = catmullRomSpline(currentPathPoints);
+    const smoothPts = smoothPoints(currentPathPoints, 4);
+    const d = createPathD(smoothPts);
     pathElement.setAttribute('d', d);
-    // Update label position roughly halfway on path
-    const midPoint = getPathMidPoint(d);
-    if (midPoint) {
-      labelElement.setAttribute('x', midPoint.x);
-      labelElement.setAttribute('y', midPoint.y);
-      labelElement.textContent = currentPathPoints.length > 5 ? labelElement.textContent : '';
+
+    // Update label position roughly halfway along path
+    const midPt = getPathMidPoint(d);
+    if (midPt) {
+      labelElement.setAttribute('x', midPt.x);
+      labelElement.setAttribute('y', midPt.y);
+      labelElement.textContent = currentPathPoints.length > 10 ? labelElement.textContent : '';
     }
   }
 
-  // Catmull-Rom spline for smooth curves
-  function catmullRomSpline(points) {
+  // Create SVG path data string with cubic Bezier from points
+  function createPathD(points) {
     if (points.length < 2) return '';
     let d = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[i === 0 ? i : i - 1];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const p3 = points[i + 2 < points.length ? i + 2 : points.length - 1];
-
-      const cp1x = p1.x + (p2.x - p0.x) / 6;
-      const cp1y = p1.y + (p2.y - p0.y) / 6;
-
-      const cp2x = p2.x - (p3.x - p1.x) / 6;
-      const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-      d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+    for (let i = 1; i < points.length; i++) {
+      const midX = (points[i-1].x + points[i].x) / 2;
+      const midY = (points[i-1].y + points[i].y) / 2;
+      d += ` Q ${points[i-1].x} ${points[i-1].y}, ${midX} ${midY}`;
     }
+    // last point line
+    const last = points[points.length -1];
+    d += ` T ${last.x} ${last.y}`;
     return d;
   }
 
-  // Get midpoint of SVG path string (approximate)
+  // Get midpoint on SVG path string approximately
   function getPathMidPoint(d) {
     try {
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute('d', d);
-      const length = path.getTotalLength();
-      const pt = path.getPointAtLength(length / 2);
-      return { x: pt.x, y: pt.y };
-    } catch (e) {
+      const len = path.getTotalLength();
+      const pt = path.getPointAtLength(len/2);
+      return {x: pt.x, y: pt.y};
+    } catch {
       return null;
     }
   }
@@ -552,7 +601,6 @@
     const endBoxId = idMap.get(selectedBoxes[1]);
     if (!startBoxId || !endBoxId) return;
 
-    // Save the points and label
     const pointsToSave = currentPathPoints.map(p => ({x: p.x, y: p.y}));
     linesCollection.add({
       startBoxId,
@@ -560,39 +608,69 @@
       points: pointsToSave,
       label
     }).then(docRef => {
-      // Store line in map and clear temp elements
-      linesMap.set(docRef.id, { points: pointsToSave, label, startBoxId, endBoxId, svgPath: pathElement, svgLabel: labelElement });
+      undoLineStack.push(docRef.id);
+      if (undoLineStack.length > 5) undoLineStack.shift();
+      undoLineBtn.disabled = false;
+
+      linesMap.set(docRef.id, {
+        points: pointsToSave,
+        label,
+        startBoxId,
+        endBoxId,
+        svgPath: pathElement,
+        svgLabel: labelElement
+      });
+
       pathElement = null;
       labelElement = null;
       currentPathPoints = [];
     });
 
-    // Clear box borders
     selectedBoxes.forEach(box => box.style.borderColor = '');
     selectedBoxes = [];
   }
 
-  // Update lines positions if boxes move
+  // Remove all lines connected to a box when box is deleted
+  function removeLinesForBox(boxId) {
+    const toRemove = [];
+    linesMap.forEach((line, lineId) => {
+      if (line.startBoxId === boxId || line.endBoxId === boxId) toRemove.push(lineId);
+    });
+    toRemove.forEach(lineId => {
+      linesCollection.doc(lineId).delete();
+      const line = linesMap.get(lineId);
+      if (line) {
+        line.svgPath.remove();
+        line.svgLabel.remove();
+      }
+      linesMap.delete(lineId);
+    });
+  }
+
+  // Update lines when box moves
   function updateLinesForBox(boxId) {
     linesMap.forEach((line, lineId) => {
       if (line.startBoxId === boxId || line.endBoxId === boxId) {
-        const startBox = [...idMap.entries()].find(([el, id]) => id === line.startBoxId)[0];
-        const endBox = [...idMap.entries()].find(([el, id]) => id === line.endBoxId)[0];
+        const startBox = [...idMap.entries()].find(([el, id]) => id === line.startBoxId)?.[0];
+        const endBox = [...idMap.entries()].find(([el, id]) => id === line.endBoxId)?.[0];
         if (!startBox || !endBox) return;
 
-        // Calculate offset between old points and new endpoints
         const oldStart = line.points[0];
         const oldEnd = line.points[line.points.length - 1];
-        const newStart = { x: parseFloat(startBox.style.left) + startBox.offsetWidth / 2, y: parseFloat(startBox.style.top) + startBox.offsetHeight / 2 };
-        const newEnd = { x: parseFloat(endBox.style.left) + endBox.offsetWidth / 2, y: parseFloat(endBox.style.top) + endBox.offsetHeight / 2 };
+        const newStart = {
+          x: parseFloat(startBox.style.left) + startBox.offsetWidth / 2,
+          y: parseFloat(startBox.style.top) + startBox.offsetHeight / 2
+        };
+        const newEnd = {
+          x: parseFloat(endBox.style.left) + endBox.offsetWidth / 2,
+          y: parseFloat(endBox.style.top) + endBox.offsetHeight / 2
+        };
 
-        // Compute translation deltas
         const dx = newStart.x - oldStart.x;
         const dy = newStart.y - oldStart.y;
         const dxEnd = newEnd.x - oldEnd.x;
         const dyEnd = newEnd.y - oldEnd.y;
 
-        // Move all intermediate points proportionally (simple linear)
         const newPoints = line.points.map((pt, i) => {
           if (i === 0) return newStart;
           if (i === line.points.length - 1) return newEnd;
@@ -603,20 +681,17 @@
           };
         });
 
-        // Update line data and SVG path
         line.points = newPoints;
-        const d = catmullRomSpline(newPoints);
+        const d = createPathD(smoothPoints(newPoints, 4));
         line.svgPath.setAttribute('d', d);
 
-        // Update label pos
-        const midPoint = getPathMidPoint(d);
-        if (midPoint) {
-          line.svgLabel.setAttribute('x', midPoint.x);
-          line.svgLabel.setAttribute('y', midPoint.y);
+        const midPt = getPathMidPoint(d);
+        if (midPt) {
+          line.svgLabel.setAttribute('x', midPt.x);
+          line.svgLabel.setAttribute('y', midPt.y);
           line.svgLabel.textContent = line.label;
         }
 
-        // Save updated points to Firestore
         linesCollection.doc(lineId).set({
           startBoxId: line.startBoxId,
           endBoxId: line.endBoxId,
@@ -627,7 +702,7 @@
     });
   }
 
-  // Load boxes and lines from Firestore
+  // Load existing boxes and lines
   function loadFromFirestore() {
     boxesCollection.onSnapshot(snapshot => {
       snapshot.docChanges().forEach(change => {
@@ -635,7 +710,6 @@
         if (change.type === 'added') {
           addBox(data.x, data.y, data.text, change.doc.id, data.width, data.height, data.fontSize);
         } else if (change.type === 'modified') {
-          // Update existing box
           const boxEntry = [...idMap.entries()].find(([el, id]) => id === change.doc.id);
           if (boxEntry) {
             const [boxEl] = boxEntry;
@@ -675,8 +749,7 @@
   }
 
   function drawSavedLine(id, data) {
-    if (linesMap.has(id)) return; // Already drawn
-
+    if (linesMap.has(id)) return;
     const startBoxEntry = [...idMap.entries()].find(([el, bid]) => bid === data.startBoxId);
     const endBoxEntry = [...idMap.entries()].find(([el, bid]) => bid === data.endBoxId);
     if (!startBoxEntry || !endBoxEntry) return;
@@ -718,7 +791,7 @@
     linesMap.delete(id);
   }
 
-  // Create initial box for testing if none exist
+  // Create default box if none exist
   boxesCollection.get().then(snapshot => {
     if (snapshot.empty) {
       addBox(100, 100, 'Hello World');
