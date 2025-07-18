@@ -3,292 +3,469 @@
 <head>
   <meta charset="UTF-8" />
   <title>stringsnthings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      height: 100%;
-      background: #f5f5f5;
-      font-family: sans-serif;
+      margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
+      touch-action: none;
     }
-    #field {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100000px;
-      height: 100000px;
-      transform: translate(-50%, -50%);
+    #viewport {
+      width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    #canvas {
+      position: absolute; top: 0; left: 0; transform-origin: 0 0;
     }
     .box {
       position: absolute;
       background: white;
-      padding: 10px;
-      border: 1px solid #ccc;
-      resize: both;
-      overflow: auto;
-      min-width: 100px;
-      min-height: 50px;
-      box-sizing: border-box;
+      border: 1px solid black;
+      padding: 8px;
+      min-width: 80px;
+      min-height: 40px;
+      white-space: pre-wrap;
+      font-family: monospace, monospace;
       user-select: text;
+      touch-action: none;
+      cursor: text;
+      box-sizing: border-box;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
     }
-    .line {
-      stroke: black;
-      stroke-width: 4;
+    .box > div[contenteditable="true"] {
+      outline: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: monospace, monospace;
+      user-select: text;
+      cursor: text;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      padding: 0;
+      margin: 0;
+      overflow: visible;
+      line-height: 1.2;
+    }
+    .box > span.delete-btn {
+      position: absolute;
+      top: 2px; right: 4px;
       cursor: pointer;
+      color: red;
+      font-weight: bold;
+      user-select: none;
+      pointer-events: auto;
+      z-index: 10;
     }
-    .label {
-      fill: white;
-      stroke: black;
-      stroke-width: 1;
-      font-size: 16px;
-      pointer-events: none;
+    .resize-handle {
+      width: 16px;
+      height: 16px;
+      background: transparent;
+      position: absolute;
+      z-index: 20;
+      touch-action: none;
     }
-    .menu {
+    .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
+    .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
+    .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
+    .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
+
+    #buttonContainer {
       position: fixed;
-      bottom: 10px;
+      bottom: 12px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
-      gap: 10px;
-      background: rgba(100, 100, 100, 0.6);
-      padding: 10px;
-      border-radius: 10px;
+      gap: 12px;
+      z-index: 1000;
     }
-    .menu button {
-      background: transparent;
-      border: none;
-      color: white;
+    .floatingBtn {
+      background: rgba(100, 100, 100, 0.5);
+      color: #eee;
+      font-family: monospace, monospace;
       font-size: 16px;
+      padding: 6px 12px;
+      border: 1px solid #555;
+      border-radius: 4px;
       cursor: pointer;
+      user-select: none;
+      min-width: 100px;
+      text-align: center;
+      box-shadow: 0 0 6px rgba(0,0,0,0.3);
+      touch-action: manipulation;
+      transition: background 0.2s ease;
+    }
+    .floatingBtn:active {
+      background: rgba(80, 80, 80, 0.7);
+    }
+    .floatingBtn:disabled {
+      background: rgba(150, 150, 150, 0.3);
+      cursor: default;
+      color: #999;
+      border-color: #999;
+      box-shadow: none;
     }
   </style>
 </head>
 <body>
-  <svg id="svg" style="position:absolute; z-index:0; width:100%; height:100%; pointer-events:none;"></svg>
-  <div id="field"></div>
-  <div class="menu">
-    <button onclick="markCenter()">Mark Center</button>
-    <button onclick="goToCenter()">Go to Center</button>
-    <button onclick="toggleDrawMode()">Draw Mode</button>
-    <button onclick="undo()">Undo</button>
-    <button onclick="deleteSelected()">Delete Selected</button>
+  <div id="viewport">
+    <div id="canvas"></div>
   </div>
 
+  <div id="buttonContainer">
+    <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
+    <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+
   <script>
-    const field = document.getElementById("field");
-    const svg = document.getElementById("svg");
-    let center = { x: 50000, y: 50000 };
-    let boxes = [];
-    let lines = [];
-    let undoStack = [];
-    let drawMode = false;
-    let selectedLine = null;
+    const firebaseConfig = {
+      apiKey: "AIzaSyCpp42OH-1mTZxu5iq44dmMQc8ahQdvnL0",
+      authDomain: "stringsnthings-65aa0.firebaseapp.com",
+      projectId: "stringsnthings-65aa0",
+      storageBucket: "stringsnthings-65aa0.firebasestorage.app",
+      messagingSenderId: "35780192306",
+      appId: "1:35780192306:web:80aedf9ba9e2ffac0cf42b"
+    };
 
-    function createBox(x, y, text = "", width = 150, height = 100, fontSize = 16) {
-      const box = document.createElement("div");
-      box.className = "box";
-      box.contentEditable = true;
-      box.style.left = x + "px";
-      box.style.top = y + "px";
-      box.style.width = width + "px";
-      box.style.height = height + "px";
-      box.style.fontSize = fontSize + "px";
-      box.innerText = text;
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-      // Add invisible resizers on all 4 corners
-      ["nwse-resize", "nesw-resize", "nesw-resize", "nwse-resize"].forEach((cursor, i) => {
-        const handle = document.createElement("div");
-        handle.style.position = "absolute";
-        handle.style.width = "12px";
-        handle.style.height = "12px";
-        handle.style.background = "transparent";
-        handle.style.zIndex = "10";
-        handle.style.cursor = cursor;
+    const canvas = document.getElementById('canvas');
+    const viewport = document.getElementById('viewport');
+    const undoBtn = document.getElementById('undoBtn');
+    const goCenterBtn = document.getElementById('goCenterBtn');
 
-        switch (i) {
-          case 0:
-            handle.style.left = "-6px"; handle.style.top = "-6px";
-            break;
-          case 1:
-            handle.style.right = "-6px"; handle.style.top = "-6px";
-            break;
-          case 2:
-            handle.style.left = "-6px"; handle.style.bottom = "-6px";
-            break;
-          case 3:
-            handle.style.right = "-6px"; handle.style.bottom = "-6px";
-            break;
-        }
+    let scale = 1, panX = 0, panY = 0;
+    let isPanning = false, startX, startY;
 
-        box.appendChild(handle);
-      });
+    const undoStack = [];
 
-      makeDraggable(box);
-      box.addEventListener("input", save);
-      field.appendChild(box);
-      boxes.push(box);
-      save();
+    function getClientCoords(e) {
+      if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      return { x: e.clientX, y: e.clientY };
     }
-
-    function makeDraggable(el) {
-      let offsetX, offsetY;
-      el.addEventListener("mousedown", e => {
-        if (drawMode) return;
-        if (e.target !== el) return;
-        offsetX = e.offsetX;
-        offsetY = e.offsetY;
-        const onMouseMove = e2 => {
-          el.style.left = e2.pageX - offsetX + "px";
-          el.style.top = e2.pageY - offsetY + "px";
-          updateLines();
-        };
-        document.addEventListener("mousemove", onMouseMove);
-        document.addEventListener("mouseup", () => {
-          document.removeEventListener("mousemove", onMouseMove);
-          save();
-        }, { once: true });
-      });
-
-      el.addEventListener("mouseup", () => {
-        el.dataset.fontSize = parseInt(window.getComputedStyle(el).fontSize);
-      });
-
-      const observer = new ResizeObserver(() => {
-        const boxFontSize = parseInt(el.dataset.fontSize || 16);
-        const newSize = Math.min(el.offsetWidth / 10, el.offsetHeight / 2);
-        el.style.fontSize = Math.max(10, Math.min(boxFontSize, newSize)) + "px";
-        updateLines();
-        save();
-      });
-      observer.observe(el);
-    }
-
-    field.addEventListener("dblclick", e => {
-      if (!drawMode) createBox(e.offsetX, e.offsetY);
+    viewport.addEventListener('pointerdown', e => {
+      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn) return;
+      isPanning = true;
+      const coords = getClientCoords(e);
+      startX = coords.x;
+      startY = coords.y;
+      viewport.setPointerCapture(e.pointerId);
+    });
+    viewport.addEventListener('pointermove', e => {
+      if (!isPanning) return;
+      const coords = getClientCoords(e);
+      panX += coords.x - startX;
+      panY += coords.y - startY;
+      startX = coords.x;
+      startY = coords.y;
+      updateTransform();
+    });
+    viewport.addEventListener('pointerup', e => {
+      isPanning = false;
+      viewport.releasePointerCapture(e.pointerId);
     });
 
-    function updateLines() {
-      svg.innerHTML = "";
-      lines.forEach(line => {
-        const [a, b, label] = line;
-        const ax = a.offsetLeft + a.offsetWidth / 2;
-        const ay = a.offsetTop + a.offsetHeight / 2;
-        const bx = b.offsetLeft + b.offsetWidth / 2;
-        const by = b.offsetTop + b.offsetHeight / 2;
+    viewport.addEventListener('wheel', e => {
+      e.preventDefault();
+      const zoomFactor = 1.1;
+      const dir = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
+      scale *= dir;
+      updateTransform();
+    });
 
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", `M${ax},${ay} Q${(ax + bx) / 2},${(ay + by) / 2 - 100} ${bx},${by}`);
-        path.classList.add("line");
-        path.addEventListener("click", () => {
-          selectedLine = line;
-        });
-
-        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        text.classList.add("label");
-        text.setAttribute("x", (ax + bx) / 2);
-        text.setAttribute("y", (ay + by) / 2 - 20);
-        text.textContent = label;
-
-        svg.appendChild(path);
-        svg.appendChild(text);
-      });
+    function updateTransform() {
+      canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     }
 
-    function toggleDrawMode() {
-      drawMode = !drawMode;
-      if (drawMode) {
-        let first = null;
-        boxes.forEach(box => {
-          box.onclick = e => {
-            e.stopPropagation();
-            if (!drawMode) return;
-            if (!first) {
-              first = box;
-            } else {
-              const label = prompt("Connection Label:");
-              if (label) {
-                lines.push([first, box, label]);
-                undoStack.push(["line", [first, box, label]]);
-                updateLines();
-                save();
-              }
-              first = null;
-            }
-          };
+    let lastTap = 0;
+    viewport.addEventListener('pointerdown', e => {
+      if (e.target === goCenterBtn || e.target === undoBtn) return;
+      const now = Date.now();
+      if (now - lastTap < 400 && !e.target.closest('.box')) {
+        const x = (e.clientX - panX) / scale;
+        const y = (e.clientY - panY) / scale;
+        addBox(x, y);
+      }
+      lastTap = now;
+    });
+
+    const boxesCollection = db.collection('boxes');
+
+    function adjustFontSizeToFit(contentDiv, box) {
+      const padding = 8; // padding in px inside box
+      const maxFontSize = 100;
+      const minFontSize = 8;
+
+      // Reset font size to max to start measurement
+      contentDiv.style.fontSize = maxFontSize + 'px';
+
+      const boxWidth = box.clientWidth - padding * 2;
+      const boxHeight = box.clientHeight - padding * 2;
+
+      let fontSize = maxFontSize;
+
+      while (fontSize >= minFontSize) {
+        contentDiv.style.fontSize = fontSize + 'px';
+        if (contentDiv.scrollWidth <= boxWidth && contentDiv.scrollHeight <= boxHeight) {
+          break;
+        }
+        fontSize -= 1;
+      }
+      if (fontSize < minFontSize) fontSize = minFontSize;
+      contentDiv.style.fontSize = fontSize + 'px';
+    }
+
+    function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px') {
+      const box = document.createElement('div');
+      box.className = 'box';
+      box.style.left = `${x}px`;
+      box.style.top = `${y}px`;
+      box.style.width = width + 'px';
+      box.style.height = height + 'px';
+      box.spellcheck = false;
+
+      const content = document.createElement('div');
+      content.contentEditable = true;
+      content.style.minWidth = '80px';
+      content.style.minHeight = '24px';
+      content.style.whiteSpace = 'pre-wrap';
+      content.style.wordBreak = 'break-word';
+      content.style.outline = 'none';
+      content.style.fontFamily = 'monospace, monospace';
+      content.textContent = text;
+      content.style.userSelect = 'text';
+      content.style.cursor = 'text';
+      content.style.height = '100%';
+      content.style.width = '100%';
+      content.style.boxSizing = 'border-box';
+      content.style.padding = '0';
+      content.style.margin = '0';
+      content.style.overflow = 'visible';
+      content.style.lineHeight = '1.2';
+
+      content.style.fontSize = fontSize || '16px';
+
+      // Only adjust font size to fit if fontSize is default or not saved
+      if (fontSize === '16px' || !fontSize) {
+        adjustFontSizeToFit(content, box);
+      }
+
+      content.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          document.execCommand('insertHTML', false, '\n');
+        }
+      });
+
+      const delBtn = document.createElement('span');
+      delBtn.className = 'delete-btn';
+      delBtn.textContent = '×';
+
+      box.appendChild(content);
+      box.appendChild(delBtn);
+
+      const handles = {};
+      ['nw', 'ne', 'sw', 'se'].forEach(pos => {
+        const h = document.createElement('div');
+        h.className = 'resize-handle ' + pos;
+        box.appendChild(h);
+        handles[pos] = h;
+      });
+
+      let dragging = false;
+      let resizing = false;
+      let offsetX = 0;
+      let offsetY = 0;
+      let moved = false;
+      let resizeDir = null;
+      let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
+
+      box.addEventListener('pointerdown', e => {
+        if (e.target === delBtn) return;
+        if (e.target.classList.contains('resize-handle')) return;
+        moved = false;
+        offsetX = e.clientX - box.getBoundingClientRect().left;
+        offsetY = e.clientY - box.getBoundingClientRect().top;
+        box.setPointerCapture(e.pointerId);
+      });
+
+      box.addEventListener('pointermove', e => {
+        if (!box.hasPointerCapture(e.pointerId) || resizing) return;
+        const dx = e.clientX - offsetX - box.getBoundingClientRect().left;
+        const dy = e.clientY - offsetY - box.getBoundingClientRect().top;
+        if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+          dragging = true;
+          content.blur();
+          box.style.cursor = 'grabbing';
+          box.style.userSelect = 'none';
+        }
+        if (dragging) {
+          const newX = (e.clientX - offsetX - panX) / scale;
+          const newY = (e.clientY - offsetY - panY) / scale;
+          box.style.left = `${newX}px`;
+          box.style.top = `${newY}px`;
+          saveBox();
+          moved = true;
+        }
+      });
+
+      box.addEventListener('pointerup', e => {
+        if (!box.hasPointerCapture(e.pointerId)) return;
+        box.releasePointerCapture(e.pointerId);
+        if (dragging) {
+          dragging = false;
+          box.style.cursor = 'grab';
+          box.style.userSelect = 'text';
+          content.focus();
+        } else if (!moved) {
+          content.focus();
+        }
+      });
+
+      for (const pos in handles) {
+        const handle = handles[pos];
+        handle.addEventListener('pointerdown', e => {
+          e.stopPropagation();
+          resizing = true;
+          resizeDir = pos;
+          startWidth = box.offsetWidth;
+          startHeight = box.offsetHeight;
+          startXpos = box.offsetLeft;
+          startYpos = box.offsetTop;
+          startClientX = e.clientX;
+          startClientY = e.clientY;
+          handle.setPointerCapture(e.pointerId);
+        });
+
+        handle.addEventListener('pointermove', e => {
+          if (!resizing || !handle.hasPointerCapture(e.pointerId)) return;
+          e.preventDefault();
+
+          const dx = (e.clientX - startClientX) / scale;
+          const dy = (e.clientY - startClientY) / scale;
+
+          let newWidth = startWidth;
+          let newHeight = startHeight;
+          let newLeft = startXpos;
+          let newTop = startYpos;
+
+          if (resizeDir.includes('e')) {
+            newWidth = Math.max(80, startWidth + dx);
+          }
+          if (resizeDir.includes('w')) {
+            newWidth = Math.max(80, startWidth - dx);
+            newLeft = startXpos + dx;
+            if (newWidth === 80) newLeft = startXpos + (startWidth - 80);
+          }
+          if (resizeDir.includes('s')) {
+            newHeight = Math.max(40, startHeight + dy);
+          }
+          if (resizeDir.includes('n')) {
+            newHeight = Math.max(40, startHeight - dy);
+            newTop = startYpos + dy;
+            if (newHeight === 40) newTop = startYpos + (startHeight - 40);
+          }
+
+          box.style.width = `${newWidth}px`;
+          box.style.height = `${newHeight}px`;
+          box.style.left = `${newLeft}px`;
+          box.style.top = `${newTop}px`;
+
+          adjustFontSizeToFit(content, box);
+
+          // Save current font size and box size/pos
+          saveBox();
+        });
+
+        handle.addEventListener('pointerup', e => {
+          if (!handle.hasPointerCapture(e.pointerId)) return;
+          handle.releasePointerCapture(e.pointerId);
+          resizing = false;
         });
       }
-    }
 
-    function deleteSelected() {
-      if (selectedLine) {
-        const idx = lines.indexOf(selectedLine);
-        if (idx > -1) {
-          lines.splice(idx, 1);
-          undoStack.push(["deleteLine", selectedLine]);
-          updateLines();
-          save();
-          selectedLine = null;
+      delBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        undoStack.push({
+          x: parseFloat(box.style.left),
+          y: parseFloat(box.style.top),
+          text: content.textContent,
+          width: box.offsetWidth,
+          height: box.offsetHeight,
+          fontSize: content.style.fontSize,
+          id: id
+        });
+        if (undoStack.length > 5) undoStack.shift();
+        undoBtn.disabled = false;
+        box.remove();
+        if (id) boxesCollection.doc(id).delete();
+      });
+
+      content.addEventListener('input', () => {
+        adjustFontSizeToFit(content, box);
+        saveBox();
+      });
+
+      function saveBox() {
+        const data = {
+          x: parseFloat(box.style.left),
+          y: parseFloat(box.style.top),
+          width: box.offsetWidth,
+          height: box.offsetHeight,
+          text: content.textContent,
+          fontSize: content.style.fontSize || '16px'
+        };
+        if (id) {
+          boxesCollection.doc(id).set(data);
+        } else {
+          boxesCollection.add(data).then(docRef => {
+            id = docRef.id;
+          });
         }
       }
+
+      canvas.appendChild(box);
+
+      if (!id) saveBox();
+
+      return box;
     }
 
-    function undo() {
-      const last = undoStack.pop();
-      if (!last) return;
-      const [type, data] = last;
-      if (type === "box") {
-        field.removeChild(data);
-        boxes = boxes.filter(b => b !== data);
-      } else if (type === "line") {
-        lines = lines.filter(l => l !== data);
-        updateLines();
-      } else if (type === "deleteLine") {
-        lines.push(data);
-        updateLines();
-      }
-      save();
-    }
+    undoBtn.addEventListener('click', () => {
+      if (undoStack.length === 0) return;
+      const lastBox = undoStack.pop();
+      const box = addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize);
 
-    function markCenter() {
-      center.x = window.scrollX + window.innerWidth / 2;
-      center.y = window.scrollY + window.innerHeight / 2;
-    }
+      if (undoStack.length === 0) undoBtn.disabled = true;
+    });
 
-    function goToCenter() {
-      window.scrollTo(center.x - window.innerWidth / 2, center.y - window.innerHeight / 2);
-    }
+    goCenterBtn.addEventListener('click', () => {
+      panX = 0;
+      panY = 0;
+      updateTransform();
+    });
 
-    function save() {
-      const data = {
-        boxes: boxes.map(b => ({
-          x: b.offsetLeft,
-          y: b.offsetTop,
-          text: b.innerText,
-          width: b.offsetWidth,
-          height: b.offsetHeight,
-          fontSize: parseInt(window.getComputedStyle(b).fontSize)
-        })),
-        lines: lines.map(l => [boxes.indexOf(l[0]), boxes.indexOf(l[1]), l[2]])
-      };
-      localStorage.setItem("stringsnthings", JSON.stringify(data));
-    }
+    window.addEventListener('load', () => {
+      updateTransform();
+      loadBoxes();
+    });
 
-    function load() {
-      const data = JSON.parse(localStorage.getItem("stringsnthings") || "{}");
-      if (data.boxes) {
-        data.boxes.forEach(b => createBox(b.x, b.y, b.text, b.width, b.height, b.fontSize));
-      }
-      if (data.lines) {
-        data.lines.forEach(([i, j, label]) => {
-          if (boxes[i] && boxes[j]) lines.push([boxes[i], boxes[j], label]);
+    function loadBoxes() {
+      boxesCollection.get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize || '16px');
         });
-        updateLines();
-      }
+      });
     }
-
-    load();
-    goToCenter();
   </script>
 </body>
 </html>
