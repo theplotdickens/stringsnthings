@@ -13,12 +13,9 @@
       width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
       overflow: hidden;
       box-sizing: border-box;
-      user-select: none;
     }
     #canvas {
       position: absolute; top: 0; left: 0; transform-origin: 0 0;
-      width: 100%; height: 100%;
-      user-select: none;
     }
     .box {
       position: absolute;
@@ -65,15 +62,20 @@
     }
     .box > span.connect-toggle {
       position: absolute;
-      top: 24px; right: 4px;
-      width: 18px;
-      height: 18px;
+      top: 26px; right: 4px;
+      width: 16px;
+      height: 16px;
       background: blue;
-      border-radius: 4px;
       cursor: pointer;
       user-select: none;
       pointer-events: auto;
+      border-radius: 3px;
       z-index: 10;
+      box-shadow: 0 0 6px rgba(0, 0, 255, 0.5);
+    }
+    .connect-toggle.active {
+      background: deepskyblue;
+      box-shadow: 0 0 10px rgba(0, 191, 255, 0.8);
     }
     .resize-handle {
       width: 16px;
@@ -129,22 +131,24 @@
       padding: 4px 8px; border-radius: 4px;
       user-select: none; pointer-events: none; z-index: 1001;
     }
+
     svg#connectionLines {
       position: absolute;
       top: 0; left: 0;
+      width: 100%; height: 100%;
       pointer-events: none;
       overflow: visible;
-      z-index: 0;
+      z-index: 5;
     }
     line.connection-line {
       stroke: black;
       stroke-width: 2;
       cursor: pointer;
-      pointer-events: all;
+      pointer-events: auto;
     }
     line.connection-line.highlighted {
-      stroke: blue;
-      stroke-width: 3;
+      stroke: red;
+      stroke-width: 4;
     }
   </style>
 </head>
@@ -168,7 +172,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 
   <script>
-    // Firebase setup
     const firebaseConfig = {
       apiKey: "AIzaSyCpp42OH-1mTZxu5iq44dmMQc8ahQdvnL0",
       authDomain: "stringsnthings-65aa0.firebaseapp.com",
@@ -181,8 +184,8 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    const viewport = document.getElementById('viewport');
     const canvas = document.getElementById('canvas');
+    const viewport = document.getElementById('viewport');
     const connectionLines = document.getElementById('connectionLines');
     const undoBtn = document.getElementById('undoBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
@@ -191,29 +194,22 @@
     const zoomDisplay = document.getElementById('zoomDisplay');
 
     let scale = 1, panX = 0, panY = 0;
-    const MIN_SCALE = 0.5;
-    const MAX_SCALE = 3;
     let isPanning = false, startX, startY;
-    let undoStack = [];
-    let boxes = new Map(); // id => box element
-    let connections = new Map(); // id => {fromId, toId, lineElement}
-    let connectBuffer = [];
+
+    const undoStack = [];
+
+    const boxes = new Map();
+    const connections = new Map();
+
     let selectedConnectionId = null;
-    let centerMark = { panX: 0, panY: 0 };
+    let connectingBoxId = null;
+
+    const centerMark = {panX: 0, panY: 0};
 
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
     }
-
-    function updateTransform() {
-      canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-      connectionLines.style.transform = canvas.style.transform;
-      const zoomPercent = Math.round(scale * 100);
-      zoomDisplay.textContent = `Zoom: ${zoomPercent}%`;
-      redrawConnections();
-    }
-
     viewport.addEventListener('pointerdown', e => {
       if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn || e.target === deleteConnectionBtn) return;
       isPanning = true;
@@ -222,7 +218,6 @@
       startY = coords.y;
       viewport.setPointerCapture(e.pointerId);
     });
-
     viewport.addEventListener('pointermove', e => {
       if (!isPanning) return;
       const coords = getClientCoords(e);
@@ -232,11 +227,13 @@
       startY = coords.y;
       updateTransform();
     });
-
     viewport.addEventListener('pointerup', e => {
       isPanning = false;
       viewport.releasePointerCapture(e.pointerId);
     });
+
+    const MIN_SCALE = 0.5;
+    const MAX_SCALE = 3;
 
     viewport.addEventListener('wheel', e => {
       e.preventDefault();
@@ -261,10 +258,44 @@
       updateTransform();
     });
 
-    // Boxes management
+    function updateTransform() {
+      canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      connectionLines.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      const zoomPercent = Math.round(scale * 100);
+      zoomDisplay.textContent = `Zoom: ${zoomPercent}%`;
+      redrawConnections();
+    }
+
+    // Box creation on double click on canvas
+    canvas.addEventListener('dblclick', e => {
+      if (e.target !== canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left - panX) / scale;
+      const y = (e.clientY - rect.top - panY) / scale;
+      const id = generateId();
+      const boxData = {
+        id,
+        x,
+        y,
+        width: 150,
+        height: 60,
+        text: 'New box',
+        fontSize: '16px'
+      };
+      addBox(boxData);
+      saveBox(boxData);
+    });
+
+    // Generate stable IDs for boxes
+    function generateId() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
 
     function adjustFontSizeToFit(contentDiv, box) {
-      const padding = 8; // px padding inside box
+      const padding = 8; // padding in px inside box
       const maxFontSize = 100;
       const minFontSize = 8;
 
@@ -287,26 +318,23 @@
     }
 
     function createBoxElement(data) {
-      const {id, x, y, width, height, text, fontSize} = data;
-
       const box = document.createElement('div');
       box.className = 'box';
-      box.style.left = x + 'px';
-      box.style.top = y + 'px';
-      box.style.width = width + 'px';
-      box.style.height = height + 'px';
-      box.dataset.id = id;
+      box.style.left = data.x + 'px';
+      box.style.top = data.y + 'px';
+      box.style.width = data.width + 'px';
+      box.style.height = data.height + 'px';
+      box.spellcheck = false;
 
       const content = document.createElement('div');
       content.contentEditable = true;
-      content.textContent = text || 'Text box';
-      content.style.fontSize = fontSize || '16px';
       content.style.minWidth = '80px';
       content.style.minHeight = '24px';
       content.style.whiteSpace = 'pre-wrap';
       content.style.wordBreak = 'break-word';
       content.style.outline = 'none';
       content.style.fontFamily = 'monospace, monospace';
+      content.textContent = data.text;
       content.style.userSelect = 'text';
       content.style.cursor = 'text';
       content.style.height = '100%';
@@ -316,8 +344,11 @@
       content.style.margin = '0';
       content.style.overflow = 'visible';
       content.style.lineHeight = '1.2';
+      content.style.fontSize = data.fontSize || '16px';
 
-      adjustFontSizeToFit(content, box);
+      if (!data.fontSize) {
+        adjustFontSizeToFit(content, box);
+      }
 
       content.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
@@ -328,60 +359,20 @@
 
       content.addEventListener('input', () => {
         adjustFontSizeToFit(content, box);
-        saveBox(id);
+        saveBox(data);
       });
 
       const delBtn = document.createElement('span');
       delBtn.className = 'delete-btn';
       delBtn.textContent = '×';
 
-      delBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        undoStack.push({
-          type: 'deleteBox',
-          data: {
-            id,
-            x: parseFloat(box.style.left),
-            y: parseFloat(box.style.top),
-            width: box.offsetWidth,
-            height: box.offsetHeight,
-            text: content.textContent,
-            fontSize: content.style.fontSize
-          }
-        });
-        undoBtn.disabled = false;
-
-        // Delete box and associated connections
-        deleteBoxAndConnections(id);
-      });
-
       const connectToggle = document.createElement('span');
       connectToggle.className = 'connect-toggle';
-      connectToggle.title = 'Click to select for connection';
 
-      connectToggle.addEventListener('click', e => {
-        e.stopPropagation();
-        if (connectBuffer.includes(id)) {
-          connectBuffer = connectBuffer.filter(i => i !== id);
-          connectToggle.style.background = 'blue';
-          return;
-        }
-        connectBuffer.push(id);
-        connectToggle.style.background = 'lime';
+      box.appendChild(content);
+      box.appendChild(delBtn);
+      box.appendChild(connectToggle);
 
-        if (connectBuffer.length === 2) {
-          addConnection(connectBuffer[0], connectBuffer[1]);
-          connectBuffer.forEach(boxId => {
-            const b = boxes.get(boxId);
-            if (b) {
-              b.querySelector('.connect-toggle').style.background = 'blue';
-            }
-          });
-          connectBuffer = [];
-        }
-      });
-
-      // Resize handles
       const handles = {};
       ['nw', 'ne', 'sw', 'se'].forEach(pos => {
         const h = document.createElement('div');
@@ -390,17 +381,18 @@
         handles[pos] = h;
       });
 
-      // Dragging and resizing
       let dragging = false;
       let resizing = false;
       let offsetX = 0;
       let offsetY = 0;
+      let moved = false;
       let resizeDir = null;
       let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
 
+      // Dragging
       box.addEventListener('pointerdown', e => {
         if (e.target === delBtn || e.target === connectToggle || e.target.classList.contains('resize-handle')) return;
-        dragging = true;
+        moved = false;
         offsetX = e.clientX - box.getBoundingClientRect().left;
         offsetY = e.clientY - box.getBoundingClientRect().top;
         box.setPointerCapture(e.pointerId);
@@ -408,14 +400,25 @@
 
       box.addEventListener('pointermove', e => {
         if (!box.hasPointerCapture(e.pointerId) || resizing) return;
-        if (!dragging) return;
-        e.preventDefault();
-        const newX = (e.clientX - offsetX - panX) / scale;
-        const newY = (e.clientY - offsetY - panY) / scale;
-        box.style.left = `${newX}px`;
-        box.style.top = `${newY}px`;
-        saveBox(id);
-        redrawConnections();
+        const dx = e.clientX - offsetX - box.getBoundingClientRect().left;
+        const dy = e.clientY - offsetY - box.getBoundingClientRect().top;
+        if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+          dragging = true;
+          content.blur();
+          box.style.cursor = 'grabbing';
+          box.style.userSelect = 'none';
+        }
+        if (dragging) {
+          const newX = (e.clientX - offsetX - panX) / scale;
+          const newY = (e.clientY - offsetY - panY) / scale;
+          box.style.left = `${newX}px`;
+          box.style.top = `${newY}px`;
+          data.x = newX;
+          data.y = newY;
+          saveBox(data);
+          moved = true;
+          redrawConnections();
+        }
       });
 
       box.addEventListener('pointerup', e => {
@@ -423,10 +426,15 @@
         box.releasePointerCapture(e.pointerId);
         if (dragging) {
           dragging = false;
+          box.style.cursor = 'grab';
+          box.style.userSelect = 'text';
+          content.focus();
+        } else if (!moved) {
+          content.focus();
         }
       });
 
-      // Resize handlers
+      // Resizing
       for (const pos in handles) {
         const handle = handles[pos];
         handle.addEventListener('pointerdown', e => {
@@ -476,262 +484,218 @@
           box.style.left = `${newLeft}px`;
           box.style.top = `${newTop}px`;
 
+          data.x = newLeft;
+          data.y = newTop;
+          data.width = newWidth;
+          data.height = newHeight;
+          saveBox(data);
           adjustFontSizeToFit(content, box);
-          saveBox(id);
           redrawConnections();
         });
 
         handle.addEventListener('pointerup', e => {
           if (!handle.hasPointerCapture(e.pointerId)) return;
-          handle.releasePointerCapture(e.pointerId);
           resizing = false;
+          resizeDir = null;
+          handle.releasePointerCapture(e.pointerId);
         });
       }
 
-      box.appendChild(content);
-      box.appendChild(delBtn);
-      box.appendChild(connectToggle);
+      delBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        removeBox(data.id);
+      });
+
+      connectToggle.addEventListener('click', e => {
+        e.stopPropagation();
+        if (connectingBoxId === null) {
+          connectingBoxId = data.id;
+          connectToggle.classList.add('active');
+        } else if (connectingBoxId === data.id) {
+          // Cancel connect mode
+          connectingBoxId = null;
+          connectToggle.classList.remove('active');
+        } else {
+          // Connect two boxes
+          addConnection(connectingBoxId, data.id);
+          const firstToggle = boxes.get(connectingBoxId).element.querySelector('.connect-toggle');
+          firstToggle.classList.remove('active');
+          connectingBoxId = null;
+        }
+      });
+
+      box.dataset.id = data.id;
 
       return box;
     }
 
-    function saveBox(id) {
-      const box = boxes.get(id);
-      if (!box) return;
-      const content = box.querySelector('div[contenteditable="true"]');
-      const data = {
-        x: parseFloat(box.style.left),
-        y: parseFloat(box.style.top),
-        width: box.offsetWidth,
-        height: box.offsetHeight,
-        text: content.textContent,
-        fontSize: content.style.fontSize || '16px'
-      };
-      db.collection('boxes').doc(id).set(data).catch(console.error);
+    function addBox(data) {
+      if (boxes.has(data.id)) return; // Avoid duplicates
+      const box = createBoxElement(data);
+      canvas.appendChild(box);
+      boxes.set(data.id, {data, element: box});
+      redrawConnections();
     }
 
-    function deleteBoxAndConnections(id) {
-      // Delete connections related to this box
-      const connsToDelete = [];
-      for (const [connId, conn] of connections) {
-        if (conn.fromId === id || conn.toId === id) {
-          connsToDelete.push(connId);
-        }
-      }
-      connsToDelete.forEach(connId => deleteConnection(connId, true));
+    function removeBox(id) {
+      if (!boxes.has(id)) return;
+      // Remove connections associated with this box
+      const toRemove = [];
+      connections.forEach((conn, key) => {
+        if (conn.from === id || conn.to === id) toRemove.push(key);
+      });
+      toRemove.forEach(key => {
+        connections.delete(key);
+        db.collection('connections').doc(key).delete();
+      });
 
-      // Delete box in Firebase
-      db.collection('boxes').doc(id).delete().catch(console.error);
-
-      // Remove box element
       const box = boxes.get(id);
-      if (box) {
-        canvas.removeChild(box);
-        boxes.delete(id);
-      }
+      canvas.removeChild(box.element);
+      boxes.delete(id);
+      db.collection('boxes').doc(id).delete();
+      redrawConnections();
+      undoStack.push({type: 'deleteBox', data: box.data});
+      undoBtn.disabled = false;
+      if (connectingBoxId === id) connectingBoxId = null;
+    }
+
+    function saveBox(data) {
+      db.collection('boxes').doc(data.id).set(data);
     }
 
     function addConnection(fromId, toId) {
-      if (fromId === toId) return; // no self connection
-      // Check for duplicates
-      for (const conn of connections.values()) {
-        if ((conn.fromId === fromId && conn.toId === toId) || (conn.fromId === toId && conn.toId === fromId)) {
-          return; // Already connected
+      if (fromId === toId) return; // No self connection
+      // Check if connection already exists in either direction
+      for (const [key, conn] of connections.entries()) {
+        if ((conn.from === fromId && conn.to === toId) || (conn.from === toId && conn.to === fromId)) {
+          return;
         }
       }
-      const connId = fromId + '::' + toId;
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      line.classList.add('connection-line');
-      line.dataset.connId = connId;
-      line.addEventListener('click', e => {
-        e.stopPropagation();
-        selectConnection(connId);
-      });
-      connectionLines.appendChild(line);
-      connections.set(connId, {fromId, toId, lineElement: line});
-      saveConnection(connId, fromId, toId);
+      const id = `${fromId}_${toId}`;
+      const conn = {id, from: fromId, to: toId};
+      connections.set(id, conn);
+      db.collection('connections').doc(id).set(conn);
       redrawConnections();
     }
 
-    function saveConnection(id, fromId, toId) {
-      db.collection('connections').doc(id).set({fromId, toId}).catch(console.error);
-    }
-
-    function deleteConnection(id, skipUndo = false) {
-      const conn = connections.get(id);
-      if (!conn) return;
-      if (!skipUndo) {
-        undoStack.push({
-          type: 'deleteConnection',
-          data: {id, fromId: conn.fromId, toId: conn.toId}
-        });
-        undoBtn.disabled = false;
-      }
-      db.collection('connections').doc(id).delete().catch(console.error);
-      connectionLines.removeChild(conn.lineElement);
+    function removeConnection(id) {
+      if (!connections.has(id)) return;
       connections.delete(id);
+      db.collection('connections').doc(id).delete();
       if (selectedConnectionId === id) {
         selectedConnectionId = null;
         deleteConnectionBtn.disabled = true;
       }
+      redrawConnections();
+      undoStack.push({type: 'deleteConnection', data: id});
+      undoBtn.disabled = false;
     }
 
     function redrawConnections() {
-      for (const [id, conn] of connections) {
-        const fromBox = boxes.get(conn.fromId);
-        const toBox = boxes.get(conn.toId);
-        if (!fromBox || !toBox) continue;
-
-        const fromRect = fromBox.getBoundingClientRect();
-        const toRect = toBox.getBoundingClientRect();
-
-        // Calculate box center positions in canvas coordinates
-        const canvasRect = canvas.getBoundingClientRect();
-
-        // Convert screen to canvas relative (account for pan and scale)
-        const fromX = (fromRect.left - canvasRect.left) / scale + fromRect.width / (2*scale);
-        const fromY = (fromRect.top - canvasRect.top) / scale + fromRect.height / (2*scale);
-        const toX = (toRect.left - canvasRect.left) / scale + toRect.width / (2*scale);
-        const toY = (toRect.top - canvasRect.top) / scale + toRect.height / (2*scale);
-
-        conn.lineElement.setAttribute('x1', fromX);
-        conn.lineElement.setAttribute('y1', fromY);
-        conn.lineElement.setAttribute('x2', toX);
-        conn.lineElement.setAttribute('y2', toY);
+      while (connectionLines.firstChild) {
+        connectionLines.removeChild(connectionLines.firstChild);
       }
-    }
 
-    function selectConnection(id) {
-      if (selectedConnectionId) {
-        const oldConn = connections.get(selectedConnectionId);
-        if (oldConn) oldConn.lineElement.classList.remove('highlighted');
-      }
-      if (selectedConnectionId === id) {
-        selectedConnectionId = null;
-        deleteConnectionBtn.disabled = true;
-        return;
-      }
-      selectedConnectionId = id;
-      const conn = connections.get(id);
-      if (conn) {
-        conn.lineElement.classList.add('highlighted');
-        deleteConnectionBtn.disabled = false;
-      }
-    }
+      connections.forEach(conn => {
+        const fromBox = boxes.get(conn.from);
+        const toBox = boxes.get(conn.to);
+        if (!fromBox || !toBox) return;
 
-    deleteConnectionBtn.addEventListener('click', () => {
-      if (!selectedConnectionId) return;
-      deleteConnection(selectedConnectionId);
-      selectedConnectionId = null;
-      deleteConnectionBtn.disabled = true;
-    });
+        const fromRect = fromBox.element.getBoundingClientRect();
+        const toRect = toBox.element.getBoundingClientRect();
+        const parentRect = canvas.getBoundingClientRect();
 
-    // Undo logic
-    undoBtn.addEventListener('click', () => {
-      if (undoStack.length === 0) return;
-      const action = undoStack.pop();
-      if (undoStack.length === 0) undoBtn.disabled = true;
+        // Calculate center coords relative to canvas
+        const fromX = (fromRect.left - parentRect.left) / scale;
+        const fromY = (fromRect.top - parentRect.top) / scale;
+        const toX = (toRect.left - parentRect.left) / scale;
+        const toY = (toRect.top - parentRect.top) / scale;
 
-      if (action.type === 'deleteBox') {
-        const data = action.data;
-        const boxData = {
-          id: data.id,
-          x: data.x,
-          y: data.y,
-          width: data.width,
-          height: data.height,
-          text: data.text,
-          fontSize: data.fontSize,
-        };
-        addBox(boxData);
-      }
-      else if (action.type === 'deleteConnection') {
-        const data = action.data;
-        addConnection(data.fromId, data.toId);
-      }
-    });
+        // Connect at box centers
+        const startX = fromX + fromBox.element.offsetWidth / 2;
+        const startY = fromY + fromBox.element.offsetHeight / 2;
+        const endX = toX + toBox.element.offsetWidth / 2;
+        const endY = toY + toBox.element.offsetHeight / 2;
 
-    // Center mark / go to center
-    markCenterBtn.addEventListener('click', () => {
-      centerMark.panX = panX;
-      centerMark.panY = panY;
-      alert('Center marked');
-    });
-
-    goCenterBtn.addEventListener('click', () => {
-      panX = centerMark.panX || 0;
-      panY = centerMark.panY || 0;
-      updateTransform();
-    });
-
-    // New box creation on double click (on canvas)
-    canvas.addEventListener('dblclick', e => {
-      if (e.target !== canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left - panX) / scale;
-      const y = (e.clientY - rect.top - panY) / scale;
-      const id = generateId();
-      const boxData = {
-        id,
-        x,
-        y,
-        width: 150,
-        height: 60,
-        text: 'New box',
-        fontSize: '16px'
-      };
-      addBox(boxData);
-      saveBox(id);
-    });
-
-    // Generate stable IDs for boxes
-    function generateId() {
-      // Simple UUID v4 generator for stable ids
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.classList.add('connection-line');
+        line.setAttribute('x1', startX);
+        line.setAttribute('y1', startY);
+        line.setAttribute('x2', endX);
+        line.setAttribute('y2', endY);
+        line.dataset.id = conn.id;
+        if (selectedConnectionId === conn.id) {
+          line.classList.add('highlighted');
+        }
+        line.addEventListener('click', e => {
+          e.stopPropagation();
+          // Select connection
+          if (selectedConnectionId === conn.id) {
+            selectedConnectionId = null;
+            line.classList.remove('highlighted');
+            deleteConnectionBtn.disabled = true;
+          } else {
+            selectedConnectionId = conn.id;
+            deleteConnectionBtn.disabled = false;
+            redrawConnections();
+          }
+        });
+        connectionLines.appendChild(line);
       });
     }
 
-    function addBox(data) {
-      if (boxes.has(data.id)) return;
-      const box = createBoxElement(data);
-      canvas.appendChild(box);
-      boxes.set(data.id, box);
-      redrawConnections();
-    }
+    undoBtn.addEventListener('click', () => {
+      if (undoStack.length === 0) return;
+      const action = undoStack.pop();
+      if (action.type === 'deleteBox') {
+        addBox(action.data);
+        saveBox(action.data);
+      } else if (action.type === 'deleteConnection') {
+        const connId = action.data;
+        const parts = connId.split('_');
+        if (parts.length === 2) {
+          addConnection(parts[0], parts[1]);
+        }
+      }
+      if (undoStack.length === 0) undoBtn.disabled = true;
+    });
 
-    // Firebase listeners to keep in sync
+    markCenterBtn.addEventListener('click', () => {
+      centerMark.panX = panX;
+      centerMark.panY = panY;
+      goCenterBtn.disabled = false;
+    });
+
+    goCenterBtn.addEventListener('click', () => {
+      panX = centerMark.panX;
+      panY = centerMark.panY;
+      updateTransform();
+    });
+
+    deleteConnectionBtn.addEventListener('click', () => {
+      if (!selectedConnectionId) return;
+      removeConnection(selectedConnectionId);
+    });
+
+    // Clicking outside connection deselects
+    viewport.addEventListener('click', e => {
+      if (e.target.closest('.connection-line')) return;
+      selectedConnectionId = null;
+      deleteConnectionBtn.disabled = true;
+      redrawConnections();
+    });
+
+    // Load from Firebase
     db.collection('boxes').onSnapshot(snapshot => {
       snapshot.docChanges().forEach(change => {
-        const doc = change.doc;
-        const id = doc.id;
-        const data = doc.data();
+        const data = change.doc.data();
         if (change.type === 'added' || change.type === 'modified') {
-          if (boxes.has(id)) {
-            // Update existing box
-            const box = boxes.get(id);
-            box.style.left = data.x + 'px';
-            box.style.top = data.y + 'px';
-            box.style.width = data.width + 'px';
-            box.style.height = data.height + 'px';
-            const content = box.querySelector('div[contenteditable="true"]');
-            if (content.textContent !== data.text) content.textContent = data.text;
-            content.style.fontSize = data.fontSize || '16px';
-            adjustFontSizeToFit(content, box);
-            redrawConnections();
-          } else {
-            // Add new box
-            addBox({id, ...data});
-          }
-        }
-        if (change.type === 'removed') {
-          // Remove box
-          const box = boxes.get(id);
-          if (box) {
-            canvas.removeChild(box);
-            boxes.delete(id);
-            redrawConnections();
+          addBox(data);
+        } else if (change.type === 'removed') {
+          if (boxes.has(data.id)) {
+            const box = boxes.get(data.id);
+            canvas.removeChild(box.element);
+            boxes.delete(data.id);
           }
         }
       });
@@ -739,58 +703,17 @@
 
     db.collection('connections').onSnapshot(snapshot => {
       snapshot.docChanges().forEach(change => {
-        const doc = change.doc;
-        const id = doc.id;
-        const data = doc.data();
-        if (change.type === 'added') {
-          if (!connections.has(id)) {
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.classList.add('connection-line');
-            line.dataset.connId = id;
-            line.addEventListener('click', e => {
-              e.stopPropagation();
-              selectConnection(id);
-            });
-            connectionLines.appendChild(line);
-            connections.set(id, {fromId: data.fromId, toId: data.toId, lineElement: line});
-            redrawConnections();
-          }
-        }
-        if (change.type === 'modified') {
-          const conn = connections.get(id);
-          if (conn) {
-            conn.fromId = data.fromId;
-            conn.toId = data.toId;
-            redrawConnections();
-          }
-        }
-        if (change.type === 'removed') {
-          const conn = connections.get(id);
-          if (conn) {
-            connectionLines.removeChild(conn.lineElement);
-            connections.delete(id);
-            redrawConnections();
-          }
+        const data = change.doc.data();
+        if (change.type === 'added' || change.type === 'modified') {
+          connections.set(data.id, data);
+        } else if (change.type === 'removed') {
+          connections.delete(data.id);
         }
       });
+      redrawConnections();
     });
 
-    // Deselect connection when clicking outside
-    document.body.addEventListener('click', () => {
-      if (selectedConnectionId) {
-        const conn = connections.get(selectedConnectionId);
-        if (conn) conn.lineElement.classList.remove('highlighted');
-        selectedConnectionId = null;
-        deleteConnectionBtn.disabled = true;
-      }
-    });
-
-    // Initialize canvas transform and everything
-    function init() {
-      updateTransform();
-    }
-
-    init();
+    updateTransform();
   </script>
 </body>
 </html>
