@@ -1,779 +1,265 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>stringsnthings with Straight Lines + Select/Delete + Center Mark</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>
-  html, body {
-    margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
-    touch-action: none;
-    user-select: none;
-  }
-  #viewport {
-    width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
-    overflow: hidden;
-    box-sizing: border-box;
-  }
-  #canvas {
-    position: absolute; top: 0; left: 0; transform-origin: 0 0;
-    z-index: 10; /* boxes above lines */
-  }
-  .box {
-    position: absolute;
-    background: white;
-    border: 1px solid black;
-    padding: 8px;
-    min-width: 80px;
-    min-height: 40px;
-    white-space: pre-wrap;
-    font-family: monospace, monospace;
-    user-select: text;
-    touch-action: none;
-    cursor: text;
-    box-sizing: border-box;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    z-index: 10;
-  }
-  .box > div[contenteditable="true"] {
-    outline: none;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-family: monospace, monospace;
-    user-select: text;
-    cursor: text;
-    width: 100%;
-    height: 100%;
-    box-sizing: border-box;
-    padding: 0;
-    margin: 0;
-    overflow: visible;
-    line-height: 1.2;
-  }
-  .delete-btn {
-    position: absolute;
-    top: 2px; right: 4px;
-    cursor: pointer;
-    color: red;
-    font-weight: bold;
-    user-select: none;
-    pointer-events: auto;
-    z-index: 20;
-  }
-  .resize-handle {
-    width: 16px;
-    height: 16px;
-    background: transparent;
-    position: absolute;
-    z-index: 20;
-    touch-action: none;
-  }
-  .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
-  .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
-  .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
-  .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
-
-  #lineLayer {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    pointer-events: auto;
-    overflow: visible;
-    z-index: 5; /* below boxes */
-  }
-  .line-group {
-    cursor: pointer;
-  }
-  .line-bar {
-    fill: black;
-    stroke: black;
-    stroke-width: 1;
-  }
-  .line-label {
-    font-family: monospace, monospace;
-    font-size: 12px;
-    fill: white;
-    pointer-events: auto;
-    user-select: text;
-    dominant-baseline: middle;
-    text-anchor: middle;
-    cursor: text;
-  }
-  .line-group.selected .line-bar {
-    fill: #004080;
-  }
-
-  #buttonContainer {
-    position: fixed;
-    bottom: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 12px;
-    z-index: 1000;
-    user-select: none;
-  }
-  .floatingBtn {
-    background: rgba(100, 100, 100, 0.5);
-    color: #eee;
-    font-family: monospace, monospace;
-    font-size: 16px;
-    padding: 6px 12px;
-    border: 1px solid #555;
-    border-radius: 4px;
-    cursor: pointer;
-    user-select: none;
-    min-width: 100px;
-    text-align: center;
-    box-shadow: 0 0 6px rgba(0,0,0,0.3);
-    touch-action: manipulation;
-    transition: background 0.2s ease;
-  }
-  .floatingBtn.active {
-    background: rgba(50, 150, 200, 0.8);
-    color: white;
-  }
-  .floatingBtn:active {
-    background: rgba(80, 80, 80, 0.7);
-  }
-  .floatingBtn:disabled {
-    background: rgba(150, 150, 150, 0.3);
-    cursor: default;
-    color: #999;
-    border-color: #999;
-    box-shadow: none;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <title>stringsnthings</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100%;
+      background: #f5f5f5;
+      font-family: sans-serif;
+    }
+    #field {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100000px;
+      height: 100000px;
+      transform: translate(-50%, -50%);
+    }
+    .box {
+      position: absolute;
+      background: white;
+      padding: 10px;
+      border: 1px solid #ccc;
+      resize: both;
+      overflow: auto;
+      min-width: 100px;
+      min-height: 50px;
+      box-sizing: border-box;
+      user-select: text;
+    }
+    .line {
+      stroke: black;
+      stroke-width: 4;
+      cursor: pointer;
+    }
+    .label {
+      fill: white;
+      stroke: black;
+      stroke-width: 1;
+      font-size: 16px;
+      pointer-events: none;
+    }
+    .menu {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      background: rgba(100, 100, 100, 0.6);
+      padding: 10px;
+      border-radius: 10px;
+    }
+    .menu button {
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-<div id="viewport">
-  <svg id="lineLayer"></svg>
-  <div id="canvas"></div>
-</div>
+  <svg id="svg" style="position:absolute; z-index:0; width:100%; height:100%; pointer-events:none;"></svg>
+  <div id="field"></div>
+  <div class="menu">
+    <button onclick="markCenter()">Mark Center</button>
+    <button onclick="goToCenter()">Go to Center</button>
+    <button onclick="toggleDrawMode()">Draw Mode</button>
+    <button onclick="undo()">Undo</button>
+    <button onclick="deleteSelected()">Delete Selected</button>
+  </div>
 
-<div id="buttonContainer">
-  <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
-  <button id="undoLineBtn" class="floatingBtn" disabled>Undo Line</button>
-  <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
-  <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
-  <button id="drawLineToggle" class="floatingBtn">Draw Line OFF</button>
-  <button id="deleteLineBtn" class="floatingBtn" disabled>Delete Selected Line</button>
-</div>
+  <script>
+    const field = document.getElementById("field");
+    const svg = document.getElementById("svg");
+    let center = { x: 50000, y: 50000 };
+    let boxes = [];
+    let lines = [];
+    let undoStack = [];
+    let drawMode = false;
+    let selectedLine = null;
 
-<script>
-  const viewport = document.getElementById('viewport');
-  const canvas = document.getElementById('canvas');
-  const lineLayer = document.getElementById('lineLayer');
+    function createBox(x, y, text = "", width = 150, height = 100, fontSize = 16) {
+      const box = document.createElement("div");
+      box.className = "box";
+      box.contentEditable = true;
+      box.style.left = x + "px";
+      box.style.top = y + "px";
+      box.style.width = width + "px";
+      box.style.height = height + "px";
+      box.style.fontSize = fontSize + "px";
+      box.innerText = text;
 
-  const undoBtn = document.getElementById('undoBtn');
-  const undoLineBtn = document.getElementById('undoLineBtn');
-  const goCenterBtn = document.getElementById('goCenterBtn');
-  const markCenterBtn = document.getElementById('markCenterBtn');
-  const drawLineToggle = document.getElementById('drawLineToggle');
-  const deleteLineBtn = document.getElementById('deleteLineBtn');
-
-  let scale = 1, panX = 0, panY = 0;
-  let isPanning = false, startX, startY;
-  const undoStack = [];
-  const undoLineStack = [];
-
-  let drawLineMode = false;
-
-  // Boxes and Lines storage:
-  // Map from box element -> boxId (simple counter)
-  const idMap = new Map();
-  let boxCounter = 1;
-
-  // Lines: lineId => {startBoxId, endBoxId, labelText, svgGroup}
-  const linesMap = new Map();
-  let lineCounter = 1;
-
-  // Track selected boxes for line drawing
-  let selectedBoxesForLine = [];
-
-  // Track selected line for deletion
-  let selectedLineId = null;
-
-  // Custom center storage
-  let customCenter = { panX: 0, panY: 0, scale: 1 };
-
-  // Update viewport transform
-  function updateTransform() {
-    canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-    lineLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-  }
-
-  // Utility to get mouse/touch coords
-  function getClientCoords(e) {
-    if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    return { x: e.clientX, y: e.clientY };
-  }
-
-  // Pan handling (only if not drawing line)
-  viewport.addEventListener('pointerdown', e => {
-    if (drawLineMode) return;
-    if (e.target.closest('.box') || e.target.closest('svg') || e.target.closest('button')) return;
-    isPanning = true;
-    const coords = getClientCoords(e);
-    startX = coords.x;
-    startY = coords.y;
-    viewport.setPointerCapture(e.pointerId);
-  });
-  viewport.addEventListener('pointermove', e => {
-    if (!isPanning) return;
-    const coords = getClientCoords(e);
-    panX += coords.x - startX;
-    panY += coords.y - startY;
-    startX = coords.x;
-    startY = coords.y;
-    updateTransform();
-  });
-  viewport.addEventListener('pointerup', e => {
-    isPanning = false;
-    viewport.releasePointerCapture(e.pointerId);
-  });
-  viewport.addEventListener('wheel', e => {
-    e.preventDefault();
-    const zoomFactor = 1.1;
-    const dir = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
-    // Zoom around cursor
-    const rect = viewport.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const wx = (mouseX - panX) / scale;
-    const wy = (mouseY - panY) / scale;
-
-    scale *= dir;
-
-    panX = mouseX - wx * scale;
-    panY = mouseY - wy * scale;
-
-    updateTransform();
-  }, { passive: false });
-
-  // Box dragging
-  const draggingInfo = { dragging: false, offsetX: 0, offsetY: 0, currentBox: null };
-
-  // Resize state
-  let resizing = false;
-  let resizeCorner = null;
-  let resizeBox = null;
-  let resizeStartX = 0;
-  let resizeStartY = 0;
-  let resizeStartWidth = 0;
-  let resizeStartHeight = 0;
-  let resizeStartLeft = 0;
-  let resizeStartTop = 0;
-
-  function startResizing(e, box, corner) {
-    resizing = true;
-    resizeCorner = corner;
-    resizeBox = box;
-    resizeStartX = e.clientX;
-    resizeStartY = e.clientY;
-    resizeStartWidth = box.offsetWidth;
-    resizeStartHeight = box.offsetHeight;
-    resizeStartLeft = parseFloat(box.style.left);
-    resizeStartTop = parseFloat(box.style.top);
-
-    window.addEventListener('pointermove', resizePointerMove);
-    window.addEventListener('pointerup', resizePointerUp);
-
-    box.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  }
-  function resizePointerMove(e) {
-    if (!resizing) return;
-    let dx = (e.clientX - resizeStartX) / scale;
-    let dy = (e.clientY - resizeStartY) / scale;
-
-    let newWidth = resizeStartWidth;
-    let newHeight = resizeStartHeight;
-    let newLeft = resizeStartLeft;
-    let newTop = resizeStartTop;
-
-    switch (resizeCorner) {
-      case 'nw':
-        newWidth = resizeStartWidth - dx;
-        newHeight = resizeStartHeight - dy;
-        newLeft = resizeStartLeft + dx;
-        newTop = resizeStartTop + dy;
-        break;
-      case 'ne':
-        newWidth = resizeStartWidth + dx;
-        newHeight = resizeStartHeight - dy;
-        newTop = resizeStartTop + dy;
-        break;
-      case 'sw':
-        newWidth = resizeStartWidth - dx;
-        newHeight = resizeStartHeight + dy;
-        newLeft = resizeStartLeft + dx;
-        break;
-      case 'se':
-        newWidth = resizeStartWidth + dx;
-        newHeight = resizeStartHeight + dy;
-        break;
+      makeDraggable(box);
+      box.addEventListener("input", save);
+      field.appendChild(box);
+      boxes.push(box);
+      save();
     }
-    newWidth = Math.max(newWidth, 80);
-    newHeight = Math.max(newHeight, 40);
 
-    resizeBox.style.width = newWidth + 'px';
-    resizeBox.style.height = newHeight + 'px';
-    resizeBox.style.left = newLeft + 'px';
-    resizeBox.style.top = newTop + 'px';
-
-    updateLinesForBox(idMap.get(resizeBox));
-  }
-  function resizePointerUp(e) {
-    resizing = false;
-    resizeCorner = null;
-    resizeBox = null;
-    window.removeEventListener('pointermove', resizePointerMove);
-    window.removeEventListener('pointerup', resizePointerUp);
-  }
-
-  // Add a new box at x,y with optional text, id, width, height, fontSize
-  function addBox(x, y, text = 'Text box', id = null, width = 180, height = 80) {
-    const box = document.createElement('div');
-    box.className = 'box';
-    box.style.left = x + 'px';
-    box.style.top = y + 'px';
-    box.style.width = width + 'px';
-    box.style.height = height + 'px';
-
-    const content = document.createElement('div');
-    content.contentEditable = true;
-    content.style.minWidth = '80px';
-    content.style.minHeight = '24px';
-    content.style.whiteSpace = 'pre-wrap';
-    content.style.wordBreak = 'break-word';
-    content.style.outline = 'none';
-    content.style.fontFamily = 'monospace, monospace';
-    content.style.userSelect = 'text';
-    content.style.cursor = 'text';
-    content.style.height = '100%';
-    content.style.width = '100%';
-    content.style.boxSizing = 'border-box';
-    content.style.padding = '0';
-    content.style.margin = '0';
-    content.style.overflow = 'visible';
-    content.style.lineHeight = '1.2';
-    content.textContent = text;
-
-    const delBtn = document.createElement('span');
-    delBtn.className = 'delete-btn';
-    delBtn.textContent = '×';
-
-    box.appendChild(content);
-    box.appendChild(delBtn);
-
-    // Add resize handles
-    ['nw', 'ne', 'sw', 'se'].forEach(corner => {
-      const handle = document.createElement('div');
-      handle.className = 'resize-handle ' + corner;
-      box.appendChild(handle);
-      handle.addEventListener('pointerdown', e => {
-        e.stopPropagation();
-        startResizing(e, box, corner);
+    function makeDraggable(el) {
+      let offsetX, offsetY;
+      el.addEventListener("mousedown", e => {
+        if (drawMode) return;
+        if (e.target !== el) return;
+        offsetX = e.offsetX;
+        offsetY = e.offsetY;
+        const onMouseMove = e2 => {
+          el.style.left = e2.pageX - offsetX + "px";
+          el.style.top = e2.pageY - offsetY + "px";
+          updateLines();
+        };
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", () => {
+          document.removeEventListener("mousemove", onMouseMove);
+          save();
+        }, { once: true });
       });
-    });
 
-    // Dragging
-    box.addEventListener('pointerdown', e => {
-      if (e.target === delBtn) return;
-      if (drawLineMode) {
-        e.stopPropagation();
-        handleBoxSelection(box);
-        return;
-      }
-      draggingInfo.dragging = true;
-      draggingInfo.offsetX = e.clientX - box.getBoundingClientRect().left;
-      draggingInfo.offsetY = e.clientY - box.getBoundingClientRect().top;
-      draggingInfo.currentBox = box;
-      box.setPointerCapture(e.pointerId);
-      box.style.cursor = 'grabbing';
-    });
-    box.addEventListener('pointermove', e => {
-      if (!draggingInfo.dragging || draggingInfo.currentBox !== box) return;
-      const newX = (e.clientX - draggingInfo.offsetX - panX) / scale;
-      const newY = (e.clientY - draggingInfo.offsetY - panY) / scale;
-      box.style.left = newX + 'px';
-      box.style.top = newY + 'px';
-      updateLinesForBox(idMap.get(box));
-    });
-    box.addEventListener('pointerup', e => {
-      if (draggingInfo.currentBox === box) {
-        draggingInfo.dragging = false;
-        draggingInfo.currentBox.style.cursor = 'text';
-        draggingInfo.currentBox.releasePointerCapture(e.pointerId);
-        draggingInfo.currentBox = null;
-      }
-    });
-
-    delBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      undoStack.push({
-        x: parseFloat(box.style.left),
-        y: parseFloat(box.style.top),
-        text: content.textContent,
-        width: box.offsetWidth,
-        height: box.offsetHeight,
-        id: idMap.get(box)
+      el.addEventListener("mouseup", () => {
+        el.dataset.fontSize = parseInt(window.getComputedStyle(el).fontSize);
       });
-      undoBtn.disabled = false;
-      // Remove lines connected to this box
-      removeLinesForBox(idMap.get(box));
-      // Remove box
-      idMap.delete(box);
-      box.remove();
+
+      const observer = new ResizeObserver(() => {
+        const boxFontSize = parseInt(el.dataset.fontSize || 16);
+        const newSize = Math.min(el.offsetWidth / 10, el.offsetHeight / 2);
+        el.style.fontSize = Math.max(10, Math.min(boxFontSize, newSize)) + "px";
+        updateLines();
+        save();
+      });
+      observer.observe(el);
+    }
+
+    field.addEventListener("dblclick", e => {
+      if (!drawMode) createBox(e.offsetX, e.offsetY);
     });
 
-    content.addEventListener('input', () => {
-      updateLinesForBox(idMap.get(box));
-    });
+    function updateLines() {
+      svg.innerHTML = "";
+      lines.forEach(line => {
+        const [a, b, label] = line;
+        const ax = a.offsetLeft + a.offsetWidth / 2;
+        const ay = a.offsetTop + a.offsetHeight / 2;
+        const bx = b.offsetLeft + b.offsetWidth / 2;
+        const by = b.offsetTop + b.offsetHeight / 2;
 
-    // Assign id and store mapping
-    if (!id) id = boxCounter++;
-    idMap.set(box, id);
-    canvas.appendChild(box);
-    return box;
-  }
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", `M${ax},${ay} Q${(ax + bx) / 2},${(ay + by) / 2 - 100} ${bx},${by}`);
+        path.classList.add("line");
+        path.addEventListener("click", () => {
+          selectedLine = line;
+        });
 
-  // Helper: get center of a box
-  function getBoxCenter(box) {
-    return {
-      x: parseFloat(box.style.left) + box.offsetWidth / 2,
-      y: parseFloat(box.style.top) + box.offsetHeight / 2
-    };
-  }
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.classList.add("label");
+        text.setAttribute("x", (ax + bx) / 2);
+        text.setAttribute("y", (ay + by) / 2 - 20);
+        text.textContent = label;
 
-  // Draw a thick bar line strictly horizontal, vertical or 45° diagonal between two boxes
-  // with editable text in the middle
-  // lineId must be unique string or number
-  function drawLine(startBoxId, endBoxId, labelText, lineId) {
-    if (linesMap.has(lineId)) return; // line already exists
-    const startBox = [...idMap.entries()].find(([el, id]) => id === startBoxId)?.[0];
-    const endBox = [...idMap.entries()].find(([el, id]) => id === endBoxId)?.[0];
-    if (!startBox || !endBox) return null;
+        svg.appendChild(path);
+        svg.appendChild(text);
+      });
+    }
 
-    const start = getBoxCenter(startBox);
-    const end = getBoxCenter(endBox);
-
-    // Calculate delta
-    let dx = end.x - start.x;
-    let dy = end.y - start.y;
-
-    // Snap line to horizontal, vertical or diagonal (45°)
-    if (Math.abs(dx) > Math.abs(dy)) {
-      if (Math.abs(dy) / Math.abs(dx) < 0.5) {
-        dy = 0; // horizontal
-      } else {
-        // diagonal with slope = ±1
-        dy = dx > 0 ? Math.abs(dx) * Math.sign(dy) : -Math.abs(dx) * Math.sign(dy);
-        dx = Math.sign(dx) * Math.abs(dy);
-      }
-    } else {
-      if (Math.abs(dx) / Math.abs(dy) < 0.5) {
-        dx = 0; // vertical
-      } else {
-        // diagonal slope ±1
-        dx = dy > 0 ? Math.abs(dy) * Math.sign(dx) : -Math.abs(dy) * Math.sign(dx);
-        dy = Math.sign(dy) * Math.abs(dx);
+    function toggleDrawMode() {
+      drawMode = !drawMode;
+      if (drawMode) {
+        let first = null;
+        boxes.forEach(box => {
+          box.addEventListener("click", e => {
+            e.stopPropagation();
+            if (!first) {
+              first = box;
+            } else {
+              const label = prompt("Connection Label:");
+              if (label) {
+                lines.push([first, box, label]);
+                undoStack.push(["line", [first, box, label]]);
+                updateLines();
+                save();
+              }
+              first = null;
+            }
+          });
+        });
       }
     }
 
-    // Line length
-    const length = Math.sqrt(dx * dx + dy * dy);
-    if (length < 30) return null; // too short, ignore
-
-    // Create SVG group for line
-    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    g.classList.add("line-group");
-    g.dataset.lineId = lineId;
-
-    // Black thick bar rect - 16px thick
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.classList.add("line-bar");
-    rect.setAttribute("width", length);
-    rect.setAttribute("height", 16);
-    rect.setAttribute("rx", 8);
-    rect.setAttribute("ry", 8);
-    rect.setAttribute("y", -8);
-
-    // Text label
-    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.classList.add("line-label");
-    text.setAttribute("x", length / 2);
-    text.setAttribute("y", 0);
-    text.textContent = labelText || "";
-
-    g.appendChild(rect);
-    g.appendChild(text);
-
-    // Position group at start point
-    g.setAttribute("transform", `translate(${start.x},${start.y}) rotate(${Math.atan2(dy, dx) * 180 / Math.PI})`);
-
-    // Add to svg layer
-    lineLayer.appendChild(g);
-
-    // Line click select logic
-    g.addEventListener('click', e => {
-      e.stopPropagation();
-      selectLine(lineId);
-    });
-
-    // Make text editable on double click
-    text.addEventListener('dblclick', e => {
-      e.stopPropagation();
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.value = text.textContent;
-      input.style.position = 'absolute';
-      input.style.left = (start.x + dx / 2) * scale + panX + 'px';
-      input.style.top = (start.y + dy / 2) * scale + panY + 'px';
-      input.style.transform = `translate(-50%, -50%) scale(${1 / scale})`;
-      input.style.fontFamily = 'monospace, monospace';
-      input.style.fontSize = '12px';
-      input.style.zIndex = 2000;
-      input.style.width = '150px';
-      input.style.border = '1px solid #333';
-      input.style.background = 'white';
-      document.body.appendChild(input);
-      input.focus();
-
-      function commit() {
-        text.textContent = input.value;
-        linesMap.get(lineId).labelText = input.value;
-        document.body.removeChild(input);
-      }
-      input.addEventListener('blur', commit);
-      input.addEventListener('keydown', evt => {
-        if (evt.key === 'Enter' || evt.key === 'Escape') {
-          input.blur();
+    function deleteSelected() {
+      if (selectedLine) {
+        const idx = lines.indexOf(selectedLine);
+        if (idx > -1) {
+          lines.splice(idx, 1);
+          undoStack.push(["deleteLine", selectedLine]);
+          updateLines();
+          save();
+          selectedLine = null;
         }
-      });
-    });
-
-    linesMap.set(lineId, { startBoxId, endBoxId, labelText: labelText || '', svgGroup: g });
-    return g;
-  }
-
-  // Update positions of all lines connected to a boxId
-  function updateLinesForBox(boxId) {
-    for (const [lineId, line] of linesMap.entries()) {
-      if (line.startBoxId === boxId || line.endBoxId === boxId) {
-        updateLinePosition(lineId);
-      }
-    }
-  }
-  // Update one line's position and rotation
-  function updateLinePosition(lineId) {
-    const line = linesMap.get(lineId);
-    if (!line) return;
-    const startBox = [...idMap.entries()].find(([el, id]) => id === line.startBoxId)?.[0];
-    const endBox = [...idMap.entries()].find(([el, id]) => id === line.endBoxId)?.[0];
-    if (!startBox || !endBox) {
-      // Remove line if box missing
-      deleteLine(lineId);
-      return;
-    }
-    const start = getBoxCenter(startBox);
-    const end = getBoxCenter(endBox);
-
-    let dx = end.x - start.x;
-    let dy = end.y - start.y;
-
-    // Snap line to horizontal, vertical or diagonal (45°)
-    if (Math.abs(dx) > Math.abs(dy)) {
-      if (Math.abs(dy) / Math.abs(dx) < 0.5) {
-        dy = 0; // horizontal
-      } else {
-        dy = dx > 0 ? Math.abs(dx) * Math.sign(dy) : -Math.abs(dx) * Math.sign(dy);
-        dx = Math.sign(dx) * Math.abs(dy);
-      }
-    } else {
-      if (Math.abs(dx) / Math.abs(dy) < 0.5) {
-        dx = 0; // vertical
-      } else {
-        dx = dy > 0 ? Math.abs(dy) * Math.sign(dx) : -Math.abs(dy) * Math.sign(dx);
-        dy = Math.sign(dy) * Math.abs(dx);
       }
     }
 
-    const length = Math.sqrt(dx * dx + dy * dy);
-    if (length < 30) {
-      // remove too short line
-      deleteLine(lineId);
-      return;
+    function undo() {
+      const last = undoStack.pop();
+      if (!last) return;
+      const [type, data] = last;
+      if (type === "box") {
+        field.removeChild(data);
+        boxes = boxes.filter(b => b !== data);
+      } else if (type === "line") {
+        lines = lines.filter(l => l !== data);
+        updateLines();
+      } else if (type === "deleteLine") {
+        lines.push(data);
+        updateLines();
+      }
+      save();
     }
 
-    const g = line.svgGroup;
-    const rect = g.querySelector('rect.line-bar');
-    const text = g.querySelector('text.line-label');
-
-    rect.setAttribute('width', length);
-    text.setAttribute('x', length / 2);
-    text.textContent = line.labelText;
-
-    g.setAttribute("transform", `translate(${start.x},${start.y}) rotate(${Math.atan2(dy, dx) * 180 / Math.PI})`);
-  }
-
-  // Remove all lines connected to a box id
-  function removeLinesForBox(boxId) {
-    const toRemove = [];
-    for (const [lineId, line] of linesMap.entries()) {
-      if (line.startBoxId === boxId || line.endBoxId === boxId) toRemove.push(lineId);
+    function markCenter() {
+      center.x = window.scrollX + window.innerWidth / 2;
+      center.y = window.scrollY + window.innerHeight / 2;
     }
-    for (const lineId of toRemove) {
-      deleteLine(lineId);
+
+    function goToCenter() {
+      window.scrollTo(center.x - window.innerWidth / 2, center.y - window.innerHeight / 2);
     }
-  }
 
-  // Delete line by id
-  function deleteLine(lineId) {
-    const line = linesMap.get(lineId);
-    if (!line) return;
-    // Remove from DOM
-    line.svgGroup.remove();
-    linesMap.delete(lineId);
-    if (selectedLineId === lineId) {
-      selectedLineId = null;
-      deleteLineBtn.disabled = true;
+    function save() {
+      const data = {
+        boxes: boxes.map(b => ({
+          x: b.offsetLeft,
+          y: b.offsetTop,
+          text: b.innerText,
+          width: b.offsetWidth,
+          height: b.offsetHeight,
+          fontSize: parseInt(window.getComputedStyle(b).fontSize)
+        })),
+        lines: lines.map(l => [boxes.indexOf(l[0]), boxes.indexOf(l[1]), l[2]])
+      };
+      localStorage.setItem("stringsnthings", JSON.stringify(data));
     }
-    undoLineStack.push(line);
-    undoLineBtn.disabled = false;
-  }
 
-  // Select a line (highlight)
-  function selectLine(lineId) {
-    if (selectedLineId === lineId) return; // already selected
-    // Deselect old
-    if (selectedLineId && linesMap.has(selectedLineId)) {
-      linesMap.get(selectedLineId).svgGroup.classList.remove('selected');
+    function load() {
+      const data = JSON.parse(localStorage.getItem("stringsnthings") || "{}");
+      if (data.boxes) {
+        data.boxes.forEach(b => createBox(b.x, b.y, b.text, b.width, b.height, b.fontSize));
+      }
+      if (data.lines) {
+        data.lines.forEach(([i, j, label]) => {
+          if (boxes[i] && boxes[j]) lines.push([boxes[i], boxes[j], label]);
+        });
+        updateLines();
+      }
     }
-    selectedLineId = lineId;
-    if (selectedLineId && linesMap.has(selectedLineId)) {
-      linesMap.get(selectedLineId).svgGroup.classList.add('selected');
-      deleteLineBtn.disabled = false;
-    } else {
-      deleteLineBtn.disabled = true;
-    }
-  }
 
-  // Deselect all lines
-  function deselectAllLines() {
-    if (selectedLineId && linesMap.has(selectedLineId)) {
-      linesMap.get(selectedLineId).svgGroup.classList.remove('selected');
-    }
-    selectedLineId = null;
-    deleteLineBtn.disabled = true;
-  }
-
-  // Handle box selection for line drawing
-  function handleBoxSelection(box) {
-    if (!drawLineMode) return;
-    const boxId = idMap.get(box);
-    if (!boxId) return;
-
-    if (selectedBoxesForLine.includes(boxId)) {
-      // deselect it
-      selectedBoxesForLine = selectedBoxesForLine.filter(id => id !== boxId);
-      box.style.borderColor = 'black';
-      return;
-    }
-    if (selectedBoxesForLine.length === 0) {
-      selectedBoxesForLine.push(boxId);
-      box.style.borderColor = 'blue';
-    } else if (selectedBoxesForLine.length === 1 && selectedBoxesForLine[0] !== boxId) {
-      selectedBoxesForLine.push(boxId);
-      // Draw line between these two
-      const lineId = lineCounter++;
-      drawLine(selectedBoxesForLine[0], selectedBoxesForLine[1], '', lineId);
-      // Reset selection border
-      [...idMap.entries()].forEach(([el]) => el.style.borderColor = 'black');
-      selectedBoxesForLine = [];
-    } else {
-      // Reset selection
-      [...idMap.entries()].forEach(([el]) => el.style.borderColor = 'black');
-      selectedBoxesForLine = [];
-    }
-  }
-
-  // Undo box delete
-  undoBtn.addEventListener('click', () => {
-    if (undoStack.length === 0) return;
-    const data = undoStack.pop();
-    addBox(data.x, data.y, data.text, data.id, data.width, data.height);
-    if (undoStack.length === 0) undoBtn.disabled = true;
-  });
-
-  // Undo line delete
-  undoLineBtn.addEventListener('click', () => {
-    if (undoLineStack.length === 0) return;
-    const line = undoLineStack.pop();
-    if (line) {
-      drawLine(line.startBoxId, line.endBoxId, line.labelText, line.svgGroup.dataset.lineId);
-    }
-    if (undoLineStack.length === 0) undoLineBtn.disabled = true;
-  });
-
-  // Go to saved center
-  goCenterBtn.addEventListener('click', () => {
-    panX = customCenter.panX;
-    panY = customCenter.panY;
-    scale = customCenter.scale;
-    updateTransform();
-  });
-
-  // Mark center button
-  markCenterBtn.addEventListener('click', () => {
-    customCenter.panX = panX;
-    customCenter.panY = panY;
-    customCenter.scale = scale;
-    markCenterBtn.textContent = 'Center Marked!';
-    setTimeout(() => {
-      markCenterBtn.textContent = 'Mark Center';
-    }, 1200);
-  });
-
-  // Toggle line draw mode
-  drawLineToggle.addEventListener('click', () => {
-    drawLineMode = !drawLineMode;
-    drawLineToggle.textContent = drawLineMode ? 'Draw Line ON' : 'Draw Line OFF';
-    // Clear any selected box for line drawing
-    selectedBoxesForLine = [];
-    [...idMap.entries()].forEach(([el]) => el.style.borderColor = 'black');
-  });
-
-  // Delete selected line button
-  deleteLineBtn.addEventListener('click', () => {
-    if (selectedLineId) {
-      deleteLine(selectedLineId);
-    }
-  });
-
-  // Click outside to deselect lines and cancel line drawing selection
-  viewport.addEventListener('click', e => {
-    if (!drawLineMode) {
-      deselectAllLines();
-    } else {
-      // In line draw mode clicking outside cancels box selection
-      selectedBoxesForLine = [];
-      [...idMap.entries()].forEach(([el]) => el.style.borderColor = 'black');
-    }
-  });
-
-  // Add initial boxes for demo
-  addBox(100, 100, 'Box 1');
-  addBox(400, 150, 'Box 2');
-  addBox(250, 300, 'Box 3');
-
-  // Initial update transform
-  updateTransform();
-</script>
+    load();
+    goToCenter();
+  </script>
 </body>
 </html>
