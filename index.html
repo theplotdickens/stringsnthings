@@ -17,12 +17,13 @@
     #canvas {
       position: absolute; top: 0; left: 0; transform-origin: 0 0;
       user-select: none;
+      z-index: 10;
     }
     #connectionLayer {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       pointer-events: none;
       overflow: visible;
-      z-index: 0;
+      z-index: 5; /* behind boxes */
     }
     svg {
       width: 100%; height: 100%;
@@ -33,6 +34,7 @@
       stroke: black;
       stroke-width: 2;
       cursor: pointer;
+      pointer-events: auto;
     }
     line.connection-line.highlighted {
       stroke: red;
@@ -226,23 +228,16 @@
     // Box Creation and Management
 
     function adjustFontSizeToFit(contentDiv, box) {
-      const padding = 8; // padding in px inside box
+      const padding = 8;
       const maxFontSize = 100;
       const minFontSize = 8;
-
-      // Reset font size to max to start measurement
       contentDiv.style.fontSize = maxFontSize + 'px';
-
       const boxWidth = box.clientWidth - padding * 2;
       const boxHeight = box.clientHeight - padding * 2;
-
       let fontSize = maxFontSize;
-
       while (fontSize >= minFontSize) {
         contentDiv.style.fontSize = fontSize + 'px';
-        if (contentDiv.scrollWidth <= boxWidth && contentDiv.scrollHeight <= boxHeight) {
-          break;
-        }
+        if (contentDiv.scrollWidth <= boxWidth && contentDiv.scrollHeight <= boxHeight) break;
         fontSize -= 1;
       }
       if (fontSize < minFontSize) fontSize = minFontSize;
@@ -251,7 +246,7 @@
 
     function addBox(data) {
       const id = data.id || generateId();
-      if (boxes.has(id)) return; // prevent duplicates
+      if (boxes.has(id)) return;
 
       const box = document.createElement('div');
       box.className = 'box';
@@ -266,7 +261,6 @@
       content.style.fontSize = data.fontSize || '16px';
       content.spellcheck = false;
 
-      // Adjust font size to fit initially
       adjustFontSizeToFit(content, box);
 
       const delBtn = document.createElement('span');
@@ -285,12 +279,10 @@
 
       boxes.set(id, { element: box, data: { ...data, id } });
 
-      // Dragging variables
       let dragging = false;
       let offsetX = 0;
       let offsetY = 0;
 
-      // Resize handles
       const handles = {};
       ['nw', 'ne', 'sw', 'se'].forEach(pos => {
         const h = document.createElement('div');
@@ -303,7 +295,6 @@
       let resizeDir = null;
       let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
 
-      // Drag box
       box.addEventListener('pointerdown', e => {
         if (e.target === delBtn || e.target === connectToggle || e.target.classList.contains('resize-handle')) return;
         dragging = true;
@@ -329,7 +320,6 @@
         box.releasePointerCapture(e.pointerId);
       });
 
-      // Resize box
       for (const pos in handles) {
         const handle = handles[pos];
         handle.addEventListener('pointerdown', e => {
@@ -390,7 +380,6 @@
         });
       }
 
-      // Delete box
       delBtn.addEventListener('click', e => {
         e.stopPropagation();
         undoStack.push({ type: 'deleteBox', data: boxes.get(id).data });
@@ -398,23 +387,18 @@
         removeBox(id);
       });
 
-      // Text input adjustments
       content.addEventListener('input', () => {
         adjustFontSizeToFit(content, box);
         updateBoxData(id);
       });
 
-      // Connect toggle
       connectToggle.addEventListener('click', e => {
         e.stopPropagation();
         if (activeConnectBoxId === id) {
-          // Deselect current
           activeConnectBoxId = null;
           connectToggle.classList.remove('active');
         } else if (activeConnectBoxId) {
-          // Connect from activeConnectBoxId to this id
           addConnection(activeConnectBoxId, id);
-          // Remove active state from old toggle
           const oldBox = boxes.get(activeConnectBoxId);
           if (oldBox) {
             const oldToggle = oldBox.element.querySelector('button.connect-toggle');
@@ -423,7 +407,6 @@
           activeConnectBoxId = null;
           connectToggle.classList.remove('active');
         } else {
-          // Set this box active
           activeConnectBoxId = id;
           connectToggle.classList.add('active');
         }
@@ -445,13 +428,11 @@
       const fontSize = content.style.fontSize;
       box.data = { id, x, y, width, height, text, fontSize };
       db.collection('boxes').doc(id).set(box.data);
-      redrawConnections();
     }
 
     function removeBox(id) {
       const box = boxes.get(id);
       if (!box) return;
-      // Remove connections involving this box
       const toDelete = [];
       connections.forEach((conn, connId) => {
         if (conn.from === id || conn.to === id) toDelete.push(connId);
@@ -467,7 +448,6 @@
 
     function addConnection(fromId, toId) {
       if (fromId === toId) return;
-      // Check if connection already exists
       for (const conn of connections.values()) {
         if ((conn.from === fromId && conn.to === toId) || (conn.from === toId && conn.to === fromId)) return;
       }
@@ -506,13 +486,13 @@
         line.classList.add('connection-line');
         line.dataset.id = conn.id;
 
-        // Calculate box centers in canvas coordinates (unscaled)
+        // Get centers in world coords
         const fromCenterX = fromBox.data.x + fromBox.data.width / 2;
         const fromCenterY = fromBox.data.y + fromBox.data.height / 2;
         const toCenterX = toBox.data.x + toBox.data.width / 2;
         const toCenterY = toBox.data.y + toBox.data.height / 2;
 
-        // Convert to screen (SVG) coordinates: apply pan and scale
+        // Convert to screen coords for line points (apply pan and scale)
         const sx1 = fromCenterX * scale + panX;
         const sy1 = fromCenterY * scale + panY;
         const sx2 = toCenterX * scale + panX;
@@ -527,12 +507,10 @@
           line.classList.add('highlighted');
         }
 
-        // Make lines clickable to select
         line.style.pointerEvents = 'auto';
         line.addEventListener('click', e => {
           e.stopPropagation();
           if (selectedConnectionId && selectedConnectionId !== conn.id) {
-            // Deselect old
             const oldLine = connectionLayer.querySelector(`line[data-id="${selectedConnectionId}"]`);
             if (oldLine) oldLine.classList.remove('highlighted');
           }
@@ -602,15 +580,11 @@
 
     function updateTransform() {
       canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-      connectionLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      // IMPORTANT: do NOT transform connectionLayer itself
+      // Instead redrawConnections uses current pan/scale to position lines properly
       zoomDisplay.textContent = `Zoom: ${Math.round(scale * 100)}%`;
       redrawConnections();
     }
-
-    // Prevent lines scaling incorrectly by applying transform to container (done)
-    // But for the lines inside SVG, the SVG element is also transformed
-    // So instead of transforming SVG, we transform it with same pan/scale as canvas.
-    // But lines coordinates are calculated in screen space, so they appear stable.
 
     // Mouse wheel zoom centered on cursor
     viewport.addEventListener('wheel', e => {
@@ -622,7 +596,6 @@
       const newScale = Math.min(3, Math.max(0.5, scale + zoomAmount));
       if (newScale === scale) return;
 
-      // Adjust pan so zoom focuses on mouse pointer
       panX -= (mouseX - panX) * (newScale / scale - 1);
       panY -= (mouseY - panY) * (newScale / scale - 1);
       scale = newScale;
@@ -700,7 +673,7 @@
       updateTransform();
     }
 
-    // Deselect connection when clicking outside
+    // Deselect connection and connect toggles when clicking outside
     window.addEventListener('click', () => {
       if (selectedConnectionId) {
         const oldLine = connectionLayer.querySelector(`line[data-id="${selectedConnectionId}"]`);
@@ -708,7 +681,6 @@
         selectedConnectionId = null;
         deleteConnectionBtn.disabled = true;
       }
-      // Also deselect active connect toggle
       if (activeConnectBoxId) {
         const oldBox = boxes.get(activeConnectBoxId);
         if (oldBox) {
