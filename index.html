@@ -32,38 +32,43 @@
       cursor: text;
       transition: width 0.3s ease, height 0.3s ease;
     }
+    .box.selected {
+      border-color: #007bff;
+      box-shadow: 0 0 6px 2px rgba(0,123,255,0.6);
+    }
     .box-header {
       background: #ddd;
       padding: 0 4px;
-      height: 18px;
+      height: 16px; /* Slimmer header */
       display: flex;
       justify-content: flex-end;
       align-items: center;
-      gap: 2px;
+      gap: 4px;
       user-select: none;
       cursor: default;
       border-bottom: 1px solid #bbb;
+      font-size: 10px;
     }
     .delete-btn {
       color: red;
       font-weight: bold;
       cursor: pointer;
-      font-size: 9px;
+      font-size: 12px;
       line-height: 1;
       user-select: none;
       padding: 0;
       margin: 0;
       border: none;
       background: transparent;
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
     .connect-toggle {
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       border: none;
       background-color: blue;
@@ -78,7 +83,7 @@
     }
     .box-content {
       flex: 1;
-      padding: 6px 10px;
+      padding: 6px 8px;
       white-space: pre-wrap;
       font-family: monospace, monospace;
       overflow: auto;
@@ -113,18 +118,18 @@
       display: flex;
       gap: 12px;
       z-index: 1000;
+      user-select: none;
     }
     .floatingBtn {
       background: rgba(100, 100, 100, 0.5);
       color: #eee;
       font-family: monospace, monospace;
-      font-size: 16px;
+      font-size: 14px;
       padding: 6px 12px;
       border: 1px solid #555;
       border-radius: 4px;
       cursor: pointer;
-      user-select: none;
-      min-width: 100px;
+      min-width: 120px;
       text-align: center;
       box-shadow: 0 0 6px rgba(0,0,0,0.3);
       touch-action: manipulation;
@@ -151,7 +156,7 @@
       top: 0; left: 0;
       width: 100%;
       height: 100%;
-      pointer-events: auto; /* Needed for clicking connections */
+      pointer-events: auto;
       z-index: 5;
     }
   </style>
@@ -166,6 +171,8 @@
     <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
     <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
+    <button id="selectToggleBtn" class="floatingBtn">Select Boxes</button>
+    <button id="deleteSelectedBtn" class="floatingBtn" disabled>Delete Selected</button>
   </div>
 
   <div id="zoomDisplay">Zoom: 100%</div>
@@ -191,6 +198,8 @@
     const undoBtn = document.getElementById('undoBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
     const markCenterBtn = document.getElementById('markCenterBtn');
+    const selectToggleBtn = document.getElementById('selectToggleBtn');
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
     const zoomDisplay = document.getElementById('zoomDisplay');
     const connectionLayer = document.getElementById('connectionLayer');
 
@@ -202,13 +211,16 @@
     let selectedBoxForConnection = null;
     const connections = [];
 
+    let multiSelectMode = false;
+    const selectedBoxes = new Set();
+
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
     }
 
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
+      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn || e.target === selectToggleBtn || e.target === deleteSelectedBtn) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -274,7 +286,8 @@
 
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
-      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
+      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn || e.target === selectToggleBtn || e.target === deleteSelectedBtn) return;
+      if (multiSelectMode) return; // don't create box in select mode
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -293,11 +306,61 @@
       updateTransform();
     });
 
+    selectToggleBtn.addEventListener('click', () => {
+      multiSelectMode = !multiSelectMode;
+      selectToggleBtn.style.background = multiSelectMode ? 'rgba(0, 123, 255, 0.7)' : 'rgba(100, 100, 100, 0.5)';
+      if (!multiSelectMode) {
+        clearSelection();
+      }
+    });
+
+    deleteSelectedBtn.addEventListener('click', () => {
+      if (selectedBoxes.size === 0) return;
+      const boxesToDelete = [...selectedBoxes].map(id => document.querySelector(`.box[data-id="${id}"]`)).filter(Boolean);
+      boxesToDelete.forEach(box => {
+        undoStack.push({
+          boxData: {
+            id: box.dataset.id,
+            x: parseFloat(box.style.left),
+            y: parseFloat(box.style.top),
+            text: box.querySelector('.box-content').textContent,
+            width: box.offsetWidth,
+            height: box.offsetHeight,
+            fontSize: box.querySelector('.box-content').style.fontSize
+          },
+          connections: connections.filter(c => c.fromId === box.dataset.id || c.toId === box.dataset.id)
+        });
+      });
+      undoBtn.disabled = false;
+
+      boxesToDelete.forEach(box => {
+        for (let i = connections.length -1; i >= 0; i--) {
+          if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
+            connections.splice(i, 1);
+          }
+        }
+        if (box.dataset.id) {
+          boxesCollection.doc(box.dataset.id).delete();
+        }
+        box.remove();
+      });
+      saveConnections().then(() => {
+        drawConnections();
+        clearSelection();
+      });
+    });
+
+    function clearSelection() {
+      selectedBoxes.clear();
+      deleteSelectedBtn.disabled = true;
+      document.querySelectorAll('.box.selected').forEach(b => b.classList.remove('selected'));
+    }
+
     const boxesCollection = db.collection('boxes');
     const connectionsCollection = db.collection('connections');
 
     function adjustFontSizeToFit(contentDiv, box) {
-      const paddingHorizontal = 20;
+      const paddingHorizontal = 16;
       const paddingVertical = 12;
       const maxFontSize = 100;
       const minFontSize = 8;
@@ -404,88 +467,85 @@
 
       const connectToggle = document.createElement('button');
       connectToggle.className = 'connect-toggle';
-      connectToggle.title = 'Connect';
+      connectToggle.title = 'Toggle connection mode';
 
       const delBtn = document.createElement('button');
       delBtn.className = 'delete-btn';
+      delBtn.title = 'Delete box';
       delBtn.textContent = '×';
 
       header.appendChild(connectToggle);
       header.appendChild(delBtn);
 
       const content = document.createElement('div');
-      content.contentEditable = true;
       content.className = 'box-content';
+      content.contentEditable = true;
       content.textContent = text;
-      content.style.fontSize = fontSize || '16px';
+      content.style.fontSize = fontSize;
 
       box.appendChild(header);
       box.appendChild(content);
 
-      const handles = {};
-      ['nw', 'ne', 'sw', 'se'].forEach(pos => {
-        const h = document.createElement('div');
-        h.className = 'resize-handle ' + pos;
-        box.appendChild(h);
-        handles[pos] = h;
+      // Select multi boxes if in select mode
+      box.addEventListener('click', e => {
+        e.stopPropagation();
+        if (multiSelectMode) {
+          if (selectedBoxes.has(box.dataset.id)) {
+            selectedBoxes.delete(box.dataset.id);
+            box.classList.remove('selected');
+          } else {
+            selectedBoxes.add(box.dataset.id);
+            box.classList.add('selected');
+          }
+          deleteSelectedBtn.disabled = selectedBoxes.size === 0;
+          return;
+        }
       });
 
-      let dragging = false;
-      let resizing = false;
-      let offsetX = 0;
-      let offsetY = 0;
-      let moved = false;
-      let resizeDir = null;
-      let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
+      // Dragging box
+      let isDragging = false, dragStartX, dragStartY, boxStartLeft, boxStartTop;
 
       box.addEventListener('pointerdown', e => {
-        if (e.target === delBtn || e.target === connectToggle || e.target.classList.contains('resize-handle')) return;
-        moved = false;
-        offsetX = e.clientX - box.getBoundingClientRect().left;
-        offsetY = e.clientY - box.getBoundingClientRect().top;
+        if (e.target.closest('.resize-handle') || e.target === delBtn || e.target === connectToggle || multiSelectMode) return;
+        isDragging = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        boxStartLeft = parseFloat(box.style.left);
+        boxStartTop = parseFloat(box.style.top);
         box.setPointerCapture(e.pointerId);
       });
 
       box.addEventListener('pointermove', e => {
-        if (!box.hasPointerCapture(e.pointerId) || resizing) return;
-        const dx = e.clientX - offsetX - box.getBoundingClientRect().left;
-        const dy = e.clientY - offsetY - box.getBoundingClientRect().top;
-        if (!dragging && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
-          dragging = true;
-          content.blur();
-          box.style.cursor = 'grabbing';
-          box.style.userSelect = 'none';
-        }
-        if (dragging) {
-          const newX = (e.clientX - offsetX - panX) / scale;
-          const newY = (e.clientY - offsetY - panY) / scale;
-          box.style.left = `${newX}px`;
-          box.style.top = `${newY}px`;
-          saveBox();
-          moved = true;
-          drawConnections();
-        }
+        if (!isDragging) return;
+        e.preventDefault();
+        const dx = (e.clientX - dragStartX) / scale;
+        const dy = (e.clientY - dragStartY) / scale;
+        box.style.left = boxStartLeft + dx + 'px';
+        box.style.top = boxStartTop + dy + 'px';
+        drawConnections();
       });
 
       box.addEventListener('pointerup', e => {
-        if (!box.hasPointerCapture(e.pointerId)) return;
+        if (!isDragging) return;
+        isDragging = false;
         box.releasePointerCapture(e.pointerId);
-        if (dragging) {
-          dragging = false;
-          box.style.cursor = 'text';
-          box.style.userSelect = 'text';
-          content.focus();
-        } else if (!moved) {
-          content.focus();
-        }
+        saveBox();
       });
 
-      for (const pos in handles) {
-        const handle = handles[pos];
+      // Resize handles
+      const resizeDirs = ['nw', 'ne', 'sw', 'se'];
+      resizeDirs.forEach(dir => {
+        const handle = document.createElement('div');
+        handle.className = `resize-handle ${dir}`;
+        box.appendChild(handle);
+
+        let resizing = false;
+        let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
+
         handle.addEventListener('pointerdown', e => {
           e.stopPropagation();
           resizing = true;
-          resizeDir = pos;
+          resizeDir = dir;
           startWidth = box.offsetWidth;
           startHeight = box.offsetHeight;
           startXpos = box.offsetLeft;
@@ -494,6 +554,7 @@
           startClientY = e.clientY;
           box.setPointerCapture(e.pointerId);
         });
+
         handle.addEventListener('pointermove', e => {
           if (!resizing || !box.hasPointerCapture(e.pointerId)) return;
           e.preventDefault();
@@ -526,16 +587,16 @@
           box.style.top = newTop + 'px';
 
           adjustFontSizeToFit(content, box);
-
           saveBox();
           drawConnections();
         });
+
         handle.addEventListener('pointerup', e => {
           if (!box.hasPointerCapture(e.pointerId)) return;
           resizing = false;
           box.releasePointerCapture(e.pointerId);
         });
-      }
+      });
 
       connectToggle.addEventListener('click', e => {
         e.stopPropagation();
@@ -565,17 +626,18 @@
         });
         undoBtn.disabled = false;
 
-        // Remove related connections
         for (let i = connections.length -1; i >= 0; i--) {
           if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
             connections.splice(i, 1);
           }
         }
         saveConnections().then(() => drawConnections());
+
         if (box.dataset.id) {
           boxesCollection.doc(box.dataset.id).delete();
         }
         box.remove();
+        clearSelection();
       });
 
       content.addEventListener('input', e => {
@@ -585,7 +647,6 @@
 
       function saveBox() {
         if (!box.dataset.id) {
-          // New box - create
           boxesCollection.add({
             x: parseFloat(box.style.left),
             y: parseFloat(box.style.top),
