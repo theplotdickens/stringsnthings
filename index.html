@@ -96,6 +96,34 @@
       box.style.fontSize = fontSize + "px";
       box.innerText = text;
 
+      // Add invisible resizers on all 4 corners
+      ["nwse-resize", "nesw-resize", "nesw-resize", "nwse-resize"].forEach((cursor, i) => {
+        const handle = document.createElement("div");
+        handle.style.position = "absolute";
+        handle.style.width = "12px";
+        handle.style.height = "12px";
+        handle.style.background = "transparent";
+        handle.style.zIndex = "10";
+        handle.style.cursor = cursor;
+
+        switch (i) {
+          case 0:
+            handle.style.left = "-6px"; handle.style.top = "-6px";
+            break;
+          case 1:
+            handle.style.right = "-6px"; handle.style.top = "-6px";
+            break;
+          case 2:
+            handle.style.left = "-6px"; handle.style.bottom = "-6px";
+            break;
+          case 3:
+            handle.style.right = "-6px"; handle.style.bottom = "-6px";
+            break;
+        }
+
+        box.appendChild(handle);
+      });
+
       makeDraggable(box);
       box.addEventListener("input", save);
       field.appendChild(box);
@@ -172,8 +200,9 @@
       if (drawMode) {
         let first = null;
         boxes.forEach(box => {
-          box.addEventListener("click", e => {
+          box.onclick = e => {
             e.stopPropagation();
+            if (!drawMode) return;
             if (!first) {
               first = box;
             } else {
@@ -186,7 +215,7 @@
               }
               first = null;
             }
-          });
+          };
         });
       }
     }
