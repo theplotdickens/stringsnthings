@@ -491,45 +491,30 @@
       const toBox = boxes.get(conn.to);
       if (!fromBox || !toBox) return;
 
-      const fromEl = fromBox.element;
-      const toEl = toBox.element;
+      const fromRect = fromBox.element.getBoundingClientRect();
+      const toRect = toBox.element.getBoundingClientRect();
 
-      // Calculate center coords of from and to boxes relative to canvas coordinates
-      const fromRect = fromEl.getBoundingClientRect();
-      const toRect = toEl.getBoundingClientRect();
-      const viewportRect = viewport.getBoundingClientRect();
+      const fromX = (fromBox.data.x + fromBox.data.width / 2) * scale + panX;
+      const fromY = (fromBox.data.y + fromBox.data.height / 2) * scale + panY;
+      const toX = (toBox.data.x + toBox.data.width / 2) * scale + panX;
+      const toY = (toBox.data.y + toBox.data.height / 2) * scale + panY;
 
-      // Box center in viewport px:
-      const fromCx = (parseFloat(fromEl.style.left) + fromEl.offsetWidth / 2) * scale + panX;
-      const fromCy = (parseFloat(fromEl.style.top) + fromEl.offsetHeight / 2) * scale + panY;
-
-      const toCx = (parseFloat(toEl.style.left) + toEl.offsetWidth / 2) * scale + panX;
-      const toCy = (parseFloat(toEl.style.top) + toEl.offsetHeight / 2) * scale + panY;
-
-      // Create SVG line element
       const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      line.setAttribute("x1", fromCx);
-      line.setAttribute("y1", fromCy);
-      line.setAttribute("x2", toCx);
-      line.setAttribute("y2", toCy);
-      line.classList.add("connection-line");
-      if (conn.id === selectedConnectionId) {
-        line.classList.add("highlighted");
-      }
+      line.setAttribute('class', 'connection-line');
+      line.setAttribute('x1', fromX);
+      line.setAttribute('y1', fromY);
+      line.setAttribute('x2', toX);
+      line.setAttribute('y2', toY);
       line.dataset.id = conn.id;
 
-      // Make lines clickable for selection
-      line.style.pointerEvents = "stroke";
-      line.addEventListener('click', (e) => {
+      if (conn.id === selectedConnectionId) {
+        line.classList.add('highlighted');
+      }
+
+      line.addEventListener('click', e => {
         e.stopPropagation();
-        if (selectedConnectionId === conn.id) {
-          // Deselect
-          selectedConnectionId = null;
-          deleteConnectionBtn.disabled = true;
-        } else {
-          selectedConnectionId = conn.id;
-          deleteConnectionBtn.disabled = false;
-        }
+        selectedConnectionId = conn.id;
+        deleteConnectionBtn.disabled = false;
         redrawConnections();
       });
 
@@ -537,150 +522,147 @@
     });
   }
 
-  // Undo last delete or addConnection
+  // Undo last action
   undoBtn.addEventListener('click', () => {
-    if (!undoStack.length) return;
-    const action = undoStack.pop();
-    if (action.type === 'deleteBox') {
-      addBox(action.data);
-    } else if (action.type === 'deleteConnection') {
-      connections.set(action.data.id, action.data);
-      db.collection('connections').doc(action.data.id).set(action.data);
-      redrawConnections();
-    } else if (action.type === 'addConnection') {
-      connections.delete(action.data.id);
-      db.collection('connections').doc(action.data.id).delete();
+    if (undoStack.length === 0) return;
+    const last = undoStack.pop();
+    if (undoStack.length === 0) undoBtn.disabled = true;
+
+    if (last.type === 'deleteBox') {
+      addBox(last.data);
+    } else if (last.type === 'addConnection') {
+      removeConnection(last.data.id);
+    } else if (last.type === 'deleteConnection') {
+      connections.set(last.data.id, last.data);
+      db.collection('connections').doc(last.data.id).set(last.data);
       redrawConnections();
     }
-    undoBtn.disabled = undoStack.length === 0;
   });
 
-  // Delete selected connection
+  // Delete selected connection button
   deleteConnectionBtn.addEventListener('click', () => {
-    if (!selectedConnectionId) return;
-    removeConnection(selectedConnectionId);
+    if (selectedConnectionId) {
+      removeConnection(selectedConnectionId);
+      selectedConnectionId = null;
+      deleteConnectionBtn.disabled = true;
+    }
   });
 
   // Mark center button
   markCenterBtn.addEventListener('click', () => {
-    markedCenter = { panX, panY };
+    markedCenter = { x: panX, y: panY, scale };
     goCenterBtn.disabled = false;
   });
 
-  // Go center button
+  // Go to center button
   goCenterBtn.addEventListener('click', () => {
     if (!markedCenter) return;
-    panX = markedCenter.panX;
-    panY = markedCenter.panY;
+    panX = markedCenter.x;
+    panY = markedCenter.y;
+    scale = markedCenter.scale;
     updateTransform();
   });
 
-  // Update transform (pan/zoom)
+  // Update canvas transform (pan/zoom)
   function updateTransform() {
     canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    zoomDisplay.textContent = `Zoom: ${Math.round(scale * 100)}%`;
     redrawConnections();
-    zoomDisplay.textContent = `Zoom: ${Math.round(scale*100)}%`;
   }
 
-  // Canvas double-click creates new box
-  viewport.addEventListener('dblclick', e => {
-    if (e.target !== viewport && e.target !== canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - panX) / scale;
-    const y = (e.clientY - panY) / scale;
-    const newBoxData = {
-      x,
-      y,
-      width: 120,
-      height: 60,
-      text: '',
-      fontSize: '16px'
-    };
-    const newBox = addBox(newBoxData);
-    updateBoxData(newBox.data.id);
+  // Wheel zoom
+  viewport.addEventListener('wheel', e => {
+    e.preventDefault();
+    const zoomStep = 0.1;
+    let newScale = scale - Math.sign(e.deltaY) * zoomStep;
+    newScale = Math.min(Math.max(0.5, newScale), 3);
+    if (newScale === scale) return;
+
+    const rect = viewport.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Calculate pan to zoom at mouse pointer
+    panX -= (mouseX - panX) * (newScale / scale - 1);
+    panY -= (mouseY - panY) * (newScale / scale - 1);
+    scale = newScale;
+
+    updateTransform();
   });
 
-  // Pan logic (dragging empty space)
+  // Pan start
   viewport.addEventListener('pointerdown', e => {
-    if (e.target !== viewport && e.target !== canvas) return;
+    if (e.target.closest('.box') || e.target.closest('line')) return;
     isPanning = true;
     panStartX = e.clientX - panX;
     panStartY = e.clientY - panY;
     viewport.style.cursor = 'grabbing';
-    e.preventDefault();
   });
+
+  // Pan move
   viewport.addEventListener('pointermove', e => {
     if (!isPanning) return;
     panX = e.clientX - panStartX;
     panY = e.clientY - panStartY;
     updateTransform();
   });
+
+  // Pan end
   viewport.addEventListener('pointerup', e => {
-    if (!isPanning) return;
     isPanning = false;
     viewport.style.cursor = 'grab';
   });
   viewport.addEventListener('pointerleave', e => {
-    if (!isPanning) return;
     isPanning = false;
     viewport.style.cursor = 'grab';
   });
 
-  // Wheel zoom with limits 0.5 to 3.0
-  viewport.addEventListener('wheel', e => {
-    e.preventDefault();
-    const zoomFactor = 1.05;
-    const mouseX = e.clientX;
-    const mouseY = e.clientY;
+  // Double click to create box
+  viewport.addEventListener('dblclick', e => {
+    if (e.target.closest('.box') || e.target.closest('line')) return;
+    const rect = viewport.getBoundingClientRect();
+    const x = (e.clientX - rect.left - panX) / scale;
+    const y = (e.clientY - rect.top - panY) / scale;
+    const boxData = { x, y, width: 150, height: 80, text: '' };
+    addBox(boxData);
+    updateBoxData(boxData.id);
+  });
 
-    // Compute new scale
-    let newScale = scale * (e.deltaY < 0 ? zoomFactor : 1 / zoomFactor);
-    newScale = Math.min(3, Math.max(0.5, newScale));
-
-    // Zoom relative to mouse pointer
-    const wx = (mouseX - panX) / scale;
-    const wy = (mouseY - panY) / scale;
-
-    panX = mouseX - wx * newScale;
-    panY = mouseY - wy * newScale;
-    scale = newScale;
-
-    updateTransform();
-  }, { passive: false });
-
-  // Save box/connection data changes to Firebase
-
-  // Load saved data from Firebase on startup
-  async function loadData() {
-    // Load boxes
-    const boxSnapshot = await db.collection('boxes').get();
-    boxSnapshot.forEach(doc => {
-      const data = doc.data();
-      addBox(data);
-    });
-
-    // Load connections
-    const connSnapshot = await db.collection('connections').get();
-    connSnapshot.forEach(doc => {
-      const data = doc.data();
-      connections.set(data.id, data);
-    });
-
-    redrawConnections();
-  }
-
-  // Initialization
-  updateTransform();
-  loadData();
-
-  // Click outside connections deselects connection
-  document.addEventListener('click', e => {
-    if (selectedConnectionId) {
+  // Click outside to clear connection selection
+  document.body.addEventListener('click', e => {
+    if (!e.target.closest('.connection-line') && !e.target.closest('button.connect-toggle')) {
       selectedConnectionId = null;
       deleteConnectionBtn.disabled = true;
+      if (activeConnectBoxId) {
+        const oldBox = boxes.get(activeConnectBoxId);
+        if (oldBox) {
+          const oldToggle = oldBox.element.querySelector('button.connect-toggle');
+          oldToggle.classList.remove('active');
+        }
+        activeConnectBoxId = null;
+      }
       redrawConnections();
     }
   });
+
+  // Load from Firestore on start
+  function loadAll() {
+    db.collection('boxes').get().then(snapshot => {
+      snapshot.forEach(doc => {
+        addBox(doc.data());
+      });
+      db.collection('connections').get().then(conns => {
+        conns.forEach(doc => {
+          connections.set(doc.id, doc.data());
+        });
+        redrawConnections();
+      });
+    });
+  }
+
+  loadAll();
+  updateTransform();
+
 </script>
 </body>
 </html>
