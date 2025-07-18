@@ -492,4 +492,28 @@
       const lastBox = undoStack.pop();
       const box = addBox(lastBox.x, lastBox.y, lastBox.text, null, lastBox.width, lastBox.height, lastBox.fontSize);
 
-      if (undoStack
+      if (undoStack.length === 0) undoBtn.disabled = true;
+    });
+
+    goCenterBtn.addEventListener('click', () => {
+      panX = 0;
+      panY = 0;
+      updateTransform();
+    });
+
+    window.addEventListener('load', () => {
+      updateTransform();
+      loadBoxes();
+    });
+
+    function loadBoxes() {
+      boxesCollection.get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize || '16px');
+        });
+      });
+    }
+  </script>
+</body>
+</html>
