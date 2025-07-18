@@ -34,11 +34,11 @@
     }
     .box-header {
       background: #ddd;
-      padding: 2px 6px;
+      padding: 1px 4px;
       display: flex;
       justify-content: flex-end;
       align-items: center;
-      gap: 8px;
+      gap: 4px;
       user-select: none;
       cursor: default;
       border-bottom: 1px solid #bbb;
@@ -47,22 +47,22 @@
       color: red;
       font-weight: bold;
       cursor: pointer;
-      font-size: 18px;
+      font-size: 12px;
       line-height: 1;
       user-select: none;
       padding: 0;
       margin: 0;
       border: none;
       background: transparent;
-      width: 20px;
-      height: 20px;
+      width: 14px;
+      height: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
     .connect-toggle {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       border: none;
       background-color: blue;
@@ -77,7 +77,7 @@
     }
     .box-content {
       flex: 1;
-      padding: 6px 8px;
+      padding: 6px 10px;
       white-space: pre-wrap;
       font-family: monospace, monospace;
       overflow: auto;
@@ -89,6 +89,7 @@
       min-height: 24px;
       word-break: break-word;
       box-sizing: border-box;
+      resize: none;
     }
     .resize-handle {
       width: 16px;
@@ -285,14 +286,15 @@
     const connectionsCollection = db.collection('connections');
 
     function adjustFontSizeToFit(contentDiv, box) {
-      const padding = 8;
+      const paddingHorizontal = 20; // match padding 10px each side
+      const paddingVertical = 12;   // match padding 6px top and bottom
       const maxFontSize = 100;
       const minFontSize = 8;
 
       contentDiv.style.fontSize = maxFontSize + 'px';
 
-      const boxWidth = box.clientWidth - padding * 2;
-      const boxHeight = box.clientHeight - padding * 2;
+      const boxWidth = box.clientWidth - paddingHorizontal;
+      const boxHeight = box.clientHeight - paddingVertical;
 
       let fontSize = maxFontSize;
 
@@ -342,19 +344,13 @@
     }
 
     async function saveConnections() {
+      // Delete all first, then add all current to ensure clean sync
       const batch = db.batch();
-      // Clear all first
       const snap = await connectionsCollection.get();
-      snap.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      // Add all current connections
+      snap.forEach(doc => batch.delete(doc.ref));
       connections.forEach(conn => {
         const docRef = connectionsCollection.doc();
-        batch.set(docRef, {
-          fromId: conn.fromId,
-          toId: conn.toId,
-        });
+        batch.set(docRef, { fromId: conn.fromId, toId: conn.toId });
       });
       await batch.commit();
     }
@@ -381,13 +377,13 @@
       const header = document.createElement('div');
       header.className = 'box-header';
 
-      const delBtn = document.createElement('button');
-      delBtn.className = 'delete-btn';
-      delBtn.textContent = '×';
-
       const connectToggle = document.createElement('button');
       connectToggle.className = 'connect-toggle';
       connectToggle.title = 'Connect';
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'delete-btn';
+      delBtn.textContent = '×';
 
       header.appendChild(connectToggle);
       header.appendChild(delBtn);
@@ -534,10 +530,16 @@
           selectedBoxForConnection = null;
           connectToggle.classList.remove('active');
         } else {
-          connections.push({ fromId: selectedBoxForConnection.dataset.id, toId: box.dataset.id });
+          // prevent duplicate connection
+          if (!connections.find(c => (c.fromId === selectedBoxForConnection.dataset.id && c.toId === box.dataset.id))) {
+            const newConn = { fromId: selectedBoxForConnection.dataset.id, toId: box.dataset.id };
+            connections.push(newConn);
+            saveConnections().then(() => {
+              drawConnections();
+            });
+          }
           resetAllToggles();
           selectedBoxForConnection = null;
-          saveConnections().then(drawConnections);
         }
       });
 
@@ -547,7 +549,9 @@
       });
 
       if (id) box.dataset.id = id;
+
       canvas.appendChild(box);
+      adjustFontSizeToFit(content, box);
       saveBox();
 
       return box;
@@ -622,21 +626,21 @@
       });
     }
 
-    function loadBoxes() {
-      boxesCollection.get().then(snapshot => {
-        snapshot.forEach(doc => {
-          const d = doc.data();
-          addBox(d.x, d.y, d.text, doc.id, d.width || 180, d.height || 80, d.fontSize || '16px');
-        });
+    async function loadBoxes() {
+      const snapshot = await boxesCollection.get();
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        addBox(d.x, d.y, d.text, doc.id, d.width || 180, d.height || 80, d.fontSize || '16px');
       });
     }
+
+    loadBoxes();
+    loadConnections();
 
     window.addEventListener('resize', () => {
       drawConnections();
     });
 
-    loadBoxes();
-    loadConnections();
     updateTransform();
   </script>
 </body>
