@@ -68,10 +68,7 @@
     -moz-user-select: text;
     -ms-user-select: text;
     user-select: text;
-    pointer-events: none; /* Allow drag through content */
-  }
-  .box > div[contenteditable="true"]:focus {
-    pointer-events: auto; /* Enable text editing when focused */
+    pointer-events: auto;
   }
   
   /* Side menu for box controls */
@@ -131,6 +128,7 @@
     position: absolute;
     z-index: 20;
     touch-action: none;
+    pointer-events: auto;
   }
   .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
   .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
@@ -325,19 +323,24 @@
     let resizeDir = null;
     let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
 
-    // Single-click drag box (anywhere in the box)
+    // Box drag functionality - only on box background (not on content or buttons)
     box.addEventListener('pointerdown', e => {
-      if (e.target.classList.contains('resize-handle') || e.target.classList.contains('box-menu-btn')) return;
+      // Don't drag if clicking on resize handles, menu buttons, or content
+      if (e.target.classList.contains('resize-handle') || 
+          e.target.classList.contains('box-menu-btn') ||
+          e.target.contentEditable === 'true') return;
       
       dragging = true;
-      offsetX = e.clientX - box.getBoundingClientRect().left;
-      offsetY = e.clientY - box.getBoundingClientRect().top;
+      const rect = box.getBoundingClientRect();
+      offsetX = e.clientX - rect.left;
+      offsetY = e.clientY - rect.top;
       box.setPointerCapture(e.pointerId);
       e.preventDefault();
+      e.stopPropagation();
     });
 
-    box.addEventListener('pointermove', e => {
-      if (!dragging) return;
+    document.addEventListener('pointermove', e => {
+      if (!dragging || !box.hasPointerCapture(e.pointerId)) return;
       const newX = (e.clientX - offsetX - panX) / scale;
       const newY = (e.clientY - offsetY - panY) / scale;
       box.style.left = newX + 'px';
@@ -346,8 +349,8 @@
       redrawConnections();
     });
 
-    box.addEventListener('pointerup', e => {
-      if (!dragging) return;
+    document.addEventListener('pointerup', e => {
+      if (!dragging || !box.hasPointerCapture(e.pointerId)) return;
       dragging = false;
       box.releasePointerCapture(e.pointerId);
     });
@@ -357,6 +360,7 @@
       const handle = handles[pos];
       handle.addEventListener('pointerdown', e => {
         e.stopPropagation();
+        e.preventDefault();
         resizing = true;
         resizeDir = pos;
         startWidth = box.offsetWidth;
@@ -366,8 +370,8 @@
         startClientX = e.clientX;
         startClientY = e.clientY;
         handle.setPointerCapture(e.pointerId);
-        e.preventDefault();
       });
+      
       handle.addEventListener('pointermove', e => {
         if (!resizing || !handle.hasPointerCapture(e.pointerId)) return;
         e.preventDefault();
@@ -406,6 +410,7 @@
         updateBoxData(id);
         redrawConnections();
       });
+      
       handle.addEventListener('pointerup', e => {
         if (!handle.hasPointerCapture(e.pointerId)) return;
         resizing = false;
@@ -416,6 +421,7 @@
     // Delete box
     delBtn.addEventListener('click', e => {
       e.stopPropagation();
+      e.preventDefault();
       undoStack.push({ type: 'deleteBox', data: boxes.get(id).data });
       undoBtn.disabled = false;
       removeBox(id);
@@ -430,6 +436,7 @@
     // Connect toggle click
     connectToggle.addEventListener('click', e => {
       e.stopPropagation();
+      e.preventDefault();
       if (activeConnectBoxId === id) {
         activeConnectBoxId = null;
         connectToggle.classList.remove('active');
@@ -448,7 +455,7 @@
       }
     });
 
-    return { element: box, data };
+    return { element: box, data: { ...data, id } };
   }
 
   // Update box data & save (now includes fontSize)
@@ -520,9 +527,6 @@
       const fromBox = boxes.get(conn.from);
       const toBox = boxes.get(conn.to);
       if (!fromBox || !toBox) return;
-
-      const fromRect = fromBox.element.getBoundingClientRect();
-      const toRect = toBox.element.getBoundingClientRect();
 
       const fromX = (fromBox.data.x + fromBox.data.width / 2) * scale + panX;
       const fromY = (fromBox.data.y + fromBox.data.height / 2) * scale + panY;
