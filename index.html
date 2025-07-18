@@ -358,7 +358,7 @@
       contentDiv.style.fontSize = fontSize + 'px';
     }
 
-    // Save or update a box in Firestore
+    // Save or update a box in Firestore immediately
     async function saveBox(box, content) {
       if (!box.dataset.id) {
         const docRef = await boxesCollection.add({
@@ -382,7 +382,7 @@
       }
     }
 
-    // Delete a box and its connections
+    // Delete a box and its connections immediately
     async function deleteBox(box) {
       if (!box.dataset.id) return;
       undoStack.push({
@@ -561,7 +561,6 @@
         box.style.left = newLeft + 'px';
         box.style.top = newTop + 'px';
 
-        // Adjust font size smoothly
         smoothAdjustFontSize(box.querySelector('.box-content'), box);
 
         drawConnections();
@@ -575,69 +574,56 @@
         await saveBox(box, box.querySelector('.box-content'));
       });
 
-      // Content editable input save
+      // Content editable input save & adjust font
       content.addEventListener('input', () => {
         smoothAdjustFontSize(content, box);
-      });
-      content.addEventListener('blur', async () => {
-        await saveBox(box, content);
+        saveBox(box, content);
       });
 
-      // Delete button
+      // Delete button - no confirmation
       delBtn.addEventListener('click', async e => {
         e.stopPropagation();
-        if (confirm('Delete this box and all its connections?')) {
-          await deleteBox(box);
-          selectedBoxes.delete(box);
-          updateDeleteButton();
-        }
+        await deleteBox(box);
+        selectedBoxes.delete(box);
+        updateDeleteButton();
       });
 
-      // Connect toggle logic
-      connectToggle.addEventListener('click', e => {
+      // Connect toggle logic (no more "must save" alert)
+      connectToggle.addEventListener('click', async e => {
         e.stopPropagation();
         if (connectingBox === null) {
-          // Start connection from this box
           connectingBox = box;
           connectToggle.classList.add('active');
         } else if (connectingBox === box) {
-          // Cancel connection
           connectingBox = null;
           connectToggle.classList.remove('active');
         } else {
-          // Create connection from connectingBox to this box
-          // Avoid duplicates
+          // Auto-save boxes if not saved
+          if (!connectingBox.dataset.id) {
+            await saveBox(connectingBox, connectingBox.querySelector('.box-content'));
+          }
+          if (!box.dataset.id) {
+            await saveBox(box, box.querySelector('.box-content'));
+          }
           const fromId = connectingBox.dataset.id;
           const toId = box.dataset.id;
-          if (!fromId || !toId) {
-            alert('Boxes must be saved before connecting');
-            connectingBox = null;
-            connectToggle.classList.remove('active');
-            return;
-          }
+          // Avoid duplicate connections
           const exists = connections.some(c => (c.fromId === fromId && c.toId === toId) || (c.fromId === toId && c.toId === fromId));
           if (!exists) {
             const id = generateId();
             connections.push({ id, fromId, toId });
-            saveConnections();
+            await saveConnections();
           }
-          // Remove active highlight from all connect toggles
           document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
           connectingBox = null;
           drawConnections();
         }
       });
 
-      // Select box click: handled above for selectMode
       box.addEventListener('click', e => {
         if (!selectMode) return;
         e.stopPropagation();
       });
-
-      // Save box ID on creation for new boxes:
-      if (!box.dataset.id) {
-        // New box, will get ID on saveBox call triggered on drag end or content blur
-      }
 
       canvas.appendChild(box);
       smoothAdjustFontSize(content, box);
@@ -654,14 +640,13 @@
       drawConnections();
     }
 
-    // Update Delete button enable state
+    // Update Delete button state
     function updateDeleteButton() {
       deleteSelectedBtn.disabled = (selectedBoxes.size === 0 && selectedConnections.size === 0);
     }
 
-    // Delete selected boxes and connections
+    // Delete selected boxes and connections (no confirm)
     async function deleteSelected() {
-      // Undo snapshot
       const deletedBoxes = [];
       const deletedConnections = [];
 
@@ -684,11 +669,12 @@
       undoStack.push({ boxes: deletedBoxes, connections: deletedConnections });
       undoBtn.disabled = false;
 
-      // Delete boxes & their connections from DB and UI
       for (const box of selectedBoxes) {
-        await boxesCollection.doc(box.dataset.id).delete();
+        if (box.dataset.id) {
+          await boxesCollection.doc(box.dataset.id).delete();
+        }
         // Remove connections linked to box
-        for (let i = connections.length -1; i >= 0; i--) {
+        for (let i = connections.length - 1; i >= 0; i--) {
           if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
             connections.splice(i, 1);
           }
@@ -696,7 +682,6 @@
         box.remove();
       }
 
-      // Delete connections from array
       for (const conn of deletedConnections) {
         const idx = connections.findIndex(c => c.id === conn.id);
         if (idx >= 0) connections.splice(idx, 1);
@@ -715,13 +700,10 @@
       const last = undoStack.pop();
       undoBtn.disabled = undoStack.length === 0;
 
-      // Restore boxes
       if (last.box) {
-        // Single box undo from single deleteBox call
         const b = last.box;
         const box = await addBox(b.x, b.y, b.text, b.id, b.width, b.height, b.fontSize);
         await saveBox(box, box.querySelector('.box-content'));
-        // Restore connections
         if (last.connections) {
           for (const c of last.connections) {
             connections.push(c);
@@ -729,7 +711,6 @@
           await saveConnections();
         }
       } else if (last.boxes) {
-        // Bulk undo from deleteSelected
         for (const b of last.boxes) {
           const box = await addBox(b.x, b.y, b.text, b.id, b.width, b.height, b.fontSize);
           await saveBox(box, box.querySelector('.box-content'));
@@ -744,7 +725,7 @@
       drawConnections();
     }
 
-    // Save all boxes - used on load and batch save
+    // Save all boxes
     async function saveAllBoxes() {
       const promises = [];
       document.querySelectorAll('.box').forEach(box => {
@@ -753,7 +734,7 @@
       await Promise.all(promises);
     }
 
-    // Load all boxes from Firestore
+    // Load boxes from Firestore
     async function loadBoxes() {
       canvas.innerHTML = '';
       const snapshot = await boxesCollection.get();
@@ -781,17 +762,15 @@
       clearSelection();
     });
 
-    // Delete selected button
+    // Delete selected button no confirm
     deleteSelectedBtn.addEventListener('click', async () => {
-      if (confirm('Delete selected boxes and connections?')) {
-        await deleteSelected();
-      }
+      await deleteSelected();
     });
 
     // Undo button
     undoBtn.addEventListener('click', undo);
 
-    // Pan & Zoom handling
+    // Pan & zoom handlers
     viewport.addEventListener('pointerdown', e => {
       if (selectMode) return;
       if (e.target.closest('.box') || e.target.closest('button') || e.target === connectionLayer) return;
@@ -818,21 +797,20 @@
       viewport.style.cursor = selectMode ? 'default' : 'grab';
     });
 
-    // Zoom on wheel
     viewport.addEventListener('wheel', e => {
       e.preventDefault();
       const oldScale = scale;
       const delta = -e.deltaY * 0.0015;
       scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale + delta));
-      // Adjust pan to zoom at mouse position
       const mouseX = e.clientX;
       const mouseY = e.clientY;
-      panX -= (mouseX - panX) * (scale / oldScale -1);
-      panY -= (mouseY - panY) * (scale / oldScale -1);
+      panX -= (mouseX - panX) * (scale / oldScale - 1);
+      panY -= (mouseY - panY) * (scale / oldScale - 1);
       updateTransform();
+      zoomDisplay.textContent = 'Zoom: ' + Math.round(scale * 100) + '%';
     }, { passive: false });
 
-    // Add box on double click when NOT in select mode
+    // Add box on double click if not select mode
     viewport.addEventListener('dblclick', e => {
       if (selectMode) return;
       const pos = screenToCanvas(e.clientX, e.clientY);
@@ -845,15 +823,14 @@
       panY = window.innerHeight / 2;
       scale = 1;
       updateTransform();
+      zoomDisplay.textContent = 'Zoom: 100%';
     });
 
-    // Mark center button - sets panX/Y so that current viewport center becomes (0,0) coordinate in canvas
+    // Mark center button - shifts all boxes so current viewport center is canvas origin
     markCenterBtn.addEventListener('click', () => {
-      // We define current viewport center in canvas coords as new origin (0,0)
-      const centerCanvasX = (window.innerWidth/2 - panX) / scale;
-      const centerCanvasY = (window.innerHeight/2 - panY) / scale;
+      const centerCanvasX = (window.innerWidth / 2 - panX) / scale;
+      const centerCanvasY = (window.innerHeight / 2 - panY) / scale;
 
-      // Adjust all boxes positions accordingly
       document.querySelectorAll('.box').forEach(box => {
         const x = parseFloat(box.style.left);
         const y = parseFloat(box.style.top);
@@ -868,7 +845,7 @@
       saveAllBoxes();
     });
 
-    // Selection rectangle logic for multi-select in select mode
+    // Selection rectangle logic
     viewport.addEventListener('pointerdown', e => {
       if (!selectMode) return;
       if (e.target.closest('.box') || e.target.closest('button') || e.target === connectionLayer) return;
@@ -903,7 +880,6 @@
 
       clearSelection();
 
-      // Select boxes inside selection rect
       document.querySelectorAll('.box').forEach(box => {
         const bRect = box.getBoundingClientRect();
         if (bRect.left >= rect.left && bRect.right <= rect.right && bRect.top >= rect.top && bRect.bottom <= rect.bottom) {
@@ -912,7 +888,6 @@
         }
       });
 
-      // Select connections with midpoint inside rect
       connections.forEach(c => {
         const boxA = document.querySelector(`.box[data-id="${c.fromId}"]`);
         const boxB = document.querySelector(`.box[data-id="${c.toId}"]`);
@@ -932,12 +907,18 @@
       drawConnections();
     });
 
-    // Click outside clears selection
+    // Click outside clears selection in select mode
     viewport.addEventListener('click', e => {
       if (!selectMode) return;
       if (e.target.closest('.box') || e.target.closest('button')) return;
       clearSelection();
     });
+
+    // Update transform on canvas
+    function updateTransform() {
+      canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      drawConnections();
+    }
 
     // Save boxes and connections before unload
     window.addEventListener('beforeunload', () => {
@@ -950,6 +931,7 @@
       await loadBoxes();
       await loadConnections();
       updateTransform();
+      zoomDisplay.textContent = 'Zoom: ' + Math.round(scale * 100) + '%';
     })();
 
   </script>
