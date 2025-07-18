@@ -252,10 +252,10 @@
       content.style.padding = '0';
       content.style.margin = '0';
       content.style.overflow = 'visible';
-      content.style.fontSize = fontSize;
       content.style.lineHeight = '1.2';
 
-      // Initial font size adjust
+      // Set font size from param or default
+      content.style.fontSize = fontSize || '16px';
       adjustFontSizeToFit(content, box);
 
       content.addEventListener('keydown', e => {
@@ -461,7 +461,7 @@
       boxesCollection.get().then(snapshot => {
         snapshot.forEach(doc => {
           const data = doc.data();
-          addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize);
+          addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize || '16px');
         });
       });
     }
