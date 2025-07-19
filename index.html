@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV15</title>
+  <title>stringsnthingsV16</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -98,7 +98,7 @@
     }
     .box-content {
       flex: 1;
-      padding: 8px 4px 4px 4px; /* Increased top padding */
+      padding: 4px;
       white-space: pre-wrap;
       font-family: monospace, monospace;
       overflow-wrap: break-word;
@@ -108,10 +108,15 @@
       line-height: 1.1;
       min-height: 24px;
       box-sizing: border-box;
-      resize: none;
-      display: block; /* changed from flex to block to avoid vertical centering */
-      text-align: left; /* align text normally */
+      display: flex;              /* keep flex for vertical centering */
+      align-items: center;        /* vertical center */
+      justify-content: flex-start;
+      text-align: left;
       word-break: break-word;
+    }
+    .box-content[contenteditable="true"] {
+      align-items: flex-start;    /* top align when editing */
+      padding-top: 8px;           /* padding so text doesn’t overlap header */
     }
     .resize-handle {
       width: 16px;
@@ -503,144 +508,139 @@
               box.style.height = newHeight + 'px';
             }
           }
+          saveAll();
           drawConnections();
         }
-        function onPointerUp(e) {
+        function onPointerUp() {
           window.removeEventListener('pointermove', onPointerMove);
           window.removeEventListener('pointerup', onPointerUp);
-          saveAll();
         }
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
       });
     });
 
-    // Dragging box
-    let dragStartX, dragStartY, boxStartX, boxStartY;
-    let dragging = false;
-
+    // Drag box
+    let drag = { active: false };
     header.addEventListener('pointerdown', e => {
       e.preventDefault();
-      dragging = true;
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      boxStartX = parseFloat(box.style.left);
-      boxStartY = parseFloat(box.style.top);
-      box.style.transition = 'none';
+      drag.active = true;
+      drag.startX = e.clientX;
+      drag.startY = e.clientY;
+      drag.origX = parseFloat(box.style.left);
+      drag.origY = parseFloat(box.style.top);
 
-      window.addEventListener('pointermove', onDragMove);
-      window.addEventListener('pointerup', onDragEnd);
-    });
-
-    function onDragMove(e) {
-      if (!dragging) return;
-      let dx = (e.clientX - dragStartX) / scale;
-      let dy = (e.clientY - dragStartY) / scale;
-      box.style.left = (boxStartX + dx) + 'px';
-      box.style.top = (boxStartY + dy) + 'px';
-      drawConnections();
-    }
-    function onDragEnd(e) {
-      dragging = false;
-      box.style.transition = '';
-      window.removeEventListener('pointermove', onDragMove);
-      window.removeEventListener('pointerup', onDragEnd);
-      saveAll();
-    }
-
-    // Connect toggle
-    connectToggle.addEventListener('click', () => {
-      if (!connectionStartBoxId) {
-        connectionStartBoxId = id;
-        connectToggle.classList.add('active');
-      } else if (connectionStartBoxId === id) {
-        connectionStartBoxId = null;
-        connectToggle.classList.remove('active');
-      } else {
-        connections.push({ fromId: connectionStartBoxId, toId: id });
-        document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
-        connectionStartBoxId = null;
+      function onPointerMove(e) {
+        if (!drag.active) return;
+        let dx = (e.clientX - drag.startX) / scale;
+        let dy = (e.clientY - drag.startY) / scale;
+        box.style.left = drag.origX + dx + 'px';
+        box.style.top = drag.origY + dy + 'px';
         drawConnections();
-        saveAll();
       }
+      function onPointerUp() {
+        drag.active = false;
+        saveAll();
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+      }
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
     });
 
-    // Delete button
-    delBtn.addEventListener('click', () => {
+    // Delete box
+    delBtn.addEventListener('click', e => {
+      e.stopPropagation();
       undoStack.push({
         box: box,
-        connections: connections.filter(c => c.fromId === id || c.toId === id)
+        connections: connections.filter(c => c.fromId === box.dataset.id || c.toId === box.dataset.id)
       });
-      undoBtn.disabled = false;
 
-      // Remove connections related to box
+      // Remove related connections
       for (let i = connections.length - 1; i >= 0; i--) {
-        if (connections[i].fromId === id || connections[i].toId === id) {
+        if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
           connections.splice(i, 1);
         }
       }
 
-      boxesMap.delete(id);
+      boxesMap.delete(box.dataset.id);
       box.remove();
-      drawConnections();
+      undoBtn.disabled = false;
       saveAll();
+      drawConnections();
     });
 
-    // Undo delete
-    undoBtn.addEventListener('click', () => {
-      if (undoStack.length === 0) return;
-      const last = undoStack.pop();
-      canvas.appendChild(last.box);
-      boxesMap.set(last.box.dataset.id, last.box);
-      connections.push(...last.connections);
-      drawConnections();
-      saveAll();
-      if (undoStack.length === 0) undoBtn.disabled = true;
-    });
-
-    // Font size controls
-    increaseBtn.addEventListener('click', () => {
-      const style = window.getComputedStyle(content);
-      let currentSize = parseFloat(style.fontSize);
-      if (currentSize < 72) {
-        content.style.fontSize = (currentSize + 1) + 'px';
+    // Connection toggle
+    connectToggle.addEventListener('click', e => {
+      e.stopPropagation();
+      if (connectionStartBoxId === null) {
+        connectionStartBoxId = box.dataset.id;
+        connectToggle.classList.add('active');
+      } else if (connectionStartBoxId === box.dataset.id) {
+        connectionStartBoxId = null;
+        connectToggle.classList.remove('active');
+      } else {
+        connections.push({ fromId: connectionStartBoxId, toId: box.dataset.id });
+        // Remove active state from previous start box toggle
+        const prevBox = boxesMap.get(connectionStartBoxId);
+        if (prevBox) {
+          const prevToggle = prevBox.querySelector('.connect-toggle');
+          if (prevToggle) prevToggle.classList.remove('active');
+        }
+        connectionStartBoxId = null;
+        connectToggle.classList.remove('active');
         saveAll();
-      }
-    });
-    decreaseBtn.addEventListener('click', () => {
-      const style = window.getComputedStyle(content);
-      let currentSize = parseFloat(style.fontSize);
-      if (currentSize > 6) {
-        content.style.fontSize = (currentSize - 1) + 'px';
-        saveAll();
+        drawConnections();
       }
     });
 
-    // Save text edits
+    // Font size buttons
+    increaseBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      let currentSize = parseFloat(window.getComputedStyle(content).fontSize);
+      if (currentSize < 40) {
+        currentSize += 1;
+        content.style.fontSize = currentSize + 'px';
+        saveAll();
+      }
+    });
+    decreaseBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      let currentSize = parseFloat(window.getComputedStyle(content).fontSize);
+      if (currentSize > 8) {
+        currentSize -= 1;
+        content.style.fontSize = currentSize + 'px';
+        saveAll();
+      }
+    });
+
+    // Save on content change
     content.addEventListener('input', () => {
       saveAll();
     });
 
-    // Prevent new lines on Enter and allow Shift+Enter for new lines
-    content.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        content.blur();
-        saveAll();
-      }
-    });
-
-    canvas.appendChild(box);
     boxesMap.set(id, box);
-
-    if (save) saveAll();
+    canvas.appendChild(box);
+    saveAll();
   }
 
-  // Load saved boxes and connections on page load
-  window.addEventListener('load', () => {
-    loadAll();
-    updateTransform();
+  undoBtn.addEventListener('click', () => {
+    if (undoStack.length === 0) return;
+    const last = undoStack.pop();
+    canvas.appendChild(last.box);
+    boxesMap.set(last.box.dataset.id, last.box);
+    last.connections.forEach(c => connections.push(c));
+    undoBtn.disabled = undoStack.length === 0;
+    saveAll();
+    drawConnections();
   });
+
+  loadAll();
+  updateTransform();
+
+  // Initial mode setup
+  toggleEditModeBtn.click();
+
 </script>
 </body>
 </html>
