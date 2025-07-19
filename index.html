@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsv23</title>
+  <title>stringsnthingsv24</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -466,7 +466,7 @@
               let newHeight = startHeight + dy;
               if (newHeight >= 40) box.style.height = newHeight + 'px';
             }
-            adjustFontSizeToFit(content);
+            adjustFontSizeToFit(content, box);
             drawConnections();
           }
 
@@ -498,78 +498,84 @@
           connectionStartBoxId = null;
           connectToggle.classList.remove('active');
         } else {
-          // Add connection
           connections.push({ fromId: connectionStartBoxId, toId: box.dataset.id });
-          document.querySelectorAll('.connect-toggle').forEach(btn => btn.classList.remove('active'));
           connectionStartBoxId = null;
+          document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
           drawConnections();
           if(save) saveAll();
         }
       });
 
-      content.addEventListener('input', e => {
-        adjustFontSizeToFit(content);
+      content.addEventListener('input', () => {
+        adjustFontSizeToFit(content, box);
         if(save) saveAll();
       });
 
-      let dragStartX, dragStartY, boxStartX, boxStartY;
       box.addEventListener('pointerdown', e => {
         if (!editMode) return;
-        if (e.target.closest('.resize-handle') || e.target.closest('.box-header') || e.target.classList.contains('delete-btn') || e.target.classList.contains('connect-toggle')) return;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        boxStartX = parseFloat(box.style.left);
-        boxStartY = parseFloat(box.style.top);
-
-        function onPointerMove(e) {
-          let dx = (e.clientX - dragStartX) / scale;
-          let dy = (e.clientY - dragStartY) / scale;
-          box.style.left = boxStartX + dx + 'px';
-          box.style.top = boxStartY + dy + 'px';
-          drawConnections();
+        if (e.target !== content && e.target !== header && !e.target.classList.contains('resize-handle')) {
+          startDragBox(e, box);
         }
-
-        function onPointerUp() {
-          window.removeEventListener('pointermove', onPointerMove);
-          window.removeEventListener('pointerup', onPointerUp);
-          if(save) saveAll();
-        }
-
-        window.addEventListener('pointermove', onPointerMove);
-        window.addEventListener('pointerup', onPointerUp);
       });
-
-      adjustFontSizeToFit(content);
 
       canvas.appendChild(box);
       boxesMap.set(id, box);
+      adjustFontSizeToFit(content, box);
+      drawConnections();
+      if(save) saveAll();
     }
 
     function serializeBox(box) {
-      const content = box.querySelector('.box-content');
+      const contentDiv = box.querySelector('.box-content');
       return {
         id: box.dataset.id,
         x: parseFloat(box.style.left),
         y: parseFloat(box.style.top),
         width: box.offsetWidth,
         height: box.offsetHeight,
-        text: content.textContent,
-        fontSize: content.style.fontSize,
+        text: contentDiv.textContent,
+        fontSize: contentDiv.style.fontSize || '18px',
       };
     }
 
     function removeBox(box) {
-      boxesMap.delete(box.dataset.id);
-      if (box.parentElement === canvas) canvas.removeChild(box);
-
-      // Remove related connections
+      const id = box.dataset.id;
+      boxesMap.delete(id);
+      canvas.removeChild(box);
+      // Remove connections linked to box
       for (let i = connections.length -1; i >= 0; i--) {
-        if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
-          connections.splice(i,1);
+        if (connections[i].fromId === id || connections[i].toId === id) {
+          connections.splice(i, 1);
         }
       }
       drawConnections();
       saveAll();
+    }
+
+    function startDragBox(e, box) {
+      e.preventDefault();
+      let startX = e.clientX;
+      let startY = e.clientY;
+      let origLeft = parseFloat(box.style.left);
+      let origTop = parseFloat(box.style.top);
+
+      function onPointerMove(ev) {
+        ev.preventDefault();
+        const dx = (ev.clientX - startX) / scale;
+        const dy = (ev.clientY - startY) / scale;
+        box.style.left = (origLeft + dx) + 'px';
+        box.style.top = (origTop + dy) + 'px';
+        drawConnections();
+      }
+
+      function onPointerUp(ev) {
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        saveAll();
+      }
+
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
     }
 
     undoBtn.addEventListener('click', () => {
@@ -577,52 +583,82 @@
       const last = undoStack.pop();
       if (last.action === 'deleteBox') {
         const d = last.boxData;
-        addBox(d.x, d.y, d.text, d.id, d.width, d.height, d.fontSize, false);
-        saveAll();
+        addBox(d.x, d.y, d.text, d.id, d.width, d.height, d.fontSize);
       }
       undoBtn.disabled = undoStack.length === 0;
     });
 
-    // Dynamic font size adjust to fill box content area
-    function adjustFontSizeToFit(contentDiv) {
-      const parent = contentDiv.parentElement;
-      if (!parent) return;
-      const maxWidth = parent.clientWidth - 16; // padding adjustment
-      const maxHeight = parent.clientHeight - 20;
+    // FONT AUTO FIT FUNCTION with mirror div and binary search for perfect fit
+    function adjustFontSizeToFit(contentDiv, box) {
+      let mirror = document.getElementById('mirrorDivForFontSizing');
+      if (!mirror) {
+        mirror = document.createElement('div');
+        mirror.id = 'mirrorDivForFontSizing';
+        mirror.style.position = 'absolute';
+        mirror.style.visibility = 'hidden';
+        mirror.style.whiteSpace = 'pre-wrap';
+        mirror.style.fontFamily = 'monospace, monospace';
+        mirror.style.padding = '4px 6px';
+        mirror.style.boxSizing = 'border-box';
+        mirror.style.left = '-9999px';
+        mirror.style.top = '-9999px';
+        mirror.style.wordBreak = 'break-word';
+        document.body.appendChild(mirror);
+      }
 
-      let minFont = 10;
-      let maxFont = 60;
-      let fontSize = minFont;
+      const style = window.getComputedStyle(contentDiv);
+      const paddingX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const paddingY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
 
-      while (minFont <= maxFont) {
-        let mid = Math.floor((minFont + maxFont) / 2);
-        contentDiv.style.fontSize = mid + 'px';
+      const headerHeight = box.querySelector('.box-header').offsetHeight;
 
-        contentDiv.style.whiteSpace = 'nowrap';
-        let scrollWidth = contentDiv.scrollWidth;
-        let scrollHeight = contentDiv.scrollHeight;
-        contentDiv.style.whiteSpace = 'pre-wrap';
+      const maxWidth = box.clientWidth - paddingX;
+      const maxHeight = box.clientHeight - paddingY - headerHeight;
 
-        if (scrollWidth <= maxWidth && scrollHeight <= maxHeight) {
-          fontSize = mid;
-          minFont = mid + 1;
+      if (maxWidth <= 0 || maxHeight <= 0) return;
+
+      mirror.style.width = maxWidth + 'px';
+      mirror.textContent = contentDiv.textContent;
+
+      let low = 8;
+      let high = 1000;
+      let bestFit = low;
+
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        mirror.style.fontSize = mid + 'px';
+
+        const rect = mirror.getBoundingClientRect();
+        const fitsWidth = rect.width <= maxWidth;
+        const fitsHeight = rect.height <= maxHeight;
+
+        if (fitsWidth && fitsHeight) {
+          bestFit = mid;
+          low = mid + 1;
         } else {
-          maxFont = mid - 1;
+          high = mid - 1;
         }
       }
-      contentDiv.style.fontSize = fontSize + 'px';
+
+      contentDiv.style.fontSize = bestFit + 'px';
+
+      contentDiv.style.display = 'flex';
+      contentDiv.style.justifyContent = 'center';
+      contentDiv.style.alignItems = 'center';
+      contentDiv.style.textAlign = 'center';
+      contentDiv.style.wordBreak = 'break-word';
     }
 
     window.addEventListener('resize', () => {
       boxesMap.forEach(box => {
-        const content = box.querySelector('.box-content');
-        adjustFontSizeToFit(content);
+        const contentDiv = box.querySelector('.box-content');
+        adjustFontSizeToFit(contentDiv, box);
       });
+      drawConnections();
     });
 
     loadAll();
     updateTransform();
-
   </script>
 </body>
 </html>
