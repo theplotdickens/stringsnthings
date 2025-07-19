@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV17</title>
+  <title>stringsnthingsV18</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -156,9 +156,6 @@
       display: flex;
       gap: 12px;
       z-index: 1000;
-      flex-wrap: wrap;
-      max-width: 90vw;
-      justify-content: center;
     }
     .floatingBtn {
       background: rgba(100, 100, 100, 0.5);
@@ -175,7 +172,6 @@
       box-shadow: 0 0 6px rgba(0,0,0,0.3);
       touch-action: manipulation;
       transition: background 0.2s ease;
-      white-space: nowrap;
     }
     .floatingBtn:active {
       background: rgba(80, 80, 80, 0.7);
@@ -220,44 +216,39 @@
       text-align: center;
     }
 
-    /* Modal Styles */
+    /* Modal styles for How To */
     #howToModal {
+      display: none;
       position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
+      z-index: 2000;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      user-select: text;
+    }
+    #howToContent {
       background: white;
-      border: 2px solid black;
-      border-radius: 6px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.5);
-      width: 400px;
-      max-width: 90vw;
-      max-height: 70vh;
-      overflow-y: auto;
+      width: 80vw;
+      max-width: 600px;
+      margin: 10vh auto;
+      padding: 20px;
+      border-radius: 8px;
       font-family: monospace, monospace;
       font-size: 14px;
-      padding: 16px;
-      z-index: 2000;
-      display: none;
+      max-height: 70vh;
+      overflow-y: auto;
       white-space: pre-wrap;
     }
-    #howToModalHeader {
-      font-weight: bold;
-      font-size: 18px;
-      margin-bottom: 12px;
-      user-select: none;
-    }
-    #howToModalClose {
-      position: absolute;
-      top: 8px;
-      right: 12px;
-      font-size: 18px;
-      font-weight: bold;
+    #howToClose {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 6px 12px;
+      background: #333;
+      color: white;
+      border: none;
+      border-radius: 4px;
       cursor: pointer;
       user-select: none;
-    }
-    #howToText {
-      white-space: pre-wrap;
     }
   </style>
 </head>
@@ -275,24 +266,27 @@
     <button id="howToBtn" class="floatingBtn">How to use</button>
   </div>
 
+  <!-- How To Modal -->
   <div id="howToModal">
-    <div id="howToModalHeader">How to use</div>
-    <div id="howToModalClose" title="Close">&times;</div>
-    <pre id="howToText">
+    <div id="howToContent">
+      <!-- Edit these instructions below -->
+      <pre id="howToText">
 Welcome to stringsnthings!
 
-- Double click anywhere on the viewport (outside boxes) to create a new text box.
-- Drag boxes by the drag handle (↔↑↓ symbol on top-left of each box).
-- Resize boxes by dragging the corners.
-- Use the connect toggle button (blue/green circle) to create connections between boxes.
-- Use the font size buttons (▲ and ▼) to adjust text size inside each box.
-- Delete boxes using the × button.
-- Use "Mark Center" to save your current viewport center.
-- Use "Go to Center" to return to your marked center.
-- Toggle Edit Mode to enable/disable editing of boxes and controls.
+- Double-click anywhere on the canvas to create a new text box.
+- Drag the text box by grabbing the ↔↕ icon on its header.
+- Resize boxes using the corners.
+- Click the blue circle to start/end a connection between boxes.
+- Use the ▲ and ▼ buttons to adjust font size.
+- Delete boxes with the × button.
+- Use Undo Delete to restore last deleted box.
+- Mark Center and Go to Center help with navigation.
+- Toggle Edit Mode to switch between editing and viewing.
 
 Enjoy your creative flow!
-    </pre>
+      </pre>
+      <button id="howToClose">Close</button>
+    </div>
   </div>
 
 <script>
@@ -302,9 +296,6 @@ Enjoy your creative flow!
   const goCenterBtn = document.getElementById('goCenterBtn');
   const markCenterBtn = document.getElementById('markCenterBtn');
   const toggleEditModeBtn = document.getElementById('toggleEditModeBtn');
-  const howToBtn = document.getElementById('howToBtn');
-  const howToModal = document.getElementById('howToModal');
-  const howToModalClose = document.getElementById('howToModalClose');
   const footerInfo = document.getElementById('footerInfo');
   const connectionLayer = document.getElementById('connectionLayer');
 
@@ -324,7 +315,7 @@ Enjoy your creative flow!
   }
 
   viewport.addEventListener('pointerdown', e => {
-    if (e.target.closest('.box') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn, howToBtn].includes(e.target)) return;
+    if (e.target.closest('.box') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target)) return;
     isPanning = true;
     const coords = getClientCoords(e);
     startX = coords.x;
@@ -381,7 +372,7 @@ Enjoy your creative flow!
   // Double click to add box
   let lastTap = 0;
   viewport.addEventListener('pointerdown', e => {
-    if ([undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn, howToBtn].includes(e.target)) return;
+    if ([undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target)) return;
     const now = Date.now();
     if (now - lastTap < 400 && !e.target.closest('.box')) {
       const x = (e.clientX - panX) / scale;
@@ -436,20 +427,6 @@ Enjoy your creative flow!
     toggleEditModeBtn.textContent = editMode ? 'Toggle Edit Mode' : 'View Mode';
   });
 
-  howToBtn.addEventListener('click', () => {
-    howToModal.style.display = 'block';
-  });
-
-  howToModalClose.addEventListener('click', () => {
-    howToModal.style.display = 'none';
-  });
-
-  window.addEventListener('click', e => {
-    if (e.target === howToModal) {
-      howToModal.style.display = 'none';
-    }
-  });
-
   function drawConnections() {
     connectionLayer.innerHTML = '';
     connections.forEach(({ fromId, toId }) => {
@@ -489,18 +466,53 @@ Enjoy your creative flow!
     });
   }
 
-  function addBox(x = 0, y = 0, contentText = '') {
-    const id = 'box_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  function saveAll() {
+    const boxesData = [];
+    boxesMap.forEach(box => {
+      const contentDiv = box.querySelector('.box-content');
+      boxesData.push({
+        id: box.dataset.id,
+        x: parseFloat(box.style.left),
+        y: parseFloat(box.style.top),
+        width: box.offsetWidth,
+        height: box.offsetHeight,
+        text: contentDiv.textContent,
+        fontSize: window.getComputedStyle(contentDiv).fontSize
+      });
+    });
+    localStorage.setItem('boxesData', JSON.stringify(boxesData));
+    localStorage.setItem('connectionsData', JSON.stringify(connections));
+  }
+
+  function loadAll() {
+    const boxesData = JSON.parse(localStorage.getItem('boxesData') || '[]');
+    boxesData.forEach(b => {
+      addBox(b.x, b.y, b.text, b.id, b.width, b.height, false, b.fontSize);
+    });
+
+    const connectionsData = JSON.parse(localStorage.getItem('connectionsData') || '[]');
+    connections.push(...connectionsData);
+
+    drawConnections();
+  }
+
+  function generateId() {
+    return 'box_' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function addBox(x, y, text = '', id = null, width = 120, height = 80, save = true, fontSize = '14px') {
+    id = id || generateId();
+    if (boxesMap.has(id)) return;
 
     const box = document.createElement('div');
-    box.classList.add('box');
+    box.className = 'box';
+    box.dataset.id = id;
     box.style.left = x + 'px';
     box.style.top = y + 'px';
-    box.style.width = '160px';
-    box.style.height = '80px';
-    box.id = id;
+    box.style.width = width + 'px';
+    box.style.height = height + 'px';
 
-    // Header with drag handle, delete, connect toggle, font size buttons
+    // Header
     const header = document.createElement('div');
     header.className = 'box-header';
 
@@ -508,27 +520,28 @@ Enjoy your creative flow!
     const dragHandle = document.createElement('div');
     dragHandle.className = 'drag-handle';
     dragHandle.title = 'Drag box';
-    dragHandle.textContent = '↔';
+    dragHandle.textContent = '↔↕';
     header.appendChild(dragHandle);
 
-    // Connect toggle button
+    // Connect toggle
     const connectToggle = document.createElement('button');
     connectToggle.className = 'connect-toggle';
-    connectToggle.title = 'Toggle connection mode';
+    connectToggle.title = 'Toggle connection';
     header.appendChild(connectToggle);
 
-    // Font size buttons
-    const fontUpBtn = document.createElement('button');
-    fontUpBtn.className = 'font-size-btn';
-    fontUpBtn.title = 'Increase font size';
-    fontUpBtn.textContent = '▲';
-    header.appendChild(fontUpBtn);
+    // Font size up
+    const fontUp = document.createElement('button');
+    fontUp.className = 'font-size-btn';
+    fontUp.title = 'Increase font size';
+    fontUp.textContent = '▲';
+    header.appendChild(fontUp);
 
-    const fontDownBtn = document.createElement('button');
-    fontDownBtn.className = 'font-size-btn';
-    fontDownBtn.title = 'Decrease font size';
-    fontDownBtn.textContent = '▼';
-    header.appendChild(fontDownBtn);
+    // Font size down
+    const fontDown = document.createElement('button');
+    fontDown.className = 'font-size-btn';
+    fontDown.title = 'Decrease font size';
+    fontDown.textContent = '▼';
+    header.appendChild(fontDown);
 
     // Delete button
     const deleteBtn = document.createElement('button');
@@ -537,296 +550,229 @@ Enjoy your creative flow!
     deleteBtn.textContent = '×';
     header.appendChild(deleteBtn);
 
-    box.appendChild(header);
-
-    // Content editable area
+    // Content area
     const content = document.createElement('div');
     content.className = 'box-content';
-    content.contentEditable = true;
-    content.spellcheck = false;
-    content.style.fontSize = '14px';
-    content.style.lineHeight = '1.1';
-    content.style.textAlign = 'center';
-    content.textContent = contentText || '';
+    content.contentEditable = editMode;
+    content.style.fontSize = fontSize;
+    content.textContent = text;
+
+    box.appendChild(header);
     box.appendChild(content);
 
     // Resize handles
-    ['nw', 'ne', 'sw', 'se'].forEach(pos => {
+    ['nw','ne','sw','se'].forEach(pos => {
       const handle = document.createElement('div');
-      handle.className = 'resize-handle ' + pos;
+      handle.className = `resize-handle ${pos}`;
       box.appendChild(handle);
     });
 
     canvas.appendChild(box);
     boxesMap.set(id, box);
 
-    setupBoxEvents(box);
-
-    updateUndoButton();
-    drawConnections();
-  }
-
-  function setupBoxEvents(box) {
-    const dragHandle = box.querySelector('.drag-handle');
-    const deleteBtn = box.querySelector('.delete-btn');
-    const connectToggle = box.querySelector('.connect-toggle');
-    const fontUpBtn = box.querySelector('.font-size-btn:nth-of-type(1)');
-    const fontDownBtn = box.querySelector('.font-size-btn:nth-of-type(2)');
-    const content = box.querySelector('.box-content');
-    const resizeHandles = box.querySelectorAll('.resize-handle');
-
-    // Drag move
-    let dragging = false;
-    let dragStartX, dragStartY;
-    let boxStartLeft, boxStartTop;
+    // Dragging
+    let dragOffsetX, dragOffsetY, dragging = false;
 
     dragHandle.addEventListener('pointerdown', e => {
       if (!editMode) return;
-      e.preventDefault();
       dragging = true;
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      boxStartLeft = parseFloat(box.style.left);
-      boxStartTop = parseFloat(box.style.top);
-      document.addEventListener('pointermove', dragMove);
-      document.addEventListener('pointerup', dragEnd);
+      dragOffsetX = e.clientX - box.offsetLeft * scale - panX;
+      dragOffsetY = e.clientY - box.offsetTop * scale - panY;
+      box.setPointerCapture(e.pointerId);
+      e.stopPropagation();
     });
 
-    function dragMove(e) {
+    dragHandle.addEventListener('pointermove', e => {
       if (!dragging) return;
-      const dx = (e.clientX - dragStartX) / scale;
-      const dy = (e.clientY - dragStartY) / scale;
-      box.style.left = boxStartLeft + dx + 'px';
-      box.style.top = boxStartTop + dy + 'px';
+      const newX = (e.clientX - panX - dragOffsetX) / scale;
+      const newY = (e.clientY - panY - dragOffsetY) / scale;
+      box.style.left = newX + 'px';
+      box.style.top = newY + 'px';
       drawConnections();
-    }
+    });
 
-    function dragEnd() {
+    dragHandle.addEventListener('pointerup', e => {
+      if (!dragging) return;
       dragging = false;
-      document.removeEventListener('pointermove', dragMove);
-      document.removeEventListener('pointerup', dragEnd);
-    }
+      box.releasePointerCapture(e.pointerId);
+      saveAll();
+    });
 
-    // Delete box
-    deleteBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      if (!editMode) return;
-      undoStack.push({ action: 'delete', boxData: serializeBox(box) });
-      boxesMap.delete(box.id);
-      box.remove();
-      updateUndoButton();
+    // Resize
+    let resizing = false;
+    let resizeDir = '';
+    let startRect, startPos;
+
+    box.querySelectorAll('.resize-handle').forEach(handle => {
+      handle.addEventListener('pointerdown', e => {
+        if (!editMode) return;
+        resizing = true;
+        resizeDir = handle.classList[1];
+        startRect = box.getBoundingClientRect();
+        startPos = { x: e.clientX, y: e.clientY };
+        box.setPointerCapture(e.pointerId);
+        e.stopPropagation();
+      });
+    });
+
+    box.addEventListener('pointermove', e => {
+      if (!resizing) return;
+      const dx = (e.clientX - startPos.x) / scale;
+      const dy = (e.clientY - startPos.y) / scale;
+
+      let newLeft = parseFloat(box.style.left);
+      let newTop = parseFloat(box.style.top);
+      let newWidth = box.offsetWidth;
+      let newHeight = box.offsetHeight;
+
+      if (resizeDir.includes('n')) {
+        newTop += dy;
+        newHeight -= dy;
+      }
+      if (resizeDir.includes('w')) {
+        newLeft += dx;
+        newWidth -= dx;
+      }
+      if (resizeDir.includes('s')) {
+        newHeight += dy;
+      }
+      if (resizeDir.includes('e')) {
+        newWidth += dx;
+      }
+
+      newWidth = Math.max(newWidth, 40);
+      newHeight = Math.max(newHeight, 30);
+
+      box.style.left = newLeft + 'px';
+      box.style.top = newTop + 'px';
+      box.style.width = newWidth + 'px';
+      box.style.height = newHeight + 'px';
+
       drawConnections();
+    });
+
+    box.addEventListener('pointerup', e => {
+      if (!resizing) return;
+      resizing = false;
+      box.releasePointerCapture(e.pointerId);
+      saveAll();
     });
 
     // Connect toggle
     connectToggle.addEventListener('click', e => {
-      e.stopPropagation();
       if (!editMode) return;
-
-      if (connectionStartBoxId === null) {
-        connectionStartBoxId = box.id;
+      const boxId = box.dataset.id;
+      if (!connectionStartBoxId) {
+        connectionStartBoxId = boxId;
         connectToggle.classList.add('active');
-      } else if (connectionStartBoxId === box.id) {
+      } else if (connectionStartBoxId === boxId) {
+        // Cancel connection start
         connectionStartBoxId = null;
         connectToggle.classList.remove('active');
       } else {
-        // Create connection from connectionStartBoxId to box.id
-        connections.push({ fromId: connectionStartBoxId, toId: box.id });
+        // Create connection or remove if exists
+        const existingIndex = connections.findIndex(c => 
+          (c.fromId === connectionStartBoxId && c.toId === boxId) ||
+          (c.fromId === boxId && c.toId === connectionStartBoxId)
+        );
+        if (existingIndex !== -1) {
+          connections.splice(existingIndex, 1);
+        } else {
+          connections.push({ fromId: connectionStartBoxId, toId: boxId });
+        }
+        // Clear active toggle
+        const startBox = boxesMap.get(connectionStartBoxId);
+        if (startBox) {
+          const startToggle = startBox.querySelector('.connect-toggle');
+          startToggle.classList.remove('active');
+        }
         connectionStartBoxId = null;
-
-        // Remove all active connectToggle highlights
-        document.querySelectorAll('.connect-toggle.active').forEach(btn => {
-          btn.classList.remove('active');
-        });
-
         drawConnections();
+        saveAll();
       }
     });
 
-    // Font size buttons
-    fontUpBtn.addEventListener('click', e => {
-      e.stopPropagation();
+    // Font size controls
+    fontUp.addEventListener('click', () => {
       if (!editMode) return;
-      const style = window.getComputedStyle(content);
-      const size = parseInt(style.fontSize);
-      if (size < 30) content.style.fontSize = (size + 1) + 'px';
+      let currentSize = parseInt(window.getComputedStyle(content).fontSize);
+      currentSize = Math.min(currentSize + 1, 72);
+      content.style.fontSize = currentSize + 'px';
+      saveAll();
     });
-    fontDownBtn.addEventListener('click', e => {
-      e.stopPropagation();
+    fontDown.addEventListener('click', () => {
       if (!editMode) return;
-      const style = window.getComputedStyle(content);
-      const size = parseInt(style.fontSize);
-      if (size > 6) content.style.fontSize = (size - 1) + 'px';
+      let currentSize = parseInt(window.getComputedStyle(content).fontSize);
+      currentSize = Math.max(currentSize - 1, 6);
+      content.style.fontSize = currentSize + 'px';
+      saveAll();
     });
 
-    // Resize box
-    let resizing = false;
-    let resizeHandle = null;
-    let resizeStartX, resizeStartY;
-    let boxStartWidth, boxStartHeight;
-    let boxStartLeftPos, boxStartTopPos;
-
-    resizeHandles.forEach(handle => {
-      handle.addEventListener('pointerdown', e => {
-        if (!editMode) return;
-        e.stopPropagation();
-        resizing = true;
-        resizeHandle = handle.classList.contains('nw') ? 'nw' :
-                       handle.classList.contains('ne') ? 'ne' :
-                       handle.classList.contains('sw') ? 'sw' :
-                       'se';
-        resizeStartX = e.clientX;
-        resizeStartY = e.clientY;
-        boxStartWidth = box.offsetWidth;
-        boxStartHeight = box.offsetHeight;
-        boxStartLeftPos = parseFloat(box.style.left);
-        boxStartTopPos = parseFloat(box.style.top);
-        document.addEventListener('pointermove', resizeMove);
-        document.addEventListener('pointerup', resizeEnd);
-      });
-    });
-
-    function resizeMove(e) {
-      if (!resizing) return;
-      const dx = (e.clientX - resizeStartX) / scale;
-      const dy = (e.clientY - resizeStartY) / scale;
-      let newWidth = boxStartWidth;
-      let newHeight = boxStartHeight;
-      let newLeft = boxStartLeftPos;
-      let newTop = boxStartTopPos;
-
-      if (resizeHandle.includes('e')) newWidth = Math.max(40, boxStartWidth + dx);
-      if (resizeHandle.includes('w')) {
-        newWidth = Math.max(40, boxStartWidth - dx);
-        newLeft = boxStartLeftPos + dx;
+    // Delete box
+    deleteBtn.addEventListener('click', () => {
+      if (!editMode) return;
+      boxesMap.delete(id);
+      box.remove();
+      // Remove connections related
+      for (let i = connections.length - 1; i >= 0; i--) {
+        if (connections[i].fromId === id || connections[i].toId === id) {
+          connections.splice(i, 1);
+        }
       }
-      if (resizeHandle.includes('s')) newHeight = Math.max(30, boxStartHeight + dy);
-      if (resizeHandle.includes('n')) {
-        newHeight = Math.max(30, boxStartHeight - dy);
-        newTop = boxStartTopPos + dy;
-      }
-
-      box.style.width = newWidth + 'px';
-      box.style.height = newHeight + 'px';
-      box.style.left = newLeft + 'px';
-      box.style.top = newTop + 'px';
+      undoStack.push({ type: 'delete', boxData: { id, x: parseFloat(box.style.left), y: parseFloat(box.style.top), width: box.offsetWidth, height: box.offsetHeight, text: content.textContent, fontSize: content.style.fontSize }, connections: [...connections] });
+      undoBtn.disabled = false;
       drawConnections();
-    }
+      saveAll();
+    });
 
-    function resizeEnd() {
-      resizing = false;
-      document.removeEventListener('pointermove', resizeMove);
-      document.removeEventListener('pointerup', resizeEnd);
-    }
+    // Text content saving on input
+    content.addEventListener('input', () => {
+      saveAll();
+    });
+
+    return box;
   }
 
-  // Undo delete box
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
     const lastAction = undoStack.pop();
-    if (lastAction.action === 'delete') {
-      const boxData = lastAction.boxData;
-      restoreBox(boxData);
+    if (lastAction.type === 'delete') {
+      const b = lastAction.boxData;
+      addBox(b.x, b.y, b.text, b.id, b.width, b.height, false, b.fontSize);
+      connections.splice(0, connections.length, ...lastAction.connections);
+      drawConnections();
+      saveAll();
     }
-    updateUndoButton();
-    drawConnections();
+    undoBtn.disabled = undoStack.length === 0;
   });
 
-  function updateUndoButton() {
-    undoBtn.disabled = undoStack.length === 0;
-  }
+  // Load saved state on startup
+  window.addEventListener('load', () => {
+    loadAll();
+    updateTransform();
+  });
 
-  function serializeBox(box) {
-    return {
-      id: box.id,
-      left: box.style.left,
-      top: box.style.top,
-      width: box.style.width,
-      height: box.style.height,
-      fontSize: box.querySelector('.box-content').style.fontSize,
-      content: box.querySelector('.box-content').textContent,
-    };
-  }
+  // Save state every 10 seconds just in case
+  setInterval(saveAll, 10000);
 
-  function restoreBox(data) {
-    if (boxesMap.has(data.id)) return;
-    const box = document.createElement('div');
-    box.classList.add('box');
-    box.id = data.id;
-    box.style.left = data.left;
-    box.style.top = data.top;
-    box.style.width = data.width;
-    box.style.height = data.height;
+  // How To Modal
+  const howToBtn = document.getElementById('howToBtn');
+  const howToModal = document.getElementById('howToModal');
+  const howToClose = document.getElementById('howToClose');
 
-    // Header with drag handle, delete, connect toggle, font size buttons
-    const header = document.createElement('div');
-    header.className = 'box-header';
+  howToBtn.addEventListener('click', () => {
+    howToModal.style.display = 'block';
+  });
 
-    const dragHandle = document.createElement('div');
-    dragHandle.className = 'drag-handle';
-    dragHandle.title = 'Drag box';
-    dragHandle.textContent = '↔';
-    header.appendChild(dragHandle);
+  howToClose.addEventListener('click', () => {
+    howToModal.style.display = 'none';
+  });
 
-    const connectToggle = document.createElement('button');
-    connectToggle.className = 'connect-toggle';
-    connectToggle.title = 'Toggle connection mode';
-    header.appendChild(connectToggle);
-
-    const fontUpBtn = document.createElement('button');
-    fontUpBtn.className = 'font-size-btn';
-    fontUpBtn.title = 'Increase font size';
-    fontUpBtn.textContent = '▲';
-    header.appendChild(fontUpBtn);
-
-    const fontDownBtn = document.createElement('button');
-    fontDownBtn.className = 'font-size-btn';
-    fontDownBtn.title = 'Decrease font size';
-    fontDownBtn.textContent = '▼';
-    header.appendChild(fontDownBtn);
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'delete-btn';
-    deleteBtn.title = 'Delete box';
-    deleteBtn.textContent = '×';
-    header.appendChild(deleteBtn);
-
-    box.appendChild(header);
-
-    const content = document.createElement('div');
-    content.className = 'box-content';
-    content.contentEditable = true;
-    content.spellcheck = false;
-    content.style.fontSize = data.fontSize || '14px';
-    content.style.lineHeight = '1.1';
-    content.style.textAlign = 'center';
-    content.textContent = data.content || '';
-    box.appendChild(content);
-
-    ['nw', 'ne', 'sw', 'se'].forEach(pos => {
-      const handle = document.createElement('div');
-      handle.className = 'resize-handle ' + pos;
-      box.appendChild(handle);
-    });
-
-    canvas.appendChild(box);
-    boxesMap.set(data.id, box);
-
-    setupBoxEvents(box);
-    if (!editMode) {
-      box.querySelector('.box-header').style.display = 'none';
-      box.querySelectorAll('.connect-toggle').forEach(el => el.style.display = 'none');
-      box.querySelectorAll('.font-size-btn').forEach(el => el.style.display = 'none');
-      box.querySelectorAll('.drag-handle').forEach(el => el.style.display = 'none');
-      box.querySelector('.box-content').contentEditable = false;
-      box.querySelector('.box-content').style.cursor = 'default';
+  howToModal.addEventListener('click', e => {
+    if (e.target === howToModal) {
+      howToModal.style.display = 'none';
     }
-  }
-
-  // Initialize
-  updateTransform();
-  toggleEditModeBtn.click(); // Start in view mode? Or call to show edit controls.
-
+  });
 </script>
 </body>
 </html>
