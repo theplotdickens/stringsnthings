@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsv25</title>
+  <title>stringsnthingsv26</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -97,6 +97,8 @@
       align-items: center;
       text-align: center;
       word-break: break-word;
+      padding-left: 4px;
+      padding-right: 4px;
     }
     .resize-handle {
       width: 16px;
@@ -473,19 +475,17 @@
             adjustFontSizeToFit(content, box);
             drawConnections();
           }
-
           function onPointerUp() {
             window.removeEventListener('pointermove', onPointerMove);
             window.removeEventListener('pointerup', onPointerUp);
-            if(save) saveAll();
+            saveAll();
           }
-
           window.addEventListener('pointermove', onPointerMove);
           window.addEventListener('pointerup', onPointerUp);
         });
       });
 
-      // Drag support for box header only
+      // Drag support only on header
       header.addEventListener('pointerdown', e => {
         if (!editMode) return;
         e.preventDefault();
@@ -505,7 +505,7 @@
         function onPointerUp() {
           window.removeEventListener('pointermove', onPointerMove);
           window.removeEventListener('pointerup', onPointerUp);
-          if(save) saveAll();
+          saveAll();
         }
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
@@ -543,14 +543,11 @@
       content.addEventListener('keydown', e => {
         if(e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          // Insert newline manually
           document.execCommand('insertHTML', false, '\n');
           adjustFontSizeToFit(content, box);
           saveAll();
         }
       });
-
-      // Make text unselectable on box header but selectable in content
 
       canvas.appendChild(box);
       boxesMap.set(id, box);
@@ -561,7 +558,6 @@
       return box;
     }
 
-    // Function to adjust font size to fit width and height with paddings
     function adjustFontSizeToFit(content, box) {
       const maxFontSize = 300;
       const minFontSize = 6;
@@ -572,25 +568,25 @@
       const availableWidth = boxWidth - 8; // 4px left+right padding assumed fixed
       const availableHeight = boxHeight - contentPaddingTop - contentPaddingBottom;
 
-      let fontSize = maxFontSize;
-
       content.style.paddingTop = contentPaddingTop + 'px';
       content.style.paddingBottom = contentPaddingBottom + 'px';
+      content.style.lineHeight = 1.1;
+      content.style.whiteSpace = 'pre-wrap';
 
-      // Apply font size and check scroll overflow to fit text inside
+      // Start from minFontSize and grow until overflow, then back down to last fit
+      let fontSize = minFontSize;
       content.style.fontSize = fontSize + 'px';
-      content.style.lineHeight = 1;
 
-      // Reduce font size until text fits within width and height
-      while (fontSize > minFontSize) {
-        const scrollWidth = content.scrollWidth;
-        const scrollHeight = content.scrollHeight;
-        if (scrollWidth <= availableWidth && scrollHeight <= availableHeight) {
+      // Grow font size while it fits
+      while (fontSize < maxFontSize) {
+        content.style.fontSize = (fontSize + 1) + 'px';
+        if (content.scrollWidth > availableWidth || content.scrollHeight > availableHeight) {
           break;
         }
-        fontSize -= 1;
-        content.style.fontSize = fontSize + 'px';
+        fontSize++;
       }
+      // Set final font size
+      content.style.fontSize = fontSize + 'px';
     }
 
     undoBtn.addEventListener('click', () => {
@@ -624,7 +620,6 @@
 
       boxesMap.delete(id);
 
-      // Remove connections to or from this box
       for (let i = connections.length -1; i >= 0; i--) {
         if (connections[i].fromId === id || connections[i].toId === id) {
           connections.splice(i, 1);
@@ -635,7 +630,6 @@
       drawConnections();
     }
 
-    // Delegate delete button click
     canvas.addEventListener('click', e => {
       if (e.target.classList.contains('delete-btn')) {
         const box = e.target.closest('.box');
@@ -645,7 +639,6 @@
 
     loadAll();
     updateTransform();
-
   </script>
 </body>
 </html>
