@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV12</title>
+  <title>stringsnthingsV15</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -97,24 +97,22 @@
       justify-content: center;
     }
     .box-content {
-  flex: 1;
-  padding: 4px;
-  white-space: pre-wrap;
-  font-family: monospace, monospace;
-  overflow-wrap: break-word;
-  outline: none;
-  cursor: text;
-  user-select: text;
-  line-height: 1.1;
-  min-height: 24px;
-  box-sizing: border-box;
-  resize: none;
-  display: flex;          /* Change back to flex */
-  justify-content: center; /* Center horizontally */
-  align-items: center;    /* Center vertically */
-  text-align: center;     /* Center multiline text */
-  word-break: break-word;
-}
+      flex: 1;
+      padding: 8px 4px 4px 4px; /* Increased top padding */
+      white-space: pre-wrap;
+      font-family: monospace, monospace;
+      overflow-wrap: break-word;
+      outline: none;
+      cursor: text;
+      user-select: text;
+      line-height: 1.1;
+      min-height: 24px;
+      box-sizing: border-box;
+      resize: none;
+      display: block; /* changed from flex to block to avoid vertical centering */
+      text-align: left; /* align text normally */
+      word-break: break-word;
+    }
     .resize-handle {
       width: 16px;
       height: 16px;
@@ -507,20 +505,51 @@
           }
           drawConnections();
         }
-
         function onPointerUp(e) {
           window.removeEventListener('pointermove', onPointerMove);
           window.removeEventListener('pointerup', onPointerUp);
           saveAll();
         }
-
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
       });
     });
 
-    connectToggle.addEventListener('click', e => {
-      e.stopPropagation();
+    // Dragging box
+    let dragStartX, dragStartY, boxStartX, boxStartY;
+    let dragging = false;
+
+    header.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      dragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      boxStartX = parseFloat(box.style.left);
+      boxStartY = parseFloat(box.style.top);
+      box.style.transition = 'none';
+
+      window.addEventListener('pointermove', onDragMove);
+      window.addEventListener('pointerup', onDragEnd);
+    });
+
+    function onDragMove(e) {
+      if (!dragging) return;
+      let dx = (e.clientX - dragStartX) / scale;
+      let dy = (e.clientY - dragStartY) / scale;
+      box.style.left = (boxStartX + dx) + 'px';
+      box.style.top = (boxStartY + dy) + 'px';
+      drawConnections();
+    }
+    function onDragEnd(e) {
+      dragging = false;
+      box.style.transition = '';
+      window.removeEventListener('pointermove', onDragMove);
+      window.removeEventListener('pointerup', onDragEnd);
+      saveAll();
+    }
+
+    // Connect toggle
+    connectToggle.addEventListener('click', () => {
       if (!connectionStartBoxId) {
         connectionStartBoxId = id;
         connectToggle.classList.add('active');
@@ -529,29 +558,27 @@
         connectToggle.classList.remove('active');
       } else {
         connections.push({ fromId: connectionStartBoxId, toId: id });
-        const startBox = boxesMap.get(connectionStartBoxId);
-        if (startBox) {
-          startBox.querySelector('.connect-toggle').classList.remove('active');
-        }
+        document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
         connectionStartBoxId = null;
         drawConnections();
         saveAll();
       }
     });
 
-    delBtn.addEventListener('click', e => {
-      e.stopPropagation();
+    // Delete button
+    delBtn.addEventListener('click', () => {
       undoStack.push({
         box: box,
         connections: connections.filter(c => c.fromId === id || c.toId === id)
       });
       undoBtn.disabled = false;
 
-      connections.forEach((c, i) => {
-        if (c.fromId === id || c.toId === id) {
+      // Remove connections related to box
+      for (let i = connections.length - 1; i >= 0; i--) {
+        if (connections[i].fromId === id || connections[i].toId === id) {
           connections.splice(i, 1);
         }
-      });
+      }
 
       boxesMap.delete(id);
       box.remove();
@@ -559,36 +586,47 @@
       saveAll();
     });
 
-    decreaseBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      const cs = window.getComputedStyle(content);
-      let currentFontSize = parseFloat(cs.fontSize);
-      if (currentFontSize > 6) {
-        currentFontSize -= 1;
-        content.style.fontSize = currentFontSize + 'px';
+    // Undo delete
+    undoBtn.addEventListener('click', () => {
+      if (undoStack.length === 0) return;
+      const last = undoStack.pop();
+      canvas.appendChild(last.box);
+      boxesMap.set(last.box.dataset.id, last.box);
+      connections.push(...last.connections);
+      drawConnections();
+      saveAll();
+      if (undoStack.length === 0) undoBtn.disabled = true;
+    });
+
+    // Font size controls
+    increaseBtn.addEventListener('click', () => {
+      const style = window.getComputedStyle(content);
+      let currentSize = parseFloat(style.fontSize);
+      if (currentSize < 72) {
+        content.style.fontSize = (currentSize + 1) + 'px';
+        saveAll();
+      }
+    });
+    decreaseBtn.addEventListener('click', () => {
+      const style = window.getComputedStyle(content);
+      let currentSize = parseFloat(style.fontSize);
+      if (currentSize > 6) {
+        content.style.fontSize = (currentSize - 1) + 'px';
         saveAll();
       }
     });
 
-    increaseBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      const cs = window.getComputedStyle(content);
-      let currentFontSize = parseFloat(cs.fontSize);
-      if (currentFontSize < 72) {
-        currentFontSize += 1;
-        content.style.fontSize = currentFontSize + 'px';
-        saveAll();
-      }
-    });
-
-    content.addEventListener('input', e => {
+    // Save text edits
+    content.addEventListener('input', () => {
       saveAll();
     });
 
+    // Prevent new lines on Enter and allow Shift+Enter for new lines
     content.addEventListener('keydown', e => {
-      if (e.key === 'Tab') {
+      if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        document.execCommand('insertText', false, '\t');
+        content.blur();
+        saveAll();
       }
     });
 
@@ -596,23 +634,13 @@
     boxesMap.set(id, box);
 
     if (save) saveAll();
-
-    return box;
   }
 
-  undoBtn.addEventListener('click', () => {
-    if (undoStack.length === 0) return;
-    const last = undoStack.pop();
-    canvas.appendChild(last.box);
-    boxesMap.set(last.box.dataset.id, last.box);
-    connections.push(...last.connections);
-    drawConnections();
-    saveAll();
-    undoBtn.disabled = undoStack.length === 0;
+  // Load saved boxes and connections on page load
+  window.addEventListener('load', () => {
+    loadAll();
+    updateTransform();
   });
-
-  loadAll();
-  updateTransform();
 </script>
 </body>
 </html>
