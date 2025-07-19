@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV2-fixed</title>
+  <title>stringsnthingsV3</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -444,7 +444,12 @@
         startLeft = parseFloat(box.style.left);
         startTop = parseFloat(box.style.top);
 
+        let lastMoveTime = 0;
         function onPointerMove(e) {
+          const now = performance.now();
+          if (now - lastMoveTime < 50) return; // throttle to ~20fps
+          lastMoveTime = now;
+
           let dx = (e.clientX - startX) / scale;
           let dy = (e.clientY - startY) / scale;
           if (pos.includes('w')) {
@@ -469,13 +474,13 @@
             let newHeight = startHeight + dy;
             if (newHeight >= 40) box.style.height = newHeight + 'px';
           }
-          resizeBoxFont(box);
           drawConnections();
         }
 
         function onPointerUp() {
           window.removeEventListener('pointermove', onPointerMove);
           window.removeEventListener('pointerup', onPointerUp);
+          resizeBoxFont(box);  // run font resize once after resizing finishes
           saveAll();
         }
 
@@ -484,158 +489,146 @@
       });
     });
 
-    // Dragging the whole box except on header and resize handles and content
-    let dragStartX, dragStartY, boxStartLeft, boxStartTop, dragging = false;
-
-    box.addEventListener('pointerdown', e => {
-      if (e.target.closest('.delete-btn') || e.target.closest('.connect-toggle') || e.target.classList.contains('resize-handle') || e.target === box.querySelector('.box-content')) return;
-
+    // Dragging the whole box
+    let dragStartX, dragStartY, origLeft, origTop, dragging = false;
+    header.addEventListener('pointerdown', e => {
+      e.stopPropagation();
       e.preventDefault();
-      dragging = true;
       dragStartX = e.clientX;
       dragStartY = e.clientY;
-      boxStartLeft = parseFloat(box.style.left);
-      boxStartTop = parseFloat(box.style.top);
-      box.style.cursor = 'grabbing';
-
-      function onMove(e) {
-        if (!dragging) return;
-        let dx = (e.clientX - dragStartX) / scale;
-        let dy = (e.clientY - dragStartY) / scale;
-        box.style.left = boxStartLeft + dx + 'px';
-        box.style.top = boxStartTop + dy + 'px';
-        drawConnections();
-      }
-
-      function onUp() {
-        dragging = false;
-        box.style.cursor = 'text';
-        saveAll();
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-      }
-
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
+      origLeft = parseFloat(box.style.left);
+      origTop = parseFloat(box.style.top);
+      dragging = true;
+      window.addEventListener('pointermove', onDragMove);
+      window.addEventListener('pointerup', onDragEnd);
     });
 
-    // Delete button
-    delBtn.addEventListener('click', () => {
-      undoStack.push({ id: box.dataset.id, boxEl: box });
-      undoBtn.disabled = false;
-      connections.forEach((conn, idx) => {
-        if (conn.fromId === box.dataset.id || conn.toId === box.dataset.id) {
-          connections.splice(idx, 1);
-        }
-      });
-      box.remove();
-      boxesMap.delete(box.dataset.id);
+    function onDragMove(e) {
+      if (!dragging) return;
+      const dx = (e.clientX - dragStartX) / scale;
+      const dy = (e.clientY - dragStartY) / scale;
+      box.style.left = (origLeft + dx) + 'px';
+      box.style.top = (origTop + dy) + 'px';
       drawConnections();
+    }
+
+    function onDragEnd(e) {
+      dragging = false;
+      window.removeEventListener('pointermove', onDragMove);
+      window.removeEventListener('pointerup', onDragEnd);
       saveAll();
+    }
+
+    // Delete box
+    delBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      removeBox(box.dataset.id);
     });
 
-    // Connect toggle
-    connectToggle.addEventListener('click', () => {
-      if (!connectionStartBoxId) {
-        connectionStartBoxId = box.dataset.id;
-        connectToggle.classList.add('active');
-      } else if (connectionStartBoxId === box.dataset.id) {
+    // Toggle connection mode
+    connectToggle.addEventListener('click', e => {
+      e.stopPropagation();
+      if (connectionStartBoxId === box.dataset.id) {
         connectionStartBoxId = null;
         connectToggle.classList.remove('active');
+      } else if (connectionStartBoxId === null) {
+        connectionStartBoxId = box.dataset.id;
+        connectToggle.classList.add('active');
       } else {
-        connections.push({ fromId: connectionStartBoxId, toId: box.dataset.id });
-        connectionStartBoxId = null;
-        document.querySelectorAll('.connect-toggle.active').forEach(t => t.classList.remove('active'));
-        drawConnections();
-        saveAll();
+        if (connectionStartBoxId !== box.dataset.id) {
+          addConnection(connectionStartBoxId, box.dataset.id);
+          const startBox = boxesMap.get(connectionStartBoxId);
+          if (startBox) startBox.querySelector('.connect-toggle').classList.remove('active');
+          connectionStartBoxId = null;
+          connectToggle.classList.remove('active');
+          saveAll();
+        }
       }
     });
 
-    // Text input event to resize font and save
+    // Content editable text input save on blur
     content.addEventListener('input', () => {
       resizeBoxFont(box);
       saveAll();
     });
 
-    // Prevent newlines on Enter in content editable, but allow Shift+Enter for newline
+    // Disable enter key in content to keep single line
     content.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Enter') {
         e.preventDefault();
       }
     });
 
     canvas.appendChild(box);
     boxesMap.set(id, box);
-
     resizeBoxFont(box);
-
     if (save) saveAll();
-
-    return box;
+    drawConnections();
   }
 
-  function resizeBoxFont(box) {
-    const content = box.querySelector('.box-content');
-    if (!content) return;
-
-    const maxFontSize = 300;
-    const minFontSize = 6;
-
-    // We'll try to find max font size that fits the box content
-
-    const boxWidth = box.clientWidth - 12;  // some padding inside content div
-    const boxHeight = box.clientHeight - 22 - paddingTopPx - paddingBottomPx; // minus header and padding
-
-    if (boxWidth <= 0 || boxHeight <= 0) return;
-
-    const testSpan = document.createElement('span');
-    testSpan.style.position = 'absolute';
-    testSpan.style.visibility = 'hidden';
-    testSpan.style.whiteSpace = 'pre-wrap';
-    testSpan.style.fontFamily = content.style.fontFamily || 'monospace';
-    testSpan.style.width = boxWidth + 'px';
-    testSpan.style.lineHeight = '1.1';
-    testSpan.style.padding = '0';
-    testSpan.style.margin = '0';
-    testSpan.style.boxSizing = 'border-box';
-
-    testSpan.textContent = content.textContent;
-    document.body.appendChild(testSpan);
-
-    let fontSize = maxFontSize;
-
-    while (fontSize > minFontSize) {
-      testSpan.style.fontSize = fontSize + 'px';
-      if (testSpan.scrollWidth <= boxWidth && testSpan.scrollHeight <= boxHeight) {
-        break;
+  function removeBox(id) {
+    const box = boxesMap.get(id);
+    if (!box) return;
+    undoStack.push({
+      boxData: {
+        id,
+        x: parseFloat(box.style.left),
+        y: parseFloat(box.style.top),
+        width: box.offsetWidth,
+        height: box.offsetHeight,
+        text: box.querySelector('.box-content').textContent
+      },
+      connections: connections.filter(c => c.fromId === id || c.toId === id)
+    });
+    undoBtn.disabled = false;
+    box.remove();
+    boxesMap.delete(id);
+    for (let i = connections.length - 1; i >= 0; i--) {
+      if (connections[i].fromId === id || connections[i].toId === id) {
+        connections.splice(i, 1);
       }
-      fontSize--;
     }
-
-    document.body.removeChild(testSpan);
-    content.style.fontSize = fontSize + 'px';
+    saveAll();
+    drawConnections();
   }
 
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
-    const item = undoStack.pop();
-    canvas.appendChild(item.boxEl);
-    boxesMap.set(item.id, item.boxEl);
+    const { boxData, connections: conns } = undoStack.pop();
+    addBox(boxData.x, boxData.y, boxData.text, boxData.id, boxData.width, boxData.height, false);
+    connections.push(...conns);
     undoBtn.disabled = undoStack.length === 0;
-    drawConnections();
     saveAll();
+    drawConnections();
   });
 
-  // Load saved boxes/connections on start
+  function addConnection(fromId, toId) {
+    // Prevent duplicates
+    if (connections.find(c => (c.fromId === fromId && c.toId === toId) || (c.fromId === toId && c.toId === fromId))) return;
+    connections.push({ fromId, toId });
+  }
+
+  function resizeBoxFont(box) {
+    const content = box.querySelector('.box-content');
+    const maxFontSize = 24;
+    const minFontSize = 6;
+    const paddingVertical = paddingTopPx + paddingBottomPx;
+    let fontSize = maxFontSize;
+
+    // Temporarily set to max font size to calculate scrollHeight correctly
+    content.style.fontSize = fontSize + 'px';
+    content.style.lineHeight = '1.1';
+
+    const availableHeight = box.clientHeight - paddingVertical;
+    while (fontSize > minFontSize && content.scrollHeight > availableHeight) {
+      fontSize -= 1;
+      content.style.fontSize = fontSize + 'px';
+    }
+  }
+
+  // Initial load
   loadAll();
-
-  // Initialize center on start
-  goCenterBtn.click();
-
-  // Autosave every 5 seconds
-  setInterval(() => {
-    saveAll();
-  }, 5000);
+  updateTransform();
 
 </script>
 </body>
