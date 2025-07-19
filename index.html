@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>stringsnthingsv16</title>
+<title>stringsnthingsv17</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
   html, body {
@@ -314,7 +314,9 @@
 
   // Draw connections under boxes
   function drawConnections() {
-    connectionLayer.innerHTML = '';
+    // Clear SVG
+    while (connectionLayer.firstChild) connectionLayer.removeChild(connectionLayer.firstChild);
+
     connections.forEach(({ fromId, toId }) => {
       const boxA = boxesMap.get(fromId);
       const boxB = boxesMap.get(toId);
@@ -389,26 +391,23 @@
     return 'id-' + Math.random().toString(36).substr(2, 9);
   }
 
-  // Adjust font size to fit text inside box content div (simple iterative)
+  // Adjust font size to fill box content area (auto up and down)
   function adjustFontSizeToFit(content, box) {
-    let fontSize = parseInt(window.getComputedStyle(content).fontSize) || 18;
     const maxWidth = box.clientWidth - 10;
     const maxHeight = box.clientHeight - 24; // header + padding approx
-
+    let fontSize = 10; // min start small
     content.style.fontSize = fontSize + 'px';
 
-    while ((content.scrollWidth > maxWidth || content.scrollHeight > maxHeight) && fontSize > 10) {
-      fontSize--;
+    // Increase font size while fits
+    while(true) {
       content.style.fontSize = fontSize + 'px';
-    }
-    while ((content.scrollWidth < maxWidth - 20 && content.scrollHeight < maxHeight - 10) && fontSize < 40) {
+      if (content.scrollWidth > maxWidth || content.scrollHeight > maxHeight) {
+        fontSize--;
+        content.style.fontSize = fontSize + 'px';
+        break;
+      }
+      if (fontSize >= 40) break; // max font size
       fontSize++;
-      content.style.fontSize = fontSize + 'px';
-    }
-    // Final adjust down if overshoot
-    if (content.scrollWidth > maxWidth || content.scrollHeight > maxHeight) {
-      fontSize--;
-      content.style.fontSize = fontSize + 'px';
     }
   }
 
@@ -499,20 +498,21 @@
         function onPointerUp() {
           document.removeEventListener('pointermove', onPointerMove);
           document.removeEventListener('pointerup', onPointerUp);
-          if (save) saveAll();
+          saveAll();
         }
         document.addEventListener('pointermove', onPointerMove);
         document.addEventListener('pointerup', onPointerUp);
       });
     });
 
-    // Dragging boxes
+    // Drag box by header
     let dragOffsetX, dragOffsetY;
     header.addEventListener('pointerdown', e => {
       if (e.target === delBtn || e.target === connectToggle) return;
       e.preventDefault();
       dragOffsetX = e.clientX / scale - parseFloat(box.style.left);
       dragOffsetY = e.clientY / scale - parseFloat(box.style.top);
+
       function onPointerMove(e) {
         box.style.left = (e.clientX / scale - dragOffsetX) + 'px';
         box.style.top = (e.clientY / scale - dragOffsetY) + 'px';
@@ -521,13 +521,13 @@
       function onPointerUp() {
         document.removeEventListener('pointermove', onPointerMove);
         document.removeEventListener('pointerup', onPointerUp);
-        if (save) saveAll();
+        saveAll();
       }
       document.addEventListener('pointermove', onPointerMove);
       document.addEventListener('pointerup', onPointerUp);
     });
 
-    // Delete box
+    // Delete box button
     delBtn.addEventListener('click', e => {
       e.stopPropagation();
       const id = box.dataset.id;
@@ -549,8 +549,8 @@
       undoBtn.disabled = false;
 
       // Remove related connections
-      for (let i = connections.length -1; i >= 0; i--) {
-        if (connections[i].fromId === id || connections[i].toId === id) connections.splice(i,1);
+      for (let i = connections.length - 1; i >= 0; i--) {
+        if (connections[i].fromId === id || connections[i].toId === id) connections.splice(i, 1);
       }
       boxesMap.delete(id);
       box.remove();
@@ -558,7 +558,7 @@
       saveAll();
     });
 
-    // Connect toggle logic
+    // Connect toggle logic (blue dot)
     connectToggle.addEventListener('click', e => {
       e.stopPropagation();
       if (!editMode) return;
@@ -566,33 +566,33 @@
         connectToggle.classList.remove('active');
         connectSource = null;
       } else {
-        // deactivate any other toggles
         document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
         connectToggle.classList.add('active');
         connectSource = box;
       }
     });
 
-    // Clicking on box to create connection if in connect mode and target not source
+    // Click box content area to connect if in connect mode
     box.addEventListener('click', e => {
       if (!editMode || !connectSource) return;
       if (box === connectSource) return;
       const fromId = connectSource.dataset.id;
       const toId = box.dataset.id;
-      // Avoid duplicate connections
+      // Prevent duplicate connections
       if (!connections.find(c => c.fromId === fromId && c.toId === toId)) {
         connections.push({ fromId, toId });
         saveAll();
         drawConnections();
       }
+      // Clear connect mode
       document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
       connectSource = null;
     });
 
-    // Content change auto save + font adjust
+    // Content input event - autosave + font adjust
     content.addEventListener('input', e => {
       adjustFontSizeToFit(content, box);
-      if (save) saveAll();
+      saveAll();
     });
 
     canvas.appendChild(box);
@@ -604,14 +604,13 @@
     return box;
   }
 
-  // Undo delete
+  // Undo button
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
     const action = undoStack.pop();
     if (action.type === 'deleteBox') {
       const { boxData, connections: oldConns } = action.data;
-      const restoredBox = addBox(boxData.x, boxData.y, boxData.text, boxData.id, boxData.width, boxData.height, boxData.fontSize, false);
-      boxesMap.set(boxData.id, restoredBox);
+      addBox(boxData.x, boxData.y, boxData.text, boxData.id, boxData.width, boxData.height, boxData.fontSize, false);
       connections.push(...oldConns);
       drawConnections();
       saveAll();
@@ -619,7 +618,7 @@
     if (undoStack.length === 0) undoBtn.disabled = true;
   });
 
-  // Load saved boxes and connections on startup
+  // Load saved data
   loadAll();
   updateTransform();
 </script>
