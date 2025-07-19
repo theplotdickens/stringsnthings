@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsv12</title>
+  <title>stringsnthingsv13</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -85,7 +85,7 @@
       padding: 6px 8px;
       white-space: pre-wrap;
       font-family: monospace, monospace;
-      overflow: hidden; /* changed from auto */
+      overflow: hidden; /* no scrollbars */
       outline: none;
       cursor: text;
       user-select: text;
@@ -169,7 +169,6 @@
     <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
     <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
-    <button id="deleteConnectionsToggle" class="floatingBtn" disabled style="display:none;">Delete Connections: OFF</button>
   </div>
 
   <div id="zoomDisplay">Zoom: 100%</div>
@@ -180,7 +179,6 @@
     const undoBtn = document.getElementById('undoBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
     const markCenterBtn = document.getElementById('markCenterBtn');
-    const deleteConnectionsToggle = document.getElementById('deleteConnectionsToggle');
     const zoomDisplay = document.getElementById('zoomDisplay');
     const connectionLayer = document.getElementById('connectionLayer');
 
@@ -192,7 +190,6 @@
     const boxesMap = new Map();
 
     let selectedBoxForConnection = null;
-    let deleteConnectionsMode = false;
 
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -200,7 +197,7 @@
     }
 
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn || e.target === deleteConnectionsToggle) return;
+      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -258,7 +255,7 @@
 
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
-      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn || e.target === deleteConnectionsToggle) return;
+      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -284,37 +281,6 @@
       panY = window.innerHeight / 2;
       updateTransform();
     });
-
-    // Removed delete connections toggle functionality and UI
-
-    function smoothAdjustFontSize(contentDiv, box) {
-      const padding = 14; // px padding inside box
-      const maxWidth = box.clientWidth - padding;
-      const maxHeight = box.clientHeight - padding;
-
-      let minSize = 8;
-      let maxSize = 200;
-      let fontSize = minSize;
-
-      while (minSize <= maxSize) {
-        let mid = Math.floor((minSize + maxSize) / 2);
-        contentDiv.style.fontSize = mid + 'px';
-
-        if (contentDiv.scrollWidth <= maxWidth && contentDiv.scrollHeight <= maxHeight) {
-          fontSize = mid;
-          minSize = mid + 1;
-        } else {
-          maxSize = mid - 1;
-        }
-      }
-      contentDiv.style.fontSize = fontSize + 'px';
-    }
-
-    function resetAllToggles() {
-      document.querySelectorAll('.connect-toggle').forEach(btn => {
-        btn.classList.remove('active');
-      });
-    }
 
     function drawConnections() {
       connectionLayer.innerHTML = '';
@@ -350,9 +316,6 @@
         path.setAttribute('stroke', 'black');
         path.setAttribute('stroke-width', '2');
         path.setAttribute('fill', 'none');
-        path.style.cursor = 'pointer';
-
-        // Removed connection click delete handler
 
         connectionLayer.appendChild(path);
       });
@@ -372,7 +335,6 @@
         });
       });
       localStorage.setItem('boxesData', JSON.stringify(boxesData));
-
       localStorage.setItem('connectionsData', JSON.stringify(connections));
     }
 
@@ -390,6 +352,24 @@
 
     function generateId() {
       return 'id-' + Math.random().toString(36).substr(2, 9);
+    }
+
+    function fitTextToBox(contentDiv, box) {
+      const padding = 14; // padding (left+right or top+bottom) in px
+      const maxWidth = box.clientWidth - padding;
+      const maxHeight = box.clientHeight - padding;
+      let fontSize = 8;
+      contentDiv.style.fontSize = fontSize + 'px';
+
+      // Increase font size while text fits within box without scrollbars
+      while (true) {
+        contentDiv.style.fontSize = (fontSize + 1) + 'px';
+        // Using scrollWidth and scrollHeight to check if content fits
+        if (contentDiv.scrollWidth > maxWidth || contentDiv.scrollHeight > maxHeight) break;
+        fontSize++;
+        if (fontSize > 200) break; // max font size limit
+      }
+      contentDiv.style.fontSize = fontSize + 'px';
     }
 
     async function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px', save=true) {
@@ -469,7 +449,7 @@
               let newHeight = startHeight + dy;
               if (newHeight >= 40) box.style.height = newHeight + 'px';
             }
-            smoothAdjustFontSize(content, box);
+            fitTextToBox(content, box);
             drawConnections();
           }
 
@@ -487,7 +467,6 @@
       let dragOffsetX, dragOffsetY;
       header.addEventListener('pointerdown', e => {
         e.preventDefault();
-        if (deleteConnectionsMode) return; // still safe, but this mode hidden
         dragOffsetX = e.clientX - parseFloat(box.style.left) * scale - panX;
         dragOffsetY = e.clientY - parseFloat(box.style.top) * scale - panY;
 
@@ -533,7 +512,6 @@
         });
         undoBtn.disabled = false;
 
-        // Remove connections linked to this box
         for (let i = connections.length - 1; i >= 0; i--) {
           if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
             connections.splice(i, 1);
@@ -545,17 +523,17 @@
         saveAll();
       });
 
-      // Content editable input event
       content.addEventListener('input', () => {
-        smoothAdjustFontSize(content, box);
+        fitTextToBox(content, box);
         saveAll();
       });
 
-      // Initial font scaling
-      smoothAdjustFontSize(content, box);
+      // Initial font fit
+      fitTextToBox(content, box);
 
       boxesMap.set(id, box);
       canvas.appendChild(box);
+      if(save) saveAll();
       return box;
     }
 
@@ -573,7 +551,6 @@
       if (undoStack.length === 0) undoBtn.disabled = true;
     });
 
-    // Load saved boxes and connections
     loadAll();
     updateTransform();
   </script>
