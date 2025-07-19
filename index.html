@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV8</title>
+  <title>stringsnthingsV9</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -169,33 +169,16 @@
     <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
     <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
-    <button id="saveBtn" class="floatingBtn">Save All</button>
   </div>
 
   <div id="zoomDisplay">Zoom: 100%</div>
 
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyCpp42OH-1mTZxu5iq44dmMQc8ahQdvnL0",
-      authDomain: "stringsnthings-65aa0.firebaseapp.com",
-      projectId: "stringsnthings-65aa0",
-      storageBucket: "stringsnthings-65aa0.firebasestorage.app",
-      messagingSenderId: "35780192306",
-      appId: "1:35780192306:web:80aedf9ba9e2ffac0cf42b"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-
     const canvas = document.getElementById('canvas');
     const viewport = document.getElementById('viewport');
     const undoBtn = document.getElementById('undoBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
     const markCenterBtn = document.getElementById('markCenterBtn');
-    const saveBtn = document.getElementById('saveBtn');
     const zoomDisplay = document.getElementById('zoomDisplay');
     const connectionLayer = document.getElementById('connectionLayer');
 
@@ -203,9 +186,10 @@
     let isPanning = false, startX, startY;
 
     const undoStack = [];
-
     let selectedBoxForConnection = null;
     const connections = [];
+
+    const STORAGE_KEY = 'stringsnthings_data';
 
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -213,7 +197,7 @@
     }
 
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn || e.target === saveBtn) return;
+      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -271,7 +255,7 @@
 
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
-      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn || e.target === saveBtn) return;
+      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -292,11 +276,69 @@
       updateTransform();
     });
 
-    const boxesCollection = db.collection('boxes');
-    const connectionsCollection = db.collection('connections');
+    // LocalStorage data helpers
+
+    function saveDataLocally(data) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+
+    function loadDataLocally() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+
+    async function saveBox(box, content) {
+      const id = box.dataset.id;
+      const data = loadDataLocally() || { boxes: {}, connections: [] };
+
+      data.boxes[id] = {
+        x: parseFloat(box.style.left),
+        y: parseFloat(box.style.top),
+        width: box.offsetWidth,
+        height: box.offsetHeight,
+        text: content.textContent,
+        fontSize: content.style.fontSize
+      };
+
+      saveDataLocally(data);
+    }
+
+    async function removeBoxFromDb(id) {
+      const data = loadDataLocally();
+      if (!data) return;
+      delete data.boxes[id];
+      saveDataLocally(data);
+    }
+
+    async function saveConnections() {
+      const data = loadDataLocally() || { boxes: {}, connections: [] };
+      data.connections = connections.slice(); // copy current connections array
+      saveDataLocally(data);
+    }
+
+    async function loadBoxes() {
+      const data = loadDataLocally();
+      if (!data || !data.boxes) return;
+      for (const id in data.boxes) {
+        const b = data.boxes[id];
+        addBox(b.x, b.y, b.text, id, b.width, b.height, b.fontSize);
+      }
+    }
+
+    async function loadConnections() {
+      const data = loadDataLocally();
+      if (!data || !data.connections) return;
+      connections.length = 0;
+      data.connections.forEach(conn => connections.push(conn));
+      drawConnections();
+    }
 
     function smoothAdjustFontSize(contentDiv, box) {
-      // Faster, smoother font scaling by binary search on font size
       const padding = 14;
       const maxWidth = box.clientWidth - padding;
       const maxHeight = box.clientHeight - padding;
@@ -341,15 +383,13 @@
         const endY = by * scale + panY;
 
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        // Quadratic bezier curve with control point offset perpendicular to line
         const dx = endX - startX;
         const dy = endY - startY;
         const distance = Math.sqrt(dx*dx + dy*dy);
         const normX = dx / distance;
         const normY = dy / distance;
-        const cpOffset = 40; // curve bend amount
+        const cpOffset = 40;
 
-        // Perpendicular vector
         const cpX = (startX + endX) / 2 - normY * cpOffset;
         const cpY = (startY + endY) / 2 + normX * cpOffset;
 
@@ -359,38 +399,17 @@
         path.setAttribute('fill', 'none');
         path.style.cursor = 'pointer';
 
-        path.addEventListener('click', async () => {
+        path.addEventListener('click', () => {
           const idx = connections.findIndex(c => c.fromId === fromId && c.toId === toId);
           if (idx !== -1) {
             connections.splice(idx, 1);
-            await saveConnections();
+            saveConnections();
             drawConnections();
           }
         });
 
         connectionLayer.appendChild(path);
       });
-    }
-
-    async function saveConnections() {
-      const batch = db.batch();
-      const snap = await connectionsCollection.get();
-      snap.forEach(doc => batch.delete(doc.ref));
-      connections.forEach(conn => {
-        const docRef = connectionsCollection.doc();
-        batch.set(docRef, { fromId: conn.fromId, toId: conn.toId });
-      });
-      await batch.commit();
-    }
-
-    async function loadConnections() {
-      connections.length = 0;
-      const snapshot = await connectionsCollection.get();
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        connections.push({ id: doc.id, fromId: data.fromId, toId: data.toId });
-      });
-      drawConnections();
     }
 
     async function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px') {
@@ -486,6 +505,7 @@
         }
       });
 
+      // Resize logic
       Object.entries(handles).forEach(([pos, handle]) => {
         handle.addEventListener('pointerdown', e => {
           e.stopPropagation();
@@ -499,71 +519,81 @@
           startClientY = e.clientY;
           handle.setPointerCapture(e.pointerId);
         });
+
         handle.addEventListener('pointermove', e => {
-          if (!handle.hasPointerCapture(e.pointerId)) return;
+          if (!resizing || !handle.hasPointerCapture(e.pointerId)) return;
           let dx = (e.clientX - startClientX) / scale;
           let dy = (e.clientY - startClientY) / scale;
-          let newWidth = startWidth;
-          let newHeight = startHeight;
+
           let newLeft = startXpos;
           let newTop = startYpos;
+          let newWidth = startWidth;
+          let newHeight = startHeight;
 
-          if (resizeDir.includes('e')) {
-            newWidth = Math.max(60, startWidth + dx);
+          if (resizeDir.includes('n')) {
+            newHeight = startHeight - dy;
+            newTop = startYpos + dy;
+            if (newHeight < 40) {
+              newHeight = 40;
+              newTop = startYpos + (startHeight - 40);
+            }
           }
           if (resizeDir.includes('s')) {
-            newHeight = Math.max(40, startHeight + dy);
+            newHeight = startHeight + dy;
+            if (newHeight < 40) newHeight = 40;
           }
           if (resizeDir.includes('w')) {
-            newWidth = Math.max(60, startWidth - dx);
+            newWidth = startWidth - dx;
             newLeft = startXpos + dx;
+            if (newWidth < 80) {
+              newWidth = 80;
+              newLeft = startXpos + (startWidth - 80);
+            }
           }
-          if (resizeDir.includes('n')) {
-            newHeight = Math.max(40, startHeight - dy);
-            newTop = startYpos + dy;
+          if (resizeDir.includes('e')) {
+            newWidth = startWidth + dx;
+            if (newWidth < 80) newWidth = 80;
           }
 
-          box.style.width = newWidth + 'px';
-          box.style.height = newHeight + 'px';
-          box.style.left = newLeft + 'px';
-          box.style.top = newTop + 'px';
+          box.style.left = `${newLeft}px`;
+          box.style.top = `${newTop}px`;
+          box.style.width = `${newWidth}px`;
+          box.style.height = `${newHeight}px`;
 
           smoothAdjustFontSize(content, box);
           drawConnections();
         });
+
         handle.addEventListener('pointerup', async e => {
           if (!handle.hasPointerCapture(e.pointerId)) return;
           handle.releasePointerCapture(e.pointerId);
           resizing = false;
+          resizeDir = null;
           await saveBox(box, content);
+          drawConnections();
         });
       });
 
       delBtn.addEventListener('click', () => {
+        const id = box.dataset.id;
+        if (!id) return;
         undoStack.push({
-          action: 'deleteBox',
-          data: {
-            id: box.dataset.id,
-            x: parseFloat(box.style.left),
-            y: parseFloat(box.style.top),
-            width: box.offsetWidth,
-            height: box.offsetHeight,
-            text: content.textContent,
-            fontSize: content.style.fontSize
-          },
-          connections: connections.filter(c => c.fromId === box.dataset.id || c.toId === box.dataset.id)
+          id,
+          boxEl: box,
+          data: loadDataLocally()?.boxes?.[id] || null,
+          connections: connections.filter(c => c.fromId === id || c.toId === id),
         });
         undoBtn.disabled = false;
 
-        // Remove connections related to box
+        // Remove box and its connections
+        box.remove();
+        // Remove connections related to this box
         for (let i = connections.length - 1; i >= 0; i--) {
-          if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
+          if (connections[i].fromId === id || connections[i].toId === id) {
             connections.splice(i, 1);
           }
         }
-
-        box.remove();
-        saveBoxes();
+        removeBoxFromDb(id);
         saveConnections();
         drawConnections();
       });
@@ -572,87 +602,54 @@
         if (connectToggle.classList.contains('active')) {
           connectToggle.classList.remove('active');
           selectedBoxForConnection = null;
-          return;
+        } else {
+          resetAllToggles();
+          connectToggle.classList.add('active');
+          selectedBoxForConnection = box;
         }
-
-        resetAllToggles();
-        connectToggle.classList.add('active');
-        selectedBoxForConnection = box.dataset.id;
       });
 
-      content.addEventListener('input', () => {
+      content.addEventListener('input', async () => {
         smoothAdjustFontSize(content, box);
-        saveBox(box, content);
+        await saveBox(box, content);
       });
 
       if (!id) {
-        id = crypto.randomUUID();
+        id = 'box-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
       }
       box.dataset.id = id;
 
       canvas.appendChild(box);
+
       smoothAdjustFontSize(content, box);
 
       return box;
     }
 
-    async function saveBox(box, contentDiv) {
-      if (!box.dataset.id) return;
-      const docRef = boxesCollection.doc(box.dataset.id);
-      await docRef.set({
-        x: parseFloat(box.style.left),
-        y: parseFloat(box.style.top),
-        width: box.offsetWidth,
-        height: box.offsetHeight,
-        text: contentDiv.textContent,
-        fontSize: contentDiv.style.fontSize || '16px'
-      });
-    }
-
-    async function saveBoxes() {
-      const batch = db.batch();
-
-      // Clear old boxes
-      const snapshot = await boxesCollection.get();
-      snapshot.forEach(doc => batch.delete(doc.ref));
-
-      const boxes = document.querySelectorAll('.box');
-      boxes.forEach(box => {
-        const content = box.querySelector('.box-content');
-        if (!box.dataset.id) return;
-        batch.set(boxesCollection.doc(box.dataset.id), {
-          x: parseFloat(box.style.left),
-          y: parseFloat(box.style.top),
-          width: box.offsetWidth,
-          height: box.offsetHeight,
-          text: content.textContent,
-          fontSize: content.style.fontSize || '16px'
-        });
-      });
-      await batch.commit();
-    }
-
-    async function loadBoxes() {
-      const snapshot = await boxesCollection.get();
-      for (const doc of snapshot.docs) {
-        const data = doc.data();
-        await addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize);
-      }
-      drawConnections();
-    }
-
-    undoBtn.addEventListener('click', async () => {
+    undoBtn.addEventListener('click', () => {
       if (undoStack.length === 0) return;
       const last = undoStack.pop();
-      if (undoStack.length === 0) undoBtn.disabled = true;
+      if (!last) return;
+      if (last.boxEl && !document.body.contains(last.boxEl)) {
+        canvas.appendChild(last.boxEl);
+        last.boxEl.style.left = last.data?.x + 'px' || '0px';
+        last.boxEl.style.top = last.data?.y + 'px' || '0px';
+        last.boxEl.style.width = last.data?.width + 'px' || '180px';
+        last.boxEl.style.height = last.data?.height + 'px' || '80px';
+        const contentDiv = last.boxEl.querySelector('.box-content');
+        if (contentDiv && last.data?.text) contentDiv.textContent = last.data.text;
+        if (contentDiv && last.data?.fontSize) contentDiv.style.fontSize = last.data.fontSize;
+        last.boxEl.dataset.id = last.id;
 
-      if (last.action === 'deleteBox') {
-        const d = last.data;
-        const box = await addBox(d.x, d.y, d.text, d.id, d.width, d.height, d.fontSize);
+        // Re-add connections
         last.connections.forEach(conn => connections.push(conn));
-        await saveBoxes();
-        await saveConnections();
+
+        saveBox(last.boxEl, last.boxEl.querySelector('.box-content'));
+        saveConnections();
         drawConnections();
+      }
+      if (undoStack.length === 0) {
+        undoBtn.disabled = true;
       }
     });
 
@@ -663,79 +660,46 @@
       updateTransform();
     });
 
-    canvas.addEventListener('click', e => {
-      if (selectedBoxForConnection) {
-        const box = e.target.closest('.box');
-        if (!box) return;
-        if (box.dataset.id === selectedBoxForConnection) return;
-        connections.push({ id: crypto.randomUUID(), fromId: selectedBoxForConnection, toId: box.dataset.id });
-        saveConnections();
-        drawConnections();
+    // Connection drawing logic: 
+    // When a box's connect toggle is active and another box's connect toggle is clicked,
+    // create connection between them.
+
+    viewport.addEventListener('click', e => {
+      if (!selectedBoxForConnection) return;
+      const clickedBox = e.target.closest('.box');
+      if (!clickedBox) return;
+      if (clickedBox === selectedBoxForConnection) return;
+
+      const fromId = selectedBoxForConnection.dataset.id;
+      const toId = clickedBox.dataset.id;
+
+      if (connections.some(c => (c.fromId === fromId && c.toId === toId) || (c.fromId === toId && c.toId === fromId))) {
+        // Connection already exists, do nothing
         resetAllToggles();
         selectedBoxForConnection = null;
-      }
-    });
-
-    // Save button handler
-    saveBtn.addEventListener('click', async () => {
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving...';
-
-      try {
-        // Save all boxes
-        const boxes = document.querySelectorAll('.box');
-        const batchBoxes = db.batch();
-
-        // Clear old boxes first
-        const snapshot = await boxesCollection.get();
-        snapshot.forEach(doc => batchBoxes.delete(doc.ref));
-
-        boxes.forEach(box => {
-          const id = box.dataset.id;
-          if (!id) return;
-          const content = box.querySelector('.box-content');
-          const data = {
-            x: parseFloat(box.style.left),
-            y: parseFloat(box.style.top),
-            width: box.offsetWidth,
-            height: box.offsetHeight,
-            text: content.textContent,
-            fontSize: content.style.fontSize || '16px'
-          };
-          batchBoxes.set(boxesCollection.doc(id), data);
-        });
-
-        await batchBoxes.commit();
-
-        // Save all connections
-        const batchConns = db.batch();
-
-        // Clear old connections first
-        const connsSnap = await connectionsCollection.get();
-        connsSnap.forEach(doc => batchConns.delete(doc.ref));
-
-        connections.forEach(conn => {
-          const docRef = connectionsCollection.doc();
-          batchConns.set(docRef, { fromId: conn.fromId, toId: conn.toId });
-        });
-
-        await batchConns.commit();
-
-        alert('All data saved to Firebase!');
-      } catch (err) {
-        alert('Error saving: ' + err.message);
+        return;
       }
 
-      saveBtn.disabled = false;
-      saveBtn.textContent = 'Save All';
+      const newConnection = {
+        id: 'conn-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+        fromId,
+        toId
+      };
+
+      connections.push(newConnection);
+      saveConnections();
+      drawConnections();
+
+      resetAllToggles();
+      selectedBoxForConnection = null;
     });
 
-    // Initialization
-    (async () => {
-      await loadBoxes();
-      await loadConnections();
-      updateTransform();
-    })();
+    // Load all boxes and connections from localStorage on start
+    loadBoxes().then(() => {
+      loadConnections();
+    });
+
+    updateTransform();
   </script>
 </body>
 </html>
