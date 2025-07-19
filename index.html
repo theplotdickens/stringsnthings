@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>stringsnthingsv15</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>stringsnthingsanothergo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   html, body {
-    margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
+    margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
     touch-action: none;
   }
   #viewport {
@@ -29,7 +29,6 @@
     flex-direction: column;
     cursor: text;
     overflow: hidden;
-    transition: width 0.1s ease, height 0.1s ease;
     z-index: 20;
   }
   .box-header {
@@ -89,7 +88,7 @@
     outline: none;
     cursor: text;
     user-select: text;
-    line-height: 1.2;
+    line-height: 1.1;
     min-height: 24px;
     word-break: break-word;
     box-sizing: border-box;
@@ -154,7 +153,7 @@
     top: 0; left: 0;
     width: 100%; height: 100%;
     pointer-events: none;
-    z-index: 15; /* under boxes which have z-index 20 */
+    z-index: 5; /* UNDER boxes z=20 */
   }
 </style>
 </head>
@@ -311,7 +310,8 @@
   });
 
   function drawConnections() {
-    connectionLayer.innerHTML = '';
+    // Clear SVG paths
+    while(connectionLayer.firstChild) connectionLayer.removeChild(connectionLayer.firstChild);
     connections.forEach(({ fromId, toId }) => {
       const boxA = boxesMap.get(fromId);
       const boxB = boxesMap.get(toId);
@@ -383,14 +383,55 @@
     return 'id-' + Math.random().toString(36).substr(2, 9);
   }
 
-  function adjustFontSizeToFit(contentDiv, box) {
-    // Calculate font size based on box height minus header and padding.
-    // Leave some padding top and bottom.
-    const headerHeight = 18;
-    const paddingV = 12; // top + bottom padding in box-content (6+6)
-    const maxFontSize = box.offsetHeight - headerHeight - paddingV;
-    const fontSizePx = Math.max(10, maxFontSize * 0.6);
-    contentDiv.style.fontSize = fontSizePx + 'px';
+  // NEW: Perfect fitting font size by binary search
+  function fitTextToBox(contentDiv, box) {
+    if (!contentDiv.textContent.trim()) {
+      contentDiv.style.fontSize = '10px';
+      return;
+    }
+    const headerHeight = 18; // box header height
+    const paddingV = 12; // top+bottom padding in contentDiv (6+6)
+    const availableHeight = box.clientHeight - headerHeight - paddingV;
+    const availableWidth = box.clientWidth - 16; // some padding left/right inside contentDiv
+
+    let minFont = 5;
+    let maxFont = 1000;
+    let bestFit = minFont;
+
+    // Use a temporary span to measure
+    let tester = document.createElement('span');
+    tester.style.position = 'absolute';
+    tester.style.visibility = 'hidden';
+    tester.style.whiteSpace = 'pre-wrap';
+    tester.style.fontFamily = 'monospace, monospace';
+    tester.style.lineHeight = '1.1';
+    tester.style.fontWeight = 'normal';
+    tester.style.padding = '0';
+    tester.style.margin = '0';
+    tester.style.border = 'none';
+    tester.style.boxSizing = 'border-box';
+    document.body.appendChild(tester);
+
+    // We'll measure height and width of the text at different font sizes to find max font fitting inside box
+
+    while (minFont <= maxFont) {
+      let mid = Math.floor((minFont + maxFont) / 2);
+      tester.style.fontSize = mid + 'px';
+      tester.style.width = availableWidth + 'px';
+      tester.textContent = contentDiv.textContent;
+
+      const rect = tester.getBoundingClientRect();
+
+      if (rect.height <= availableHeight && rect.width <= availableWidth) {
+        bestFit = mid;
+        minFont = mid + 1;
+      } else {
+        maxFont = mid - 1;
+      }
+    }
+
+    contentDiv.style.fontSize = bestFit + 'px';
+    document.body.removeChild(tester);
   }
 
   function serializeBox(box) {
@@ -426,92 +467,97 @@
   }
 
   function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='18px', save=true) {
+    if (!id) id = generateId();
+    if (boxesMap.has(id)) return; // prevent dupes
+
     const box = document.createElement('div');
-    box.className = 'box';
-    box.style.left = `${x}px`;
-    box.style.top = `${y}px`;
+    box.classList.add('box');
+    box.dataset.id = id;
+    box.style.left = x + 'px';
+    box.style.top = y + 'px';
     box.style.width = width + 'px';
     box.style.height = height + 'px';
-    box.spellcheck = false;
 
-    if (!id) id = generateId();
-    box.dataset.id = id;
-
+    // Header
     const header = document.createElement('div');
     header.className = 'box-header';
 
+    // Delete button
     const delBtn = document.createElement('button');
     delBtn.className = 'delete-btn';
+    delBtn.title = 'Delete box';
     delBtn.textContent = '×';
 
-    header.appendChild(delBtn);
-
+    // Connect toggle
     const connectToggle = document.createElement('button');
     connectToggle.className = 'connect-toggle';
-    if (!editMode) connectToggle.style.display = 'none';
-    header.appendChild(connectToggle);
+    connectToggle.title = 'Connect this box';
 
+    header.appendChild(connectToggle);
+    header.appendChild(delBtn);
+    box.appendChild(header);
+
+    // Content div (contenteditable)
     const content = document.createElement('div');
-    content.contentEditable = editMode;
     content.className = 'box-content';
+    content.contentEditable = editMode;
     content.textContent = text;
     content.style.fontSize = fontSize;
-
-    box.appendChild(header);
     box.appendChild(content);
 
-    ['nw', 'ne', 'sw', 'se'].forEach(pos => {
-      const h = document.createElement('div');
-      h.className = 'resize-handle ' + pos;
-      box.appendChild(h);
+    // Resize handles
+    ['nw','ne','sw','se'].forEach(pos => {
+      const handle = document.createElement('div');
+      handle.className = 'resize-handle ' + pos;
+      box.appendChild(handle);
 
-      let startX, startY, startWidth, startHeight, startLeft, startTop;
-
-      h.addEventListener('pointerdown', e => {
+      handle.addEventListener('pointerdown', e => {
         e.stopPropagation();
+        if (!editMode) return;
         e.preventDefault();
-        startX = e.clientX;
-        startY = e.clientY;
-        startWidth = box.offsetWidth;
-        startHeight = box.offsetHeight;
-        startLeft = parseFloat(box.style.left);
-        startTop = parseFloat(box.style.top);
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startWidth = box.offsetWidth;
+        const startHeight = box.offsetHeight;
+        const startLeft = parseFloat(box.style.left);
+        const startTop = parseFloat(box.style.top);
 
         function onPointerMove(e) {
-          let dx = (e.clientX - startX) / scale;
-          let dy = (e.clientY - startY) / scale;
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+
           if (pos.includes('w')) {
-            let newWidth = startWidth - dx;
+            const newWidth = startWidth - dx;
             if (newWidth >= 80) {
               box.style.width = newWidth + 'px';
-              box.style.left = (startLeft + dx) + 'px';
+              box.style.left = startLeft + dx + 'px';
             }
           }
           if (pos.includes('e')) {
-            let newWidth = startWidth + dx;
+            const newWidth = startWidth + dx;
             if (newWidth >= 80) box.style.width = newWidth + 'px';
           }
           if (pos.includes('n')) {
-            let newHeight = startHeight - dy;
+            const newHeight = startHeight - dy;
             if (newHeight >= 40) {
               box.style.height = newHeight + 'px';
-              box.style.top = (startTop + dy) + 'px';
+              box.style.top = startTop + dy + 'px';
             }
           }
           if (pos.includes('s')) {
-            let newHeight = startHeight + dy;
+            const newHeight = startHeight + dy;
             if (newHeight >= 40) box.style.height = newHeight + 'px';
           }
-          adjustFontSizeToFit(content, box);
+
+          fitTextToBox(content, box);
           drawConnections();
         }
-
         function onPointerUp() {
           window.removeEventListener('pointermove', onPointerMove);
           window.removeEventListener('pointerup', onPointerUp);
           saveAll();
         }
-
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
       });
@@ -548,7 +594,7 @@
       }
     });
 
-    // Dragging box
+    // Drag box header to move box
     let dragStartX, dragStartY, boxStartX, boxStartY;
     header.addEventListener('pointerdown', e => {
       if (!editMode) return;
@@ -560,33 +606,32 @@
       boxStartY = parseFloat(box.style.top);
 
       function onPointerMove(e) {
-        const dx = (e.clientX - dragStartX) / scale;
-        const dy = (e.clientY - dragStartY) / scale;
+        const dx = e.clientX - dragStartX;
+        const dy = e.clientY - dragStartY;
         box.style.left = boxStartX + dx + 'px';
         box.style.top = boxStartY + dy + 'px';
         drawConnections();
       }
-
       function onPointerUp() {
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
         saveAll();
       }
-
       window.addEventListener('pointermove', onPointerMove);
       window.addEventListener('pointerup', onPointerUp);
     });
 
-    // When content changes, save and adjust font size
+    // Update font size on input change
     content.addEventListener('input', () => {
-      adjustFontSizeToFit(content, box);
+      fitTextToBox(content, box);
       saveAll();
     });
 
     canvas.appendChild(box);
     boxesMap.set(id, box);
-    adjustFontSizeToFit(content, box);
+    fitTextToBox(content, box);
     drawConnections();
+
     if(save) saveAll();
   }
 
