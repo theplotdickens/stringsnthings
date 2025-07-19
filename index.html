@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV20</title>
+  <title>stringsnthingsV21</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -34,7 +34,7 @@
     }
     .box-header {
       background: #ddd;
-      padding-left: 24px; /* space for drag handle */
+      padding-left: 28px; /* space for drag handle */
       min-width: 40px;
       min-height: 18px;
       height: 18px;
@@ -55,7 +55,7 @@
       left: 4px;
       top: 50%;
       transform: translateY(-50%);
-      font-size: 16px;
+      font-size: 20px;
       cursor: move;
       user-select: none;
       width: 20px;
@@ -66,14 +66,9 @@
       color: #333;
       white-space: nowrap;
       z-index: 5;
-      font-weight: bold;
-      font-family: monospace, monospace;
-      user-select: none;
     }
     .drag-handle::before {
-      content: "⤧"; /* cross arrows symbol */
-      font-size: 20px;
-      line-height: 1;
+      content: "✥";
     }
     .delete-btn {
       color: red;
@@ -206,7 +201,7 @@
     }
     #footerInfo {
       position: fixed;
-      bottom: 60px;
+      bottom: 96px;
       left: 50%;
       transform: translateX(-50%);
       font-family: monospace, monospace;
@@ -223,6 +218,37 @@
       max-width: 90vw;
       text-align: center;
     }
+    /* How to use popup styles */
+    #howToPopup {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      max-width: 80vw;
+      max-height: 70vh;
+      overflow-y: auto;
+      background: white;
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 16px;
+      font-family: monospace, monospace;
+      font-size: 14px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+      z-index: 2000;
+      display: none;
+    }
+    #howToPopup button.closeBtn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: #333;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
@@ -236,6 +262,24 @@
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
     <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
     <button id="toggleEditModeBtn" class="floatingBtn">Toggle Edit Mode</button>
+    <button id="howToBtn" class="floatingBtn">How to Use</button>
+  </div>
+
+  <div id="howToPopup">
+    <button class="closeBtn" title="Close">×</button>
+    <h2>How to Use stringsnthings</h2>
+    <p>
+      Double click anywhere on the canvas to create a new text box.<br>
+      Drag the ✥ symbol on the top left of each box to move it.<br>
+      Use the ▲ and ▼ buttons on each box header to increase or decrease the font size.<br>
+      Click the blue circle to toggle connections between boxes.<br>
+      Use the resize handles (corners) to resize the boxes.<br>
+      Click × on the box header to delete a box.<br>
+      Use the Undo Delete button to restore the last deleted box.<br>
+      Mark Center saves a point to return to with Go to Center.<br>
+      Toggle Edit Mode enables or disables editing.<br>
+      All changes are saved automatically.<br>
+    </p>
   </div>
 
 <script>
@@ -245,6 +289,9 @@
   const goCenterBtn = document.getElementById('goCenterBtn');
   const markCenterBtn = document.getElementById('markCenterBtn');
   const toggleEditModeBtn = document.getElementById('toggleEditModeBtn');
+  const howToBtn = document.getElementById('howToBtn');
+  const howToPopup = document.getElementById('howToPopup');
+  const footerInfo = document.getElementById('footerInfo');
   const connectionLayer = document.getElementById('connectionLayer');
 
   let scale = 1, panX = 0, panY = 0;
@@ -263,7 +310,7 @@
   }
 
   viewport.addEventListener('pointerdown', e => {
-    if (e.target.closest('.box') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target)) return;
+    if (e.target.closest('.box') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn, howToBtn].includes(e.target)) return;
     isPanning = true;
     const coords = getClientCoords(e);
     startX = coords.x;
@@ -320,7 +367,7 @@
   // Double click to add box
   let lastTap = 0;
   viewport.addEventListener('pointerdown', e => {
-    if ([undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target)) return;
+    if ([undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn, howToBtn].includes(e.target)) return;
     const now = Date.now();
     if (now - lastTap < 400 && !e.target.closest('.box')) {
       const x = (e.clientX - panX) / scale;
@@ -373,6 +420,14 @@
       content.style.cursor = editMode ? 'text' : 'default';
     });
     toggleEditModeBtn.textContent = editMode ? 'Toggle Edit Mode' : 'View Mode';
+  });
+
+  howToBtn.addEventListener('click', () => {
+    howToPopup.style.display = 'block';
+  });
+
+  howToPopup.querySelector('.closeBtn').addEventListener('click', () => {
+    howToPopup.style.display = 'none';
   });
 
   function drawConnections() {
@@ -433,141 +488,171 @@
   }
 
   function loadAll() {
-    const boxesData = JSON.parse(localStorage.getItem('boxesData') || '[]');
+    const boxesDataRaw = localStorage.getItem('boxesData');
+    const connectionsDataRaw = localStorage.getItem('connectionsData');
+    if (!boxesDataRaw) return;
+    const boxesData = JSON.parse(boxesDataRaw);
     boxesData.forEach(b => {
-      addBox(b.x, b.y, b.text, b.id, b.width, b.height, false, b.fontSize);
+      const box = createBoxElement(b.id, b.x, b.y, b.width, b.height, b.text, b.fontSize);
+      canvas.appendChild(box);
+      boxesMap.set(b.id, box);
     });
-
-    const connectionsData = JSON.parse(localStorage.getItem('connectionsData') || '[]');
-    connections.push(...connectionsData);
-
+    if (connectionsDataRaw) {
+      const loadedConnections = JSON.parse(connectionsDataRaw);
+      loadedConnections.forEach(conn => {
+        connections.push(conn);
+      });
+    }
     drawConnections();
   }
 
-  function generateId() {
-    return 'id-' + Math.random().toString(36).substr(2, 9);
+  function addBox(x, y) {
+    const id = 'box_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    const box = createBoxElement(id, x, y, 120, 40, '', '14px');
+    canvas.appendChild(box);
+    boxesMap.set(id, box);
+    saveAll();
   }
 
-  function addBox(x, y, text = 'Text box', id = null, width=180, height=80, save=true, fontSize = null) {
+  function createBoxElement(id, x, y, width, height, text, fontSize) {
     const box = document.createElement('div');
     box.className = 'box';
-    box.style.left = `${x}px`;
-    box.style.top = `${y}px`;
+    box.dataset.id = id;
+    box.style.left = x + 'px';
+    box.style.top = y + 'px';
     box.style.width = width + 'px';
     box.style.height = height + 'px';
-    box.spellcheck = false;
 
-    if (!id) id = generateId();
-    box.dataset.id = id;
-
+    // Header
     const header = document.createElement('div');
     header.className = 'box-header';
 
-    // Drag handle with cross arrows symbol
+    // Drag handle
     const dragHandle = document.createElement('div');
     dragHandle.className = 'drag-handle';
-    dragHandle.title = 'Drag handle';
-
     header.appendChild(dragHandle);
 
+    // Font size increase button
+    const fontIncBtn = document.createElement('button');
+    fontIncBtn.className = 'font-size-btn';
+    fontIncBtn.textContent = '▲';
+    fontIncBtn.title = 'Increase font size';
+    header.appendChild(fontIncBtn);
+
+    // Font size decrease button
+    const fontDecBtn = document.createElement('button');
+    fontDecBtn.className = 'font-size-btn';
+    fontDecBtn.textContent = '▼';
+    fontDecBtn.title = 'Decrease font size';
+    header.appendChild(fontDecBtn);
+
+    // Connection toggle button
     const connectToggle = document.createElement('button');
     connectToggle.className = 'connect-toggle';
-    connectToggle.title = 'Toggle Connection';
-
-    const decreaseBtn = document.createElement('button');
-    decreaseBtn.className = 'font-size-btn';
-    decreaseBtn.textContent = '▼';
-    decreaseBtn.title = 'Decrease font size';
-
-    const increaseBtn = document.createElement('button');
-    increaseBtn.className = 'font-size-btn';
-    increaseBtn.textContent = '▲';
-    increaseBtn.title = 'Increase font size';
-
-    const delBtn = document.createElement('button');
-    delBtn.className = 'delete-btn';
-    delBtn.textContent = '×';
-
+    connectToggle.title = 'Toggle connection';
     header.appendChild(connectToggle);
-    header.appendChild(decreaseBtn);
-    header.appendChild(increaseBtn);
-    header.appendChild(delBtn);
+
+    // Delete button
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'delete-btn';
+    deleteBtn.title = 'Delete box';
+    deleteBtn.textContent = '×';
+    header.appendChild(deleteBtn);
 
     box.appendChild(header);
 
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'box-content';
-    contentDiv.contentEditable = editMode;
-    contentDiv.textContent = text;
-    if (fontSize) {
-      contentDiv.style.fontSize = fontSize;
-    } else {
-      contentDiv.style.fontSize = '14px';
-    }
-    box.appendChild(contentDiv);
+    // Content
+    const content = document.createElement('div');
+    content.className = 'box-content';
+    content.contentEditable = editMode;
+    content.textContent = text || '';
+    content.style.fontSize = fontSize || '14px';
+    box.appendChild(content);
 
     // Resize handles
     ['nw', 'ne', 'sw', 'se'].forEach(pos => {
-      const handle = document.createElement('div');
-      handle.className = `resize-handle ${pos}`;
-      box.appendChild(handle);
-      handle.addEventListener('pointerdown', e => {
-        e.stopPropagation();
-        if (!editMode) return;
-        draggingResize = {
-          box,
-          handlePos: pos,
-          startX: e.clientX,
-          startY: e.clientY,
-          startWidth: box.offsetWidth,
-          startHeight: box.offsetHeight,
-          startLeft: parseFloat(box.style.left),
-          startTop: parseFloat(box.style.top),
-        };
-        document.addEventListener('pointermove', onResizeMove);
-        document.addEventListener('pointerup', onResizeEnd);
-        box.setPointerCapture(e.pointerId);
-      });
+      const resizeHandle = document.createElement('div');
+      resizeHandle.className = 'resize-handle ' + pos;
+      box.appendChild(resizeHandle);
     });
 
-    canvas.appendChild(box);
-    boxesMap.set(id, box);
+    // Event handlers:
 
-    // Dragging variables
+    // Dragging box
     let dragging = false;
-    let dragOffsetX = 0;
-    let dragOffsetY = 0;
+    let dragStartX, dragStartY, boxStartX, boxStartY;
 
     dragHandle.addEventListener('pointerdown', e => {
       if (!editMode) return;
-      dragging = true;
-      dragOffsetX = e.clientX - (box.offsetLeft * scale + panX);
-      dragOffsetY = e.clientY - (box.offsetTop * scale + panY);
-      box.setPointerCapture(e.pointerId);
       e.stopPropagation();
+      dragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      boxStartX = parseFloat(box.style.left);
+      boxStartY = parseFloat(box.style.top);
+      dragHandle.setPointerCapture(e.pointerId);
     });
 
     dragHandle.addEventListener('pointermove', e => {
       if (!dragging) return;
-      const newX = (e.clientX - panX - dragOffsetX) / scale;
-      const newY = (e.clientY - panY - dragOffsetY) / scale;
-      box.style.left = newX + 'px';
-      box.style.top = newY + 'px';
+      e.preventDefault();
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      box.style.left = boxStartX + dx / scale + 'px';
+      box.style.top = boxStartY + dy / scale + 'px';
       drawConnections();
     });
 
     dragHandle.addEventListener('pointerup', e => {
       if (!dragging) return;
       dragging = false;
-      box.releasePointerCapture(e.pointerId);
+      dragHandle.releasePointerCapture(e.pointerId);
       saveAll();
     });
 
-    delBtn.addEventListener('click', e => {
+    // Font size buttons
+    fontIncBtn.addEventListener('click', e => {
       e.stopPropagation();
-      deleteBox(id);
+      let size = parseInt(window.getComputedStyle(content).fontSize);
+      if (size < 48) {
+        size += 2;
+        content.style.fontSize = size + 'px';
+        saveAll();
+      }
+    });
+    fontDecBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      let size = parseInt(window.getComputedStyle(content).fontSize);
+      if (size > 8) {
+        size -= 2;
+        content.style.fontSize = size + 'px';
+        saveAll();
+      }
     });
 
+    // Delete button
+    deleteBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      undoStack.push({
+        box: box,
+        connections: connections.filter(c => c.fromId === id || c.toId === id)
+      });
+      undoBtn.disabled = false;
+
+      // Remove connections related to this box
+      for (let i = connections.length - 1; i >= 0; i--) {
+        if (connections[i].fromId === id || connections[i].toId === id) {
+          connections.splice(i, 1);
+        }
+      }
+
+      boxesMap.delete(id);
+      box.remove();
+      drawConnections();
+      saveAll();
+    });
+
+    // Connect toggle button
     connectToggle.addEventListener('click', e => {
       e.stopPropagation();
       if (!editMode) return;
@@ -578,251 +663,115 @@
         connectionStartBoxId = null;
         connectToggle.classList.remove('active');
       } else {
-        connections.push({ fromId: connectionStartBoxId, toId: id });
-        connectionStartBoxId = null;
+        // Check if connection already exists
+        const existing = connections.find(c =>
+          (c.fromId === connectionStartBoxId && c.toId === id) ||
+          (c.toId === connectionStartBoxId && c.fromId === id)
+        );
+        if (!existing) {
+          connections.push({ fromId: connectionStartBoxId, toId: id });
+        }
+        // Remove active state on all connect toggles
         document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
+        connectionStartBoxId = null;
         drawConnections();
         saveAll();
       }
     });
 
-    decreaseBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      adjustFontSize(contentDiv, -1);
-    });
-    increaseBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      adjustFontSize(contentDiv, 1);
+    // Resize handles
+    let resizing = false;
+    let resizeDir = '';
+    let startWidth, startHeight, startLeft, startTop;
+    let resizeStartX, resizeStartY;
+
+    box.querySelectorAll('.resize-handle').forEach(handle => {
+      handle.addEventListener('pointerdown', e => {
+        if (!editMode) return;
+        e.stopPropagation();
+        resizing = true;
+        resizeDir = handle.classList[1];
+        resizeStartX = e.clientX;
+        resizeStartY = e.clientY;
+        startWidth = box.offsetWidth;
+        startHeight = box.offsetHeight;
+        startLeft = parseFloat(box.style.left);
+        startTop = parseFloat(box.style.top);
+        handle.setPointerCapture(e.pointerId);
+      });
     });
 
-    contentDiv.addEventListener('input', () => {
+    document.addEventListener('pointermove', e => {
+      if (!resizing) return;
+      e.preventDefault();
+      let dx = (e.clientX - resizeStartX) / scale;
+      let dy = (e.clientY - resizeStartY) / scale;
+
+      if (resizeDir.includes('n')) {
+        let newHeight = startHeight - dy;
+        let newTop = startTop + dy;
+        if (newHeight >= 40) {
+          box.style.height = newHeight + 'px';
+          box.style.top = newTop + 'px';
+        }
+      }
+      if (resizeDir.includes('s')) {
+        let newHeight = startHeight + dy;
+        if (newHeight >= 40) {
+          box.style.height = newHeight + 'px';
+        }
+      }
+      if (resizeDir.includes('w')) {
+        let newWidth = startWidth - dx;
+        let newLeft = startLeft + dx;
+        if (newWidth >= 80) {
+          box.style.width = newWidth + 'px';
+          box.style.left = newLeft + 'px';
+        }
+      }
+      if (resizeDir.includes('e')) {
+        let newWidth = startWidth + dx;
+        if (newWidth >= 80) {
+          box.style.width = newWidth + 'px';
+        }
+      }
+      drawConnections();
+    });
+
+    document.addEventListener('pointerup', e => {
+      if (resizing) {
+        resizing = false;
+        saveAll();
+      }
+      if (dragging) {
+        dragging = false;
+        saveAll();
+      }
+    });
+
+    // Save content changes after edits
+    content.addEventListener('input', () => {
       saveAll();
     });
-
-    if(save) saveAll();
 
     return box;
   }
 
-  let draggingResize = null;
-
-  function onResizeMove(e) {
-    if (!draggingResize) return;
-    const { box, handlePos, startX, startY, startWidth, startHeight, startLeft, startTop } = draggingResize;
-
-    let dx = (e.clientX - startX) / scale;
-    let dy = (e.clientY - startY) / scale;
-
-    let newWidth = startWidth;
-    let newHeight = startHeight;
-    let newLeft = startLeft;
-    let newTop = startTop;
-
-    if (handlePos.includes('e')) {
-      newWidth = Math.max(50, startWidth + dx);
-    }
-    if (handlePos.includes('s')) {
-      newHeight = Math.max(30, startHeight + dy);
-    }
-    if (handlePos.includes('w')) {
-      newWidth = Math.max(50, startWidth - dx);
-      newLeft = startLeft + dx;
-    }
-    if (handlePos.includes('n')) {
-      newHeight = Math.max(30, startHeight - dy);
-      newTop = startTop + dy;
-    }
-
-    box.style.width = newWidth + 'px';
-    box.style.height = newHeight + 'px';
-    box.style.left = newLeft + 'px';
-    box.style.top = newTop + 'px';
-
-    drawConnections();
-  }
-
-  function onResizeEnd(e) {
-    if (!draggingResize) return;
-    draggingResize.box.releasePointerCapture(e.pointerId);
-    draggingResize = null;
-    saveAll();
-    document.removeEventListener('pointermove', onResizeMove);
-    document.removeEventListener('pointerup', onResizeEnd);
-  }
-
-  function deleteBox(id) {
-    const box = boxesMap.get(id);
-    if (!box) return;
-    undoStack.push({
-      id,
-      html: box.outerHTML,
-      connections: connections.filter(c => c.fromId === id || c.toId === id),
-    });
-    undoBtn.disabled = false;
-
-    // Remove box element and from map
-    box.remove();
-    boxesMap.delete(id);
-
-    // Remove connections involving this box
-    for (let i = connections.length -1; i >=0; i--) {
-      if (connections[i].fromId === id || connections[i].toId === id) {
-        connections.splice(i,1);
-      }
-    }
-    drawConnections();
-    saveAll();
-  }
-
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
-    const lastDeleted = undoStack.pop();
-    if (!lastDeleted) return;
-
-    // Restore box element
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = lastDeleted.html;
-    const restoredBox = tempDiv.firstElementChild;
-    canvas.appendChild(restoredBox);
-    boxesMap.set(lastDeleted.id, restoredBox);
-
-    // Restore connections
-    lastDeleted.connections.forEach(conn => {
-      connections.push(conn);
-    });
-
+    const last = undoStack.pop();
+    canvas.appendChild(last.box);
+    boxesMap.set(last.box.dataset.id, last.box);
+    last.connections.forEach(conn => connections.push(conn));
     drawConnections();
     saveAll();
-
     if (undoStack.length === 0) undoBtn.disabled = true;
-
-    // Reattach event listeners for restored box
-    reattachBoxEvents(restoredBox);
   });
 
-  function reattachBoxEvents(box) {
-    const id = box.dataset.id;
-    const dragHandle = box.querySelector('.drag-handle');
-    const delBtn = box.querySelector('.delete-btn');
-    const connectToggle = box.querySelector('.connect-toggle');
-    const decreaseBtn = box.querySelector('.font-size-btn:nth-of-type(1)');
-    const increaseBtn = box.querySelector('.font-size-btn:nth-of-type(2)');
-    const contentDiv = box.querySelector('.box-content');
-
-    // Remove old listeners if any (safeguard)
-    dragHandle.replaceWith(dragHandle.cloneNode(true));
-    delBtn.replaceWith(delBtn.cloneNode(true));
-    connectToggle.replaceWith(connectToggle.cloneNode(true));
-    decreaseBtn.replaceWith(decreaseBtn.cloneNode(true));
-    increaseBtn.replaceWith(increaseBtn.cloneNode(true));
-    contentDiv.replaceWith(contentDiv.cloneNode(true));
-
-    // Re-get after clone
-    const newDragHandle = box.querySelector('.drag-handle');
-    const newDelBtn = box.querySelector('.delete-btn');
-    const newConnectToggle = box.querySelector('.connect-toggle');
-    const newDecreaseBtn = box.querySelector('.font-size-btn:nth-of-type(1)');
-    const newIncreaseBtn = box.querySelector('.font-size-btn:nth-of-type(2)');
-    const newContentDiv = box.querySelector('.box-content');
-
-    // Dragging variables
-    let dragging = false;
-    let dragOffsetX = 0;
-    let dragOffsetY = 0;
-
-    newDragHandle.addEventListener('pointerdown', e => {
-      if (!editMode) return;
-      dragging = true;
-      dragOffsetX = e.clientX - (box.offsetLeft * scale + panX);
-      dragOffsetY = e.clientY - (box.offsetTop * scale + panY);
-      box.setPointerCapture(e.pointerId);
-      e.stopPropagation();
-    });
-    newDragHandle.addEventListener('pointermove', e => {
-      if (!dragging) return;
-      const newX = (e.clientX - panX - dragOffsetX) / scale;
-      const newY = (e.clientY - panY - dragOffsetY) / scale;
-      box.style.left = newX + 'px';
-      box.style.top = newY + 'px';
-      drawConnections();
-    });
-    newDragHandle.addEventListener('pointerup', e => {
-      if (!dragging) return;
-      dragging = false;
-      box.releasePointerCapture(e.pointerId);
-      saveAll();
-    });
-
-    newDelBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      deleteBox(id);
-    });
-    newConnectToggle.addEventListener('click', e => {
-      e.stopPropagation();
-      if (!editMode) return;
-      if (connectionStartBoxId === null) {
-        connectionStartBoxId = id;
-        newConnectToggle.classList.add('active');
-      } else if (connectionStartBoxId === id) {
-        connectionStartBoxId = null;
-        newConnectToggle.classList.remove('active');
-      } else {
-        connections.push({ fromId: connectionStartBoxId, toId: id });
-        connectionStartBoxId = null;
-        document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
-        drawConnections();
-        saveAll();
-      }
-    });
-
-    newDecreaseBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      adjustFontSize(newContentDiv, -1);
-    });
-    newIncreaseBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      adjustFontSize(newContentDiv, 1);
-    });
-
-    newContentDiv.addEventListener('input', () => {
-      saveAll();
-    });
-
-    // Resize handles listeners
-    ['nw', 'ne', 'sw', 'se'].forEach(pos => {
-      const handle = box.querySelector(`.resize-handle.${pos}`);
-      handle.addEventListener('pointerdown', e => {
-        e.stopPropagation();
-        if (!editMode) return;
-        draggingResize = {
-          box,
-          handlePos: pos,
-          startX: e.clientX,
-          startY: e.clientY,
-          startWidth: box.offsetWidth,
-          startHeight: box.offsetHeight,
-          startLeft: parseFloat(box.style.left),
-          startTop: parseFloat(box.style.top),
-        };
-        document.addEventListener('pointermove', onResizeMove);
-        document.addEventListener('pointerup', onResizeEnd);
-        box.setPointerCapture(e.pointerId);
-      });
-    });
-
-  }
-
-  function adjustFontSize(contentDiv, delta) {
-    let fs = parseInt(window.getComputedStyle(contentDiv).fontSize);
-    fs = Math.min(48, Math.max(8, fs + delta));
-    contentDiv.style.fontSize = fs + 'px';
-    saveAll();
-  }
-
+  // Initial load
   loadAll();
-
-  // Initial state
   updateTransform();
+  toggleEditModeBtn.click(); // to set proper UI
 
 </script>
 </body>
