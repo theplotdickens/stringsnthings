@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsv41</title>
+  <title>stringsnthingsv50-fixed</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -82,8 +82,8 @@
     }
     .box-content {
       flex: 1;
-      padding-top: var(--padding-top, 4px);
-      padding-bottom: var(--padding-bottom, 4px);
+      padding-top: 2px;
+      padding-bottom: 2px;
       padding-left: 6px;
       padding-right: 6px;
       white-space: pre-wrap;
@@ -367,7 +367,6 @@
         width: box.offsetWidth,
         height: box.offsetHeight,
         text: contentDiv.textContent,
-        fontSize: contentDiv.style.fontSize || '18px',
       });
     });
     localStorage.setItem('boxesData', JSON.stringify(boxesData));
@@ -377,7 +376,7 @@
   function loadAll() {
     const boxesData = JSON.parse(localStorage.getItem('boxesData') || '[]');
     boxesData.forEach(b => {
-      addBox(b.x, b.y, b.text, b.id, b.width, b.height, b.fontSize, false);
+      addBox(b.x, b.y, b.text, b.id, b.width, b.height, false);
     });
 
     const connectionsData = JSON.parse(localStorage.getItem('connectionsData') || '[]');
@@ -390,7 +389,7 @@
     return 'id-' + Math.random().toString(36).substr(2, 9);
   }
 
-  function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='18px', save=true) {
+  function addBox(x, y, text = 'Text box', id = null, width=180, height=80, save=true) {
     const box = document.createElement('div');
     box.className = 'box';
     box.style.left = `${x}px`;
@@ -424,10 +423,6 @@
     content.contentEditable = editMode;
     content.className = 'box-content';
     content.textContent = text;
-
-    // Set adjustable padding CSS vars for this content div
-    content.style.setProperty('--padding-top', paddingTopPx + 'px');
-    content.style.setProperty('--padding-bottom', paddingBottomPx + 'px');
 
     box.appendChild(header);
     box.appendChild(content);
@@ -489,69 +484,58 @@
       });
     });
 
-    // Dragging the whole box except on header and resize handles
-    let dragStartX, dragStartY, boxStartLeft, boxStartTop;
+    // Dragging the whole box except on header and resize handles and content
+    let dragStartX, dragStartY, boxStartLeft, boxStartTop, dragging = false;
+
     box.addEventListener('pointerdown', e => {
-      if (!editMode) return;
-      if (e.target.closest('.box-header') || e.target.classList.contains('resize-handle') || e.target === content) return;
+      if (e.target.closest('.delete-btn') || e.target.closest('.connect-toggle') || e.target.classList.contains('resize-handle') || e.target === box.querySelector('.box-content')) return;
+
       e.preventDefault();
+      dragging = true;
       dragStartX = e.clientX;
       dragStartY = e.clientY;
       boxStartLeft = parseFloat(box.style.left);
       boxStartTop = parseFloat(box.style.top);
+      box.style.cursor = 'grabbing';
 
-      function onDragMove(e) {
+      function onMove(e) {
+        if (!dragging) return;
         let dx = (e.clientX - dragStartX) / scale;
         let dy = (e.clientY - dragStartY) / scale;
-        box.style.left = (boxStartLeft + dx) + 'px';
-        box.style.top = (boxStartTop + dy) + 'px';
+        box.style.left = boxStartLeft + dx + 'px';
+        box.style.top = boxStartTop + dy + 'px';
         drawConnections();
       }
 
-      function onDragEnd() {
-        window.removeEventListener('pointermove', onDragMove);
-        window.removeEventListener('pointerup', onDragEnd);
+      function onUp() {
+        dragging = false;
+        box.style.cursor = 'text';
         saveAll();
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
       }
 
-      window.addEventListener('pointermove', onDragMove);
-      window.addEventListener('pointerup', onDragEnd);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
     });
 
-    delBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      undoStack.push({
-        id: box.dataset.id,
-        x: parseFloat(box.style.left),
-        y: parseFloat(box.style.top),
-        width: box.offsetWidth,
-        height: box.offsetHeight,
-        text: content.textContent,
-        fontSize: content.style.fontSize,
-      });
+    // Delete button
+    delBtn.addEventListener('click', () => {
+      undoStack.push({ id: box.dataset.id, boxEl: box });
       undoBtn.disabled = false;
-      boxesMap.delete(box.dataset.id);
-      box.remove();
-      // Remove connections from or to this box
-      for (let i = connections.length - 1; i >= 0; i--) {
-        if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
-          connections.splice(i, 1);
+      connections.forEach((conn, idx) => {
+        if (conn.fromId === box.dataset.id || conn.toId === box.dataset.id) {
+          connections.splice(idx, 1);
         }
-      }
+      });
+      box.remove();
+      boxesMap.delete(box.dataset.id);
       drawConnections();
       saveAll();
     });
 
-    undoBtn.addEventListener('click', () => {
-      if (undoStack.length === 0) return;
-      const last = undoStack.pop();
-      addBox(last.x, last.y, last.text, last.id, last.width, last.height, last.fontSize, false);
-      undoBtn.disabled = undoStack.length === 0;
-      saveAll();
-    });
-
-    connectToggle.addEventListener('click', e => {
-      e.stopPropagation();
+    // Connect toggle
+    connectToggle.addEventListener('click', () => {
       if (!connectionStartBoxId) {
         connectionStartBoxId = box.dataset.id;
         connectToggle.classList.add('active');
@@ -559,25 +543,30 @@
         connectionStartBoxId = null;
         connectToggle.classList.remove('active');
       } else {
-        // Create connection from connectionStartBoxId to this box
         connections.push({ fromId: connectionStartBoxId, toId: box.dataset.id });
-        // Reset all toggles
-        document.querySelectorAll('.connect-toggle.active').forEach(t => t.classList.remove('active'));
         connectionStartBoxId = null;
+        document.querySelectorAll('.connect-toggle.active').forEach(t => t.classList.remove('active'));
         drawConnections();
         saveAll();
       }
     });
 
+    // Text input event to resize font and save
     content.addEventListener('input', () => {
       resizeBoxFont(box);
       saveAll();
     });
 
-    // Initial font resize
-    box.style.fontSize = '18px'; // default
+    // Prevent newlines on Enter in content editable, but allow Shift+Enter for newline
+    content.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+      }
+    });
+
     canvas.appendChild(box);
-    boxesMap.set(box.dataset.id, box);
+    boxesMap.set(id, box);
+
     resizeBoxFont(box);
 
     if (save) saveAll();
@@ -585,71 +574,68 @@
     return box;
   }
 
-  // Resize font to fill the box width and height, with binary search approach
   function resizeBoxFont(box) {
     const content = box.querySelector('.box-content');
-    const paddingTop = paddingTopPx;
-    const paddingBottom = paddingBottomPx;
-
     if (!content) return;
-    // Remove inline font-size to reset if any
-    content.style.fontSize = '';
 
-    const boxWidth = box.clientWidth - 12; // padding left/right 6 + 6
-    const boxHeight = box.clientHeight - (paddingTop + paddingBottom);
+    const maxFontSize = 300;
+    const minFontSize = 6;
 
-    if (boxWidth <= 0 || boxHeight <= 0) {
-      content.style.fontSize = '12px';
-      return;
-    }
+    // We'll try to find max font size that fits the box content
 
-    let min = 4, max = 200;
-    let bestSize = min;
+    const boxWidth = box.clientWidth - 12;  // some padding inside content div
+    const boxHeight = box.clientHeight - 22 - paddingTopPx - paddingBottomPx; // minus header and padding
 
-    // Prepare test div offscreen
-    let testDiv = document.getElementById('fontTestDiv');
-    if (!testDiv) {
-      testDiv = document.createElement('div');
-      testDiv.id = 'fontTestDiv';
-      testDiv.style.position = 'fixed';
-      testDiv.style.visibility = 'hidden';
-      testDiv.style.whiteSpace = 'pre-wrap';
-      testDiv.style.fontFamily = 'monospace, monospace';
-      testDiv.style.padding = '0';
-      testDiv.style.margin = '0';
-      testDiv.style.lineHeight = '1.1';
-      testDiv.style.width = boxWidth + 'px';
-      testDiv.style.boxSizing = 'border-box';
-      document.body.appendChild(testDiv);
-    }
-    testDiv.style.width = boxWidth + 'px';
-    testDiv.style.padding = '0';
-    testDiv.textContent = content.textContent || ' '; // fallback to space
+    if (boxWidth <= 0 || boxHeight <= 0) return;
 
-    while (min <= max) {
-      let mid = Math.floor((min + max) / 2);
-      testDiv.style.fontSize = mid + 'px';
-      const height = testDiv.scrollHeight;
-      const width = testDiv.scrollWidth;
+    const testSpan = document.createElement('span');
+    testSpan.style.position = 'absolute';
+    testSpan.style.visibility = 'hidden';
+    testSpan.style.whiteSpace = 'pre-wrap';
+    testSpan.style.fontFamily = content.style.fontFamily || 'monospace';
+    testSpan.style.width = boxWidth + 'px';
+    testSpan.style.lineHeight = '1.1';
+    testSpan.style.padding = '0';
+    testSpan.style.margin = '0';
+    testSpan.style.boxSizing = 'border-box';
 
-      if (height <= boxHeight && width <= boxWidth) {
-        bestSize = mid;
-        min = mid + 1;
-      } else {
-        max = mid - 1;
+    testSpan.textContent = content.textContent;
+    document.body.appendChild(testSpan);
+
+    let fontSize = maxFontSize;
+
+    while (fontSize > minFontSize) {
+      testSpan.style.fontSize = fontSize + 'px';
+      if (testSpan.scrollWidth <= boxWidth && testSpan.scrollHeight <= boxHeight) {
+        break;
       }
+      fontSize--;
     }
-    content.style.fontSize = bestSize + 'px';
+
+    document.body.removeChild(testSpan);
+    content.style.fontSize = fontSize + 'px';
   }
 
-  // Resize fonts on window resize for all boxes
-  window.addEventListener('resize', () => {
-    boxesMap.forEach(box => resizeBoxFont(box));
+  undoBtn.addEventListener('click', () => {
+    if (undoStack.length === 0) return;
+    const item = undoStack.pop();
+    canvas.appendChild(item.boxEl);
+    boxesMap.set(item.id, item.boxEl);
+    undoBtn.disabled = undoStack.length === 0;
+    drawConnections();
+    saveAll();
   });
 
-  // Load saved boxes on start
+  // Load saved boxes/connections on start
   loadAll();
-  updateTransform();
+
+  // Initialize center on start
+  goCenterBtn.click();
+
+  // Autosave every 5 seconds
+  setInterval(() => {
+    saveAll();
+  }, 5000);
 
 </script>
 </body>
