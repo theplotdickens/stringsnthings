@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingod</title>
+  <title>stringsnthingsv11</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -174,22 +174,7 @@
 
   <div id="zoomDisplay">Zoom: 100%</div>
 
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyCpp42OH-1mTZxu5iq44dmMQc8ahQdvnL0",
-      authDomain: "stringsnthings-65aa0.firebaseapp.com",
-      projectId: "stringsnthings-65aa0",
-      storageBucket: "stringsnthings-65aa0.firebasestorage.app",
-      messagingSenderId: "35780192306",
-      appId: "1:35780192306:web:80aedf9ba9e2ffac0cf42b"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-
     const canvas = document.getElementById('canvas');
     const viewport = document.getElementById('viewport');
     const undoBtn = document.getElementById('undoBtn');
@@ -371,12 +356,14 @@
         path.setAttribute('fill', 'none');
         path.style.cursor = deleteConnectionsMode ? 'crosshair' : 'pointer';
 
-        path.addEventListener('click', async () => {
+        path.addEventListener('click', () => {
           if (!deleteConnectionsMode) return;
           const idx = connections.findIndex(c => c.fromId === fromId && c.toId === toId);
           if (idx !== -1) {
+            undoStack.push({ type: 'connection', data: connections[idx] });
+            undoBtn.disabled = false;
             connections.splice(idx, 1);
-            await saveConnections();
+            saveAll();
             drawConnections();
           }
         });
@@ -385,25 +372,12 @@
       });
     }
 
-    async function saveConnections() {
-      const batch = db.batch();
-      const snap = await db.collection('connections').get();
-      snap.forEach(doc => batch.delete(doc.ref));
-      connections.forEach(conn => {
-        const docRef = db.collection('connections').doc();
-        batch.set(docRef, { fromId: conn.fromId, toId: conn.toId });
-      });
-      await batch.commit();
-    }
-
-    async function saveBoxes() {
-      const batch = db.batch();
-      const snap = await db.collection('boxes').get();
-      snap.forEach(doc => batch.delete(doc.ref));
-      boxesMap.forEach((box) => {
-        const id = box.dataset.id;
-        const docRef = db.collection('boxes').doc(id);
-        batch.set(docRef, {
+    function saveAll() {
+      // Save boxes
+      const boxesData = [];
+      boxesMap.forEach(box => {
+        boxesData.push({
+          id: box.dataset.id,
           x: parseFloat(box.style.left),
           y: parseFloat(box.style.top),
           width: box.offsetWidth,
@@ -412,20 +386,23 @@
           fontSize: box.querySelector('.box-content').style.fontSize || '16px',
         });
       });
-      await batch.commit();
+      localStorage.setItem('boxesData', JSON.stringify(boxesData));
+
+      // Save connections
+      localStorage.setItem('connectionsData', JSON.stringify(connections));
     }
 
-    async function loadData() {
-      const boxesSnapshot = await db.collection('boxes').get();
-      boxesSnapshot.forEach(doc => {
-        const data = doc.data();
-        addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize);
+    function loadAll() {
+      // Load boxes
+      const boxesData = JSON.parse(localStorage.getItem('boxesData') || '[]');
+      boxesData.forEach(b => {
+        addBox(b.x, b.y, b.text, b.id, b.width, b.height, b.fontSize, false);
       });
-      const connectionsSnapshot = await db.collection('connections').get();
-      connectionsSnapshot.forEach(doc => {
-        const data = doc.data();
-        connections.push({ fromId: data.fromId, toId: data.toId });
-      });
+
+      // Load connections
+      const connectionsData = JSON.parse(localStorage.getItem('connectionsData') || '[]');
+      connections.push(...connectionsData);
+
       drawConnections();
     }
 
@@ -433,7 +410,7 @@
       return 'id-' + Math.random().toString(36).substr(2, 9);
     }
 
-    async function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px') {
+    async function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px', save=true) {
       const box = document.createElement('div');
       box.className = 'box';
       box.style.left = `${x}px`;
@@ -517,7 +494,7 @@
           function onPointerUp(e) {
             window.removeEventListener('pointermove', onPointerMove);
             window.removeEventListener('pointerup', onPointerUp);
-            saveBoxes();
+            saveAll();
           }
 
           window.addEventListener('pointermove', onPointerMove);
@@ -525,107 +502,149 @@
         });
       });
 
-      delBtn.addEventListener('click', async () => {
-        undoStack.push({ type: 'box', data: box, id: box.dataset.id });
+      let dragOffsetX, dragOffsetY;
+      header.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        if (deleteConnectionsMode) return; // don't drag while in delete connections mode
+        dragOffsetX = e.clientX - parseFloat(box.style.left) * scale - panX;
+        dragOffsetY = e.clientY - parseFloat(box.style.top) * scale - panY;
+
+        function onPointerMove(e) {
+          const newX = (e.clientX - panX - dragOffsetX) / scale;
+          const newY = (e.clientY - panY - dragOffsetY) / scale;
+          box.style.left = newX + 'px';
+          box.style.top = newY + 'px';
+          drawConnections();
+        }
+
+        function onPointerUp(e) {
+          window.removeEventListener('pointermove', onPointerMove);
+          window.removeEventListener('pointerup', onPointerUp);
+          saveAll();
+        }
+
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+      });
+
+      connectToggle.addEventListener('click', e => {
+        e.stopPropagation();
+        if (deleteConnectionsMode) return;
+
+        if (selectedBoxForConnection === null) {
+          selectedBoxForConnection = box;
+          connectToggle.classList.add('active');
+        } else if (selectedBoxForConnection === box) {
+          selectedBoxForConnection = null;
+          connectToggle.classList.remove('active');
+        } else {
+          // Add connection
+          const fromId = selectedBoxForConnection.dataset.id;
+          const toId = box.dataset.id;
+
+          // Avoid duplicates and self
+          if (fromId !== toId && !connections.some(c => (c.fromId === fromId && c.toId === toId) || (c.fromId === toId && c.toId === fromId))) {
+            connections.push({ fromId, toId });
+            undoStack.push({ type: 'connectionAdd', data: { fromId, toId } });
+            undoBtn.disabled = false;
+          }
+          resetAllToggles();
+          selectedBoxForConnection = null;
+          saveAll();
+          drawConnections();
+        }
+      });
+
+      delBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        // Delete box and related connections
+        undoStack.push({
+          type: 'box',
+          data: {
+            id: box.dataset.id,
+            x: parseFloat(box.style.left),
+            y: parseFloat(box.style.top),
+            width: box.offsetWidth,
+            height: box.offsetHeight,
+            text: content.textContent,
+            fontSize: content.style.fontSize || '16px',
+            connections: connections.filter(c => c.fromId === box.dataset.id || c.toId === box.dataset.id)
+          }
+        });
         undoBtn.disabled = false;
-        boxesMap.delete(box.dataset.id);
-        box.remove();
+
         // Remove connections with this box
         for (let i = connections.length - 1; i >= 0; i--) {
           if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
-            undoStack.push({ type: 'connection', data: connections[i] });
             connections.splice(i, 1);
           }
         }
-        await saveBoxes();
-        await saveConnections();
-        drawConnections();
-      });
 
-      connectToggle.addEventListener('click', () => {
-        if (deleteConnectionsMode) return;
-        const active = connectToggle.classList.toggle('active');
-        if (active) {
-          if (selectedBoxForConnection && selectedBoxForConnection !== box) {
-            // Add connection
-            connections.push({ fromId: selectedBoxForConnection.dataset.id, toId: box.dataset.id });
-            saveConnections();
-            drawConnections();
-            resetAllToggles();
-            selectedBoxForConnection = null;
-          } else {
-            selectedBoxForConnection = box;
-          }
-        } else {
-          if (selectedBoxForConnection === box) selectedBoxForConnection = null;
-        }
+        boxesMap.delete(box.dataset.id);
+        box.remove();
+        saveAll();
+        drawConnections();
       });
 
       content.addEventListener('input', () => {
         smoothAdjustFontSize(content, box);
-        saveBoxes();
+        saveAll();
       });
 
       content.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Tab') {
           e.preventDefault();
-          document.execCommand('insertHTML', false, '\n');
+          const sel = window.getSelection();
+          const range = sel.getRangeAt(0);
+          const tabNode = document.createTextNode('  ');
+          range.insertNode(tabNode);
+          range.setStartAfter(tabNode);
+          range.setEndAfter(tabNode);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          saveAll();
         }
       });
 
-      box.addEventListener('pointerdown', e => {
-        if (e.target === content || e.target.closest('.resize-handle')) return;
-        e.stopPropagation();
-        let startX = e.clientX;
-        let startY = e.clientY;
-        let origX = parseFloat(box.style.left);
-        let origY = parseFloat(box.style.top);
-
-        function onMove(ev) {
-          ev.preventDefault();
-          let dx = (ev.clientX - startX) / scale;
-          let dy = (ev.clientY - startY) / scale;
-          box.style.left = origX + dx + 'px';
-          box.style.top = origY + dy + 'px';
-          drawConnections();
-        }
-
-        function onUp() {
-          window.removeEventListener('pointermove', onMove);
-          window.removeEventListener('pointerup', onUp);
-          saveBoxes();
-        }
-
-        window.addEventListener('pointermove', onMove);
-        window.addEventListener('pointerup', onUp);
-      });
-
+      smoothAdjustFontSize(content, box);
       canvas.appendChild(box);
       boxesMap.set(id, box);
-      smoothAdjustFontSize(content, box);
-      await saveBoxes();
+
+      if (save) saveAll();
+
+      return box;
     }
 
-    undoBtn.addEventListener('click', async () => {
+    undoBtn.addEventListener('click', () => {
       if (undoStack.length === 0) return;
-      const last = undoStack.pop();
-      if (last.type === 'box') {
-        canvas.appendChild(last.data);
-        boxesMap.set(last.id, last.data);
-      } else if (last.type === 'connection') {
-        connections.push(last.data);
+      const action = undoStack.pop();
+
+      if (action.type === 'box') {
+        // Re-add deleted box and its connections
+        const b = action.data;
+        addBox(b.x, b.y, b.text, b.id, b.width, b.height, b.fontSize, false);
+        b.connections.forEach(conn => {
+          if (!connections.some(c => c.fromId === conn.fromId && c.toId === conn.toId)) {
+            connections.push(conn);
+          }
+        });
+      } else if (action.type === 'connection') {
+        connections.push(action.data);
+      } else if (action.type === 'connectionAdd') {
+        const idx = connections.findIndex(c => c.fromId === action.data.fromId && c.toId === action.data.toId);
+        if (idx !== -1) connections.splice(idx, 1);
       }
-      undoBtn.disabled = undoStack.length === 0;
-      await saveBoxes();
-      await saveConnections();
+      saveAll();
       drawConnections();
+
+      if (undoStack.length === 0) undoBtn.disabled = true;
     });
 
-    window.addEventListener('resize', () => {
-      updateTransform();
-    });
+    // Disable context menu on canvas to avoid interference
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-    loadData();
+    loadAll();
+    goCenterBtn.click(); // Center view on load
     updateTransform();
   </script>
 </body>
