@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV10</title>
+  <title>stringsnthingsV12</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -98,10 +98,7 @@
     }
     .box-content {
       flex: 1;
-      padding-top: 0;
-      padding-bottom: 0;
-      padding-left: 0;
-      padding-right: 0;
+      padding: 4px 4px 4px 4px;  /* Added padding to create space below header */
       white-space: pre-wrap;
       font-family: monospace, monospace;
       overflow-wrap: break-word;
@@ -112,12 +109,9 @@
       min-height: 24px;
       box-sizing: border-box;
       resize: none;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      text-align: center;
+      display: block; /* changed from flex to block to avoid vertical centering */
+      text-align: left; /* align text normally */
       word-break: break-word;
-      padding: 2px;
     }
     .resize-handle {
       width: 16px;
@@ -492,7 +486,9 @@
           }
           if (pos.includes('e')) {
             let newWidth = startWidth + dx;
-            if (newWidth >= 80) box.style.width = newWidth + 'px';
+            if (newWidth >= 80) {
+              box.style.width = newWidth + 'px';
+            }
           }
           if (pos.includes('n')) {
             let newHeight = startHeight - dy;
@@ -503,12 +499,14 @@
           }
           if (pos.includes('s')) {
             let newHeight = startHeight + dy;
-            if (newHeight >= 40) box.style.height = newHeight + 'px';
+            if (newHeight >= 40) {
+              box.style.height = newHeight + 'px';
+            }
           }
           drawConnections();
         }
 
-        function onPointerUp() {
+        function onPointerUp(e) {
           window.removeEventListener('pointermove', onPointerMove);
           window.removeEventListener('pointerup', onPointerUp);
           saveAll();
@@ -519,88 +517,19 @@
       });
     });
 
-    // Dragging
-    header.addEventListener('pointerdown', e => {
-      if (e.target.closest('button')) return; // Ignore clicks on buttons in header
-      e.preventDefault();
-      let startX = e.clientX;
-      let startY = e.clientY;
-      let origLeft = parseFloat(box.style.left);
-      let origTop = parseFloat(box.style.top);
-
-      function onPointerMove(e) {
-        let dx = (e.clientX - startX) / scale;
-        let dy = (e.clientY - startY) / scale;
-        box.style.left = (origLeft + dx) + 'px';
-        box.style.top = (origTop + dy) + 'px';
-        drawConnections();
-      }
-
-      function onPointerUp() {
-        window.removeEventListener('pointermove', onPointerMove);
-        window.removeEventListener('pointerup', onPointerUp);
-        saveAll();
-      }
-
-      window.addEventListener('pointermove', onPointerMove);
-      window.addEventListener('pointerup', onPointerUp);
-    });
-
-    // Delete button
-    delBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      canvas.removeChild(box);
-      undoStack.push(box);
-      undoBtn.disabled = false;
-
-      // Remove connections related to this box
-      for (let i = connections.length - 1; i >= 0; i--) {
-        if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
-          connections.splice(i, 1);
-        }
-      }
-
-      boxesMap.delete(box.dataset.id);
-      drawConnections();
-      saveAll();
-    });
-
-    // Undo delete
-    undoBtn.addEventListener('click', () => {
-      if (undoStack.length === 0) return;
-      const lastDeleted = undoStack.pop();
-      canvas.appendChild(lastDeleted);
-      boxesMap.set(lastDeleted.dataset.id, lastDeleted);
-      undoBtn.disabled = undoStack.length === 0;
-      drawConnections();
-      saveAll();
-    });
-
-    // Connect toggle
     connectToggle.addEventListener('click', e => {
       e.stopPropagation();
-      if (!editMode) return;
-
-      if (connectionStartBoxId === null) {
-        connectionStartBoxId = box.dataset.id;
+      if (!connectionStartBoxId) {
+        connectionStartBoxId = id;
         connectToggle.classList.add('active');
-      } else if (connectionStartBoxId === box.dataset.id) {
-        // Cancel connecting if clicking same box
+      } else if (connectionStartBoxId === id) {
         connectionStartBoxId = null;
         connectToggle.classList.remove('active');
       } else {
-        // Add connection
-        const fromId = connectionStartBoxId;
-        const toId = box.dataset.id;
-        // Prevent duplicate
-        if (!connections.some(c => (c.fromId === fromId && c.toId === toId) || (c.fromId === toId && c.toId === fromId))) {
-          connections.push({ fromId, toId });
-        }
-        // Reset toggle
-        const oldBox = boxesMap.get(connectionStartBoxId);
-        if (oldBox) {
-          const oldToggle = oldBox.querySelector('.connect-toggle');
-          oldToggle.classList.remove('active');
+        connections.push({ fromId: connectionStartBoxId, toId: id });
+        const startBox = boxesMap.get(connectionStartBoxId);
+        if (startBox) {
+          startBox.querySelector('.connect-toggle').classList.remove('active');
         }
         connectionStartBoxId = null;
         drawConnections();
@@ -608,35 +537,77 @@
       }
     });
 
-    // Font size buttons
-    increaseBtn.addEventListener('click', e => {
+    delBtn.addEventListener('click', e => {
       e.stopPropagation();
-      const currentSize = parseInt(window.getComputedStyle(content).fontSize);
-      if (currentSize < 40) {
-        content.style.fontSize = (currentSize + 1) + 'px';
-        saveAll();
-      }
+      undoStack.push({
+        box: box,
+        connections: connections.filter(c => c.fromId === id || c.toId === id)
+      });
+      undoBtn.disabled = false;
+
+      connections.forEach((c, i) => {
+        if (c.fromId === id || c.toId === id) {
+          connections.splice(i, 1);
+        }
+      });
+
+      boxesMap.delete(id);
+      box.remove();
+      drawConnections();
+      saveAll();
     });
+
     decreaseBtn.addEventListener('click', e => {
       e.stopPropagation();
-      const currentSize = parseInt(window.getComputedStyle(content).fontSize);
-      if (currentSize > 6) {
-        content.style.fontSize = (currentSize - 1) + 'px';
+      const cs = window.getComputedStyle(content);
+      let currentFontSize = parseFloat(cs.fontSize);
+      if (currentFontSize > 6) {
+        currentFontSize -= 1;
+        content.style.fontSize = currentFontSize + 'px';
         saveAll();
       }
     });
 
-    // Content editing saves on input
-    content.addEventListener('input', () => {
+    increaseBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const cs = window.getComputedStyle(content);
+      let currentFontSize = parseFloat(cs.fontSize);
+      if (currentFontSize < 72) {
+        currentFontSize += 1;
+        content.style.fontSize = currentFontSize + 'px';
+        saveAll();
+      }
+    });
+
+    content.addEventListener('input', e => {
       saveAll();
+    });
+
+    content.addEventListener('keydown', e => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        document.execCommand('insertText', false, '\t');
+      }
     });
 
     canvas.appendChild(box);
     boxesMap.set(id, box);
 
     if (save) saveAll();
+
     return box;
   }
+
+  undoBtn.addEventListener('click', () => {
+    if (undoStack.length === 0) return;
+    const last = undoStack.pop();
+    canvas.appendChild(last.box);
+    boxesMap.set(last.box.dataset.id, last.box);
+    connections.push(...last.connections);
+    drawConnections();
+    saveAll();
+    undoBtn.disabled = undoStack.length === 0;
+  });
 
   loadAll();
   updateTransform();
