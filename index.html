@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsv14</title>
+  <title>stringsnthingsv17</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -14,9 +14,17 @@
       overflow: hidden;
       box-sizing: border-box;
     }
+    #connectionLayer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 5; /* BELOW boxes */
+      background: transparent;
+    }
     #canvas {
       position: absolute; top: 0; left: 0; transform-origin: 0 0;
-      z-index: 10;
+      z-index: 10; /* ABOVE connectionLayer */
     }
     .box {
       position: absolute;
@@ -31,6 +39,7 @@
       cursor: text;
       overflow: hidden;
       transition: width 0.1s ease, height 0.1s ease;
+      z-index: 20;
     }
     .box-header {
       background: #ddd;
@@ -65,8 +74,8 @@
       justify-content: center;
     }
     .connect-toggle {
-      width: 10px;
-      height: 10px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       border: none;
       background-color: blue;
@@ -74,7 +83,7 @@
       user-select: none;
       transition: background-color 0.25s ease;
       padding: 0;
-      margin: 0;
+      margin: 0 4px 0 0;
       flex-shrink: 0;
     }
     .connect-toggle.active {
@@ -85,23 +94,25 @@
       padding: 6px 8px;
       white-space: pre-wrap;
       font-family: monospace, monospace;
-      overflow: hidden; /* no scrollbars */
+      overflow-wrap: break-word;
+      overflow-y: auto;
       outline: none;
       cursor: text;
       user-select: text;
-      font-size: 16px; /* base font size - will be overridden by autosize */
+      font-size: 18px;
       line-height: 1.2;
       min-height: 24px;
-      word-break: break-word;
       box-sizing: border-box;
       resize: none;
+      max-height: 100%;
+      max-width: 100%;
     }
     .resize-handle {
       width: 16px;
       height: 16px;
       background: transparent;
       position: absolute;
-      z-index: 20;
+      z-index: 30;
       touch-action: none;
     }
     .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
@@ -150,29 +161,6 @@
       padding: 4px 8px; border-radius: 4px;
       user-select: none; pointer-events: none; z-index: 1001;
     }
-    #connectionLayer {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      pointer-events: auto;
-      z-index: 5;
-    }
-
-    /* Hidden clone for autosizing */
-    #autosizeHelper {
-      position: absolute;
-      visibility: hidden;
-      white-space: pre-wrap;
-      font-family: monospace, monospace;
-      padding: 6px 8px;
-      box-sizing: border-box;
-      word-break: break-word;
-      overflow-wrap: break-word;
-      width: auto;
-      max-width: none;
-      left: -9999px;
-      top: -9999px;
-    }
   </style>
 </head>
 <body>
@@ -185,11 +173,10 @@
     <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
     <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
     <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
+    <button id="toggleEditModeBtn" class="floatingBtn">Toggle Edit Mode</button>
   </div>
 
   <div id="zoomDisplay">Zoom: 100%</div>
-
-  <div id="autosizeHelper"></div>
 
   <script>
     const canvas = document.getElementById('canvas');
@@ -197,9 +184,9 @@
     const undoBtn = document.getElementById('undoBtn');
     const goCenterBtn = document.getElementById('goCenterBtn');
     const markCenterBtn = document.getElementById('markCenterBtn');
+    const toggleEditModeBtn = document.getElementById('toggleEditModeBtn');
     const zoomDisplay = document.getElementById('zoomDisplay');
     const connectionLayer = document.getElementById('connectionLayer');
-    const autosizeHelper = document.getElementById('autosizeHelper');
 
     let scale = 1, panX = 0, panY = 0;
     let isPanning = false, startX, startY;
@@ -208,24 +195,9 @@
     const connections = [];
     const boxesMap = new Map();
 
-    let selectedBoxForConnection = null;
+    let editMode = true;
 
-    // Load saved center point from localStorage or default to viewport center
-    let savedCenter = JSON.parse(localStorage.getItem('savedCenter')) || null;
-
-    // Initialize panX, panY based on saved center (if any)
-    function initPanToCenter() {
-      if (savedCenter) {
-        const rect = viewport.getBoundingClientRect();
-        panX = rect.width / 2 - savedCenter.x * scale;
-        panY = rect.height / 2 - savedCenter.y * scale;
-      } else {
-        panX = window.innerWidth / 2;
-        panY = window.innerHeight / 2;
-      }
-    }
-
-    initPanToCenter();
+    // -- Panning and Zooming --
 
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -233,7 +205,7 @@
     }
 
     viewport.addEventListener('pointerdown', e => {
-      if (e.target.closest('.box') || e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
+      if (e.target.closest('.box') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target)) return;
       isPanning = true;
       const coords = getClientCoords(e);
       startX = coords.x;
@@ -289,9 +261,11 @@
       drawConnections();
     }
 
+    // -- Add Box on Double Click --
+
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
-      if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
+      if ([undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target)) return;
       const now = Date.now();
       if (now - lastTap < 400 && !e.target.closest('.box')) {
         const x = (e.clientX - panX) / scale;
@@ -301,20 +275,25 @@
       lastTap = now;
     });
 
+    // -- Center Mark and Go --
+
     markCenterBtn.addEventListener('click', () => {
       const rect = viewport.getBoundingClientRect();
       const centerX = (rect.width / 2 - panX) / scale;
       const centerY = (rect.height / 2 - panY) / scale;
-      savedCenter = { x: centerX, y: centerY };
-      localStorage.setItem('savedCenter', JSON.stringify(savedCenter));
-      alert('Center marked! This will be the starting center on reload.');
+
+      localStorage.setItem('markedCenter', JSON.stringify({ x: centerX, y: centerY }));
+
+      alert('Center marked at: ' + Math.round(centerX) + ', ' + Math.round(centerY));
     });
 
     goCenterBtn.addEventListener('click', () => {
+      const savedCenter = localStorage.getItem('markedCenter');
       if (savedCenter) {
+        const c = JSON.parse(savedCenter);
         const rect = viewport.getBoundingClientRect();
-        panX = rect.width / 2 - savedCenter.x * scale;
-        panY = rect.height / 2 - savedCenter.y * scale;
+        panX = rect.width / 2 - c.x * scale;
+        panY = rect.height / 2 - c.y * scale;
       } else {
         panX = window.innerWidth / 2;
         panY = window.innerHeight / 2;
@@ -322,9 +301,27 @@
       updateTransform();
     });
 
-    function drawConnections() {
-      connectionLayer.innerHTML = '';
+    // -- Toggle Edit Mode --
 
+    toggleEditModeBtn.addEventListener('click', () => {
+      editMode = !editMode;
+      document.querySelectorAll('.box-header').forEach(header => {
+        header.style.display = editMode ? 'flex' : 'none';
+      });
+      document.querySelectorAll('.connect-toggle').forEach(toggle => {
+        toggle.style.display = editMode ? 'inline-block' : 'none';
+      });
+      document.querySelectorAll('.box-content').forEach(content => {
+        content.contentEditable = editMode;
+        content.style.cursor = editMode ? 'text' : 'default';
+      });
+      toggleEditModeBtn.textContent = editMode ? 'Toggle Edit Mode' : 'View Mode';
+    });
+
+    // -- Draw Connections --
+
+    function drawConnections() {
+      while(connectionLayer.firstChild) connectionLayer.removeChild(connectionLayer.firstChild);
       connections.forEach(({ fromId, toId }) => {
         const boxA = boxesMap.get(fromId);
         const boxB = boxesMap.get(toId);
@@ -356,27 +353,30 @@
         path.setAttribute('stroke', 'black');
         path.setAttribute('stroke-width', '2');
         path.setAttribute('fill', 'none');
+        path.style.cursor = 'pointer';
 
         connectionLayer.appendChild(path);
       });
     }
 
+    // -- Saving / Loading --
+
     function saveAll() {
       const boxesData = [];
       boxesMap.forEach(box => {
+        const contentDiv = box.querySelector('.box-content');
         boxesData.push({
           id: box.dataset.id,
           x: parseFloat(box.style.left),
           y: parseFloat(box.style.top),
           width: box.offsetWidth,
           height: box.offsetHeight,
-          text: box.querySelector('.box-content').textContent,
-          fontSize: box.querySelector('.box-content').style.fontSize || '16px',
+          text: contentDiv.textContent,
+          fontSize: contentDiv.style.fontSize || '18px',
         });
       });
       localStorage.setItem('boxesData', JSON.stringify(boxesData));
       localStorage.setItem('connectionsData', JSON.stringify(connections));
-      localStorage.setItem('savedCenter', JSON.stringify(savedCenter));
     }
 
     function loadAll() {
@@ -391,43 +391,15 @@
       drawConnections();
     }
 
+    // -- ID Generator --
+
     function generateId() {
       return 'id-' + Math.random().toString(36).substr(2, 9);
     }
 
-    // Autosize text to fit inside box with padding - using hidden clone
-    function autosizeText(contentDiv, box) {
-      const paddingH = 16; // left+right padding approx
-      const paddingV = 12; // top+bottom padding approx
-      const maxWidth = box.clientWidth - paddingH;
-      const maxHeight = box.clientHeight - paddingV;
+    // -- Add Box --
 
-      autosizeHelper.style.width = maxWidth + 'px';
-      autosizeHelper.textContent = contentDiv.textContent || ' ';
-      autosizeHelper.style.fontSize = '8px';
-
-      let low = 8;
-      let high = 300;
-      let bestFit = low;
-
-      while (low <= high) {
-        let mid = Math.floor((low + high) / 2);
-        autosizeHelper.style.fontSize = mid + 'px';
-        const w = autosizeHelper.scrollWidth;
-        const h = autosizeHelper.scrollHeight;
-
-        if (w <= maxWidth && h <= maxHeight) {
-          bestFit = mid;
-          low = mid + 1;
-        } else {
-          high = mid - 1;
-        }
-      }
-
-      contentDiv.style.fontSize = bestFit + 'px';
-    }
-
-    async function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px', save=true) {
+    function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='18px', save=true) {
       const box = document.createElement('div');
       box.className = 'box';
       box.style.left = `${x}px`;
@@ -442,19 +414,20 @@
       const header = document.createElement('div');
       header.className = 'box-header';
 
-      const connectToggle = document.createElement('button');
-      connectToggle.className = 'connect-toggle';
-      connectToggle.title = 'Connect';
-
       const delBtn = document.createElement('button');
       delBtn.className = 'delete-btn';
       delBtn.textContent = '×';
+
+      // Add connection toggle button
+      const connectToggle = document.createElement('button');
+      connectToggle.className = 'connect-toggle';
+      connectToggle.title = 'Connect box';
 
       header.appendChild(connectToggle);
       header.appendChild(delBtn);
 
       const content = document.createElement('div');
-      content.contentEditable = true;
+      content.contentEditable = editMode;
       content.className = 'box-content';
       content.textContent = text;
       content.style.fontSize = fontSize;
@@ -484,33 +457,27 @@
             let dy = (e.clientY - startY) / scale;
             if (pos.includes('w')) {
               let newWidth = startWidth - dx;
-              let newLeft = startLeft + dx;
-              if (newWidth >= 50) {
+              if (newWidth >= 80) {
                 box.style.width = newWidth + 'px';
-                box.style.left = newLeft + 'px';
+                box.style.left = (startLeft + dx) + 'px';
               }
             }
             if (pos.includes('e')) {
               let newWidth = startWidth + dx;
-              if (newWidth >= 50) {
-                box.style.width = newWidth + 'px';
-              }
+              if (newWidth >= 80) box.style.width = newWidth + 'px';
             }
             if (pos.includes('n')) {
               let newHeight = startHeight - dy;
-              let newTop = startTop + dy;
-              if (newHeight >= 30) {
+              if (newHeight >= 40) {
                 box.style.height = newHeight + 'px';
-                box.style.top = newTop + 'px';
+                box.style.top = (startTop + dy) + 'px';
               }
             }
             if (pos.includes('s')) {
               let newHeight = startHeight + dy;
-              if (newHeight >= 30) {
-                box.style.height = newHeight + 'px';
-              }
+              if (newHeight >= 40) box.style.height = newHeight + 'px';
             }
-            autosizeText(content, box);
+            adjustFontSizeToFit(content, box);
             drawConnections();
           }
 
@@ -525,21 +492,20 @@
         });
       });
 
-      // Drag to move
-      let dragStartX, dragStartY, dragBoxStartX, dragBoxStartY;
+      // Dragging by header
       header.addEventListener('pointerdown', e => {
-        if (e.target === delBtn || e.target === connectToggle) return;
         e.preventDefault();
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        dragBoxStartX = parseFloat(box.style.left);
-        dragBoxStartY = parseFloat(box.style.top);
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startLeft = parseFloat(box.style.left);
+        const startTop = parseFloat(box.style.top);
 
         function onPointerMove(e) {
-          let dx = (e.clientX - dragStartX) / scale;
-          let dy = (e.clientY - dragStartY) / scale;
-          box.style.left = (dragBoxStartX + dx) + 'px';
-          box.style.top = (dragBoxStartY + dy) + 'px';
+          let dx = (e.clientX - startX) / scale;
+          let dy = (e.clientY - startY) / scale;
+          box.style.left = (startLeft + dx) + 'px';
+          box.style.top = (startTop + dy) + 'px';
           drawConnections();
         }
 
@@ -553,75 +519,151 @@
         window.addEventListener('pointerup', onPointerUp);
       });
 
-      // Connect toggle
-      connectToggle.addEventListener('click', e => {
-        e.stopPropagation();
-        if (!selectedBoxForConnection) {
-          selectedBoxForConnection = box;
-          connectToggle.classList.add('active');
-        } else if (selectedBoxForConnection === box) {
-          selectedBoxForConnection = null;
-          connectToggle.classList.remove('active');
-        } else {
-          // Add connection
-          connections.push({ fromId: selectedBoxForConnection.dataset.id, toId: box.dataset.id });
-          selectedBoxForConnection.querySelector('.connect-toggle').classList.remove('active');
-          selectedBoxForConnection = null;
-          drawConnections();
-          saveAll();
-        }
-      });
-
-      // Delete button removes the box and its connections
+      // Delete
       delBtn.addEventListener('click', e => {
         e.stopPropagation();
         undoStack.push({
-          boxes: [{ id: box.dataset.id, x: parseFloat(box.style.left), y: parseFloat(box.style.top), width: box.offsetWidth, height: box.offsetHeight, text: content.textContent }],
-          connections: connections.filter(c => c.fromId === box.dataset.id || c.toId === box.dataset.id)
+          type: 'deleteBox',
+          data: {
+            id: box.dataset.id,
+            x: parseFloat(box.style.left),
+            y: parseFloat(box.style.top),
+            width: box.offsetWidth,
+            height: box.offsetHeight,
+            text: content.textContent,
+            fontSize: content.style.fontSize
+          }
         });
         undoBtn.disabled = false;
 
+        // Remove connections attached
         for (let i = connections.length - 1; i >= 0; i--) {
           if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
             connections.splice(i, 1);
           }
         }
-        boxesMap.delete(box.dataset.id);
+
         box.remove();
+        boxesMap.delete(box.dataset.id);
+        saveAll();
         drawConnections();
-        saveAll();
       });
 
+      // Connect toggle
+      connectToggle.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!editMode) return;
+        if (connectToggle.classList.contains('active')) {
+          connectToggle.classList.remove('active');
+          connectSource = null;
+          return;
+        }
+        document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
+        connectToggle.classList.add('active');
+        connectSource = box.dataset.id;
+      });
+
+      // Content editing with autofit
       content.addEventListener('input', () => {
-        autosizeText(content, box);
+        adjustFontSizeToFit(content, box);
         saveAll();
       });
 
-      // Initial autosize
-      autosizeText(content, box);
+      content.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          document.execCommand('insertHTML', false, '\n');
+        }
+      });
 
-      boxesMap.set(id, box);
+      content.contentEditable = editMode;
+      content.style.cursor = editMode ? 'text' : 'default';
+
       canvas.appendChild(box);
-      if(save) saveAll();
-      return box;
+      boxesMap.set(box.dataset.id, box);
+
+      adjustFontSizeToFit(content, box);
+
+      if (save) saveAll();
     }
+
+    // -- Font size autofit function --
+
+    function adjustFontSizeToFit(contentDiv, box) {
+      const maxFontSize = 60;
+      const minFontSize = 8;
+      const paddingX = 16; // padding inside box-content left+right
+      const paddingY = 12; // padding inside box-content top+bottom
+
+      let fontSize = maxFontSize;
+      contentDiv.style.fontSize = fontSize + 'px';
+
+      // Because contentDiv is flexible height, use scrollHeight/scrollWidth vs clientWidth/clientHeight
+      while (fontSize >= minFontSize) {
+        contentDiv.style.fontSize = fontSize + 'px';
+
+        if (contentDiv.scrollWidth <= contentDiv.clientWidth + 1 &&
+            contentDiv.scrollHeight <= contentDiv.clientHeight + 1) break;
+        fontSize -= 1;
+      }
+      contentDiv.style.fontSize = fontSize + 'px';
+    }
+
+    // -- Connection logic --
+
+    let connectSource = null;
+
+    canvas.addEventListener('click', e => {
+      if (!editMode) return;
+      if (!connectSource) return;
+
+      let targetBox = e.target.closest('.box');
+      if (!targetBox) return;
+      if (targetBox.dataset.id === connectSource) return;
+
+      const exists = connections.some(c =>
+        (c.fromId === connectSource && c.toId === targetBox.dataset.id) ||
+        (c.fromId === targetBox.dataset.id && c.toId === connectSource)
+      );
+      if (!exists) {
+        connections.push({ fromId: connectSource, toId: targetBox.dataset.id });
+      }
+      document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
+      connectSource = null;
+      saveAll();
+      drawConnections();
+    });
+
+    // -- Undo delete --
 
     undoBtn.addEventListener('click', () => {
       if (undoStack.length === 0) return;
-      const last = undoStack.pop();
-      last.boxes.forEach(b => {
-        addBox(b.x, b.y, b.text, b.id, b.width, b.height);
-      });
-      last.connections.forEach(c => {
-        connections.push(c);
-      });
-      drawConnections();
-      saveAll();
-      if (undoStack.length === 0) undoBtn.disabled = true;
+      const lastAction = undoStack.pop();
+      if (lastAction.type === 'deleteBox') {
+        const d = lastAction.data;
+        addBox(d.x, d.y, d.text, d.id, d.width, d.height, d.fontSize, true);
+      }
+      undoBtn.disabled = undoStack.length === 0;
+    });
+
+    // -- Save positions on text blur --
+
+    canvas.addEventListener('focusout', e => {
+      if (e.target.classList.contains('box-content')) {
+        saveAll();
+      }
+    });
+
+    // -- Initial Setup --
+
+    window.addEventListener('resize', () => {
+      updateTransform();
     });
 
     loadAll();
+    toggleEditModeBtn.click();
     updateTransform();
+
   </script>
 </body>
 </html>
