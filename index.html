@@ -2,112 +2,111 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV2</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>stringsnthingsv3</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     html, body {
-      margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
-      touch-action: none;
+      margin:0; height:100%; overflow:hidden; font-family: monospace, monospace;
+      touch-action:none;
+      user-select:none;
     }
     #viewport {
-      width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
-      overflow: hidden;
-      box-sizing: border-box;
+      width:100%; height:100%; position:relative; background:#f0f0f0; cursor:grab;
+      overflow:hidden; box-sizing:border-box;
     }
     #canvas {
-      position: absolute; top: 0; left: 0; transform-origin: 0 0;
-      z-index: 10;
+      position:absolute; top:0; left:0; transform-origin: 0 0;
+      z-index:10;
+      user-select:text;
     }
     .box {
-      position: absolute;
-      background: white;
-      border: 1px solid black;
-      min-width: 80px;
-      min-height: 40px;
-      user-select: none;
-      box-sizing: border-box;
-      display: flex;
+      position:absolute;
+      background:#fff;
+      border:1px solid black;
+      min-width:80px;
+      min-height:40px;
+      box-sizing:border-box;
+      display:flex;
       flex-direction: column;
-      cursor: text;
-      overflow: hidden;
-      transition: width 0.1s ease, height 0.1s ease;
+      cursor:text;
+      overflow:hidden;
+      user-select:text;
     }
     .box-header {
-      background: #ddd;
-      padding: 1px 4px;
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 4px;
-      user-select: none;
-      cursor: default;
-      border-bottom: 1px solid #bbb;
-      font-size: 12px;
-      height: 18px;
-      box-sizing: border-box;
-      flex-shrink: 0;
+      background:#ddd;
+      padding:1px 4px;
+      display:flex;
+      justify-content:flex-end;
+      align-items:center;
+      gap:4px;
+      user-select:none;
+      cursor:default;
+      border-bottom:1px solid #bbb;
+      font-size:12px;
+      height:18px;
+      flex-shrink:0;
     }
     .delete-btn {
-      color: red;
-      font-weight: bold;
-      cursor: pointer;
-      font-size: 14px;
-      line-height: 1;
-      user-select: none;
-      padding: 0;
-      margin: 0;
-      border: none;
-      background: transparent;
-      width: 18px;
-      height: 18px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      color:red;
+      font-weight:bold;
+      cursor:pointer;
+      font-size:14px;
+      line-height:1;
+      padding:0;
+      margin:0;
+      border:none;
+      background:transparent;
+      width:18px;
+      height:18px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      user-select:none;
     }
     .connect-toggle {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      border: none;
-      background-color: blue;
-      cursor: pointer;
-      user-select: none;
+      width:18px;
+      height:18px;
+      border-radius:50%;
+      border:none;
+      background-color:#3498db;
+      cursor:pointer;
+      user-select:none;
+      padding:0;
+      margin:0;
+      flex-shrink:0;
       transition: background-color 0.25s ease;
-      padding: 0;
-      margin: 0;
-      flex-shrink: 0;
     }
     .connect-toggle.active {
-      background-color: green;
+      background-color:#2ecc71;
     }
     .box-content {
-      flex: 1;
-      padding: 6px 8px;
+      flex:1;
+      padding:6px 8px;
       white-space: pre-wrap;
       font-family: monospace, monospace;
-      overflow: auto;
-      outline: none;
-      cursor: text;
-      user-select: text;
-      font-size: 16px;
-      line-height: 1.2;
-      min-height: 24px;
+      overflow:auto;
+      outline:none;
+      cursor:text;
+      user-select:text;
+      font-size:16px;
+      line-height:1.2;
+      min-height:24px;
       word-break: break-word;
-      box-sizing: border-box;
-      resize: none;
+      box-sizing:border-box;
+      resize:none;
     }
     .resize-handle {
-      width: 16px;
-      height: 16px;
-      background: transparent;
-      position: absolute;
-      z-index: 20;
-      touch-action: none;
+      width:16px;
+      height:16px;
+      background:transparent;
+      position:absolute;
+      z-index:20;
+      touch-action:none;
     }
-    .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
-    .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
-    .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
-    .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
+    .resize-handle.nw { top:-8px; left:-8px; cursor:nwse-resize; }
+    .resize-handle.ne { top:-8px; right:-8px; cursor:nesw-resize; }
+    .resize-handle.sw { bottom:-8px; left:-8px; cursor:nesw-resize; }
+    .resize-handle.se { bottom:-8px; right:-8px; cursor:nwse-resize; }
 
     #buttonContainer {
       position: fixed;
@@ -117,6 +116,7 @@
       display: flex;
       gap: 12px;
       z-index: 1000;
+      user-select:none;
     }
     .floatingBtn {
       background: rgba(100, 100, 100, 0.5);
@@ -127,7 +127,6 @@
       border: 1px solid #555;
       border-radius: 4px;
       cursor: pointer;
-      user-select: none;
       min-width: 100px;
       text-align: center;
       box-shadow: 0 0 6px rgba(0,0,0,0.3);
@@ -177,6 +176,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 
   <script>
+    // Firebase config - your existing project
     const firebaseConfig = {
       apiKey: "AIzaSyCpp42OH-1mTZxu5iq44dmMQc8ahQdvnL0",
       authDomain: "stringsnthings-65aa0.firebaseapp.com",
@@ -185,7 +185,6 @@
       messagingSenderId: "35780192306",
       appId: "1:35780192306:web:80aedf9ba9e2ffac0cf42b"
     };
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
@@ -202,15 +201,17 @@
 
     const undoStack = [];
 
-    let selectedBoxForConnection = null;
+    // We allow multiple connection selects simultaneously.
+    // So instead of single selectedBoxForConnection, we track a Set of active boxes.
+    const selectedBoxesForConnection = new Set();
+
+    // Store connections as array of {id, fromId, toId}
     const connections = [];
 
-    const boxesCollection = db.collection('boxes');
-    const connectionsCollection = db.collection('connections');
-
-    // Keep track of currently displayed boxes by ID
+    // Keep track of box elements by ID
     const currentBoxes = new Map();
 
+    // Pan/Zoom handlers
     function getClientCoords(e) {
       if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
       return { x: e.clientX, y: e.clientY };
@@ -273,6 +274,7 @@
       drawConnections();
     }
 
+    // Double-click or double pointerdown to add box
     let lastTap = 0;
     viewport.addEventListener('pointerdown', e => {
       if (e.target === goCenterBtn || e.target === undoBtn || e.target === markCenterBtn) return;
@@ -296,8 +298,15 @@
       updateTransform();
     });
 
+    goCenterBtn.addEventListener('click', () => {
+      panX = 0;
+      panY = 0;
+      scale = 1;
+      updateTransform();
+    });
+
+    // Smooth font size adjust helper
     function smoothAdjustFontSize(contentDiv, box) {
-      // Faster, smoother font scaling by binary search on font size
       const padding = 14;
       const maxWidth = box.clientWidth - padding;
       const maxHeight = box.clientHeight - padding;
@@ -317,74 +326,7 @@
       contentDiv.style.fontSize = fontSize + 'px';
     }
 
-    function resetAllToggles() {
-      document.querySelectorAll('.connect-toggle').forEach(btn => {
-        btn.classList.remove('active');
-      });
-    }
-
-    function drawConnections() {
-      connectionLayer.innerHTML = '';
-
-      connections.forEach(({ id, fromId, toId }) => {
-        const boxA = currentBoxes.get(fromId);
-        const boxB = currentBoxes.get(toId);
-        if (!boxA || !boxB) return;
-
-        const ax = parseFloat(boxA.style.left) + boxA.offsetWidth / 2;
-        const ay = parseFloat(boxA.style.top) + boxA.offsetHeight / 2;
-        const bx = parseFloat(boxB.style.left) + boxB.offsetWidth / 2;
-        const by = parseFloat(boxB.style.top) + boxB.offsetHeight / 2;
-
-        const startX = ax * scale + panX;
-        const startY = ay * scale + panY;
-        const endX = bx * scale + panX;
-        const endY = by * scale + panY;
-
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        // Quadratic bezier curve with control point offset perpendicular to line
-        const dx = endX - startX;
-        const dy = endY - startY;
-        const distance = Math.sqrt(dx*dx + dy*dy);
-        if(distance === 0) return; // avoid divide by zero
-        const normX = dx / distance;
-        const normY = dy / distance;
-        const cpOffset = 40; // curve bend amount
-
-        // Perpendicular vector
-        const cpX = (startX + endX) / 2 - normY * cpOffset;
-        const cpY = (startY + endY) / 2 + normX * cpOffset;
-
-        path.setAttribute('d', `M${startX},${startY} Q${cpX},${cpY} ${endX},${endY}`);
-        path.setAttribute('stroke', 'black');
-        path.setAttribute('stroke-width', '2');
-        path.setAttribute('fill', 'none');
-        path.style.cursor = 'pointer';
-
-        path.addEventListener('click', async () => {
-          const idx = connections.findIndex(c => c.fromId === fromId && c.toId === toId);
-          if (idx !== -1) {
-            connections.splice(idx, 1);
-            await saveConnections();
-            drawConnections();
-          }
-        });
-
-        connectionLayer.appendChild(path);
-      });
-    }
-
-    async function saveConnections() {
-      const batch = db.batch();
-      const snap = await connectionsCollection.get();
-      snap.forEach(doc => batch.delete(doc.ref));
-      connections.forEach(conn => {
-        const docRef = connectionsCollection.doc();
-        batch.set(docRef, { fromId: conn.fromId, toId: conn.toId });
-      });
-      await batch.commit();
-    }
-
+    // Generate unique ID
     function generateId() {
       return 'id-' + Math.random().toString(36).substr(2, 9);
     }
@@ -392,7 +334,7 @@
     async function saveBox(box, content) {
       const id = box.dataset.id;
       try {
-        await boxesCollection.doc(id).set({
+        await db.collection('boxes').doc(id).set({
           x: parseFloat(box.style.left),
           y: parseFloat(box.style.top),
           width: box.offsetWidth,
@@ -407,19 +349,37 @@
 
     async function removeBoxFromDb(id) {
       try {
-        await boxesCollection.doc(id).delete();
+        await db.collection('boxes').doc(id).delete();
       } catch (e) {
         console.error("Error deleting box:", e);
       }
     }
 
+    // Remove connections related to box id
     function removeConnectionsForBox(id) {
+      let removed = false;
       for (let i = connections.length - 1; i >= 0; i--) {
         if (connections[i].fromId === id || connections[i].toId === id) {
           connections.splice(i, 1);
+          removed = true;
         }
       }
-      saveConnections();
+      if (removed) saveConnections();
+    }
+
+    async function saveConnections() {
+      const batch = db.batch();
+      const colRef = db.collection('connections');
+
+      // Delete all existing connection docs before saving new
+      const snapshot = await colRef.get();
+      snapshot.forEach(doc => batch.delete(doc.ref));
+
+      connections.forEach(conn => {
+        const docRef = colRef.doc();
+        batch.set(docRef, { fromId: conn.fromId, toId: conn.toId });
+      });
+      await batch.commit();
     }
 
     async function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px') {
@@ -430,7 +390,6 @@
         box.style.top = `${y}px`;
         box.style.width = width + 'px';
         box.style.height = height + 'px';
-        box.spellcheck = false;
 
         const header = document.createElement('div');
         header.className = 'box-header';
@@ -467,50 +426,34 @@
         let resizing = false;
         let offsetX = 0;
         let offsetY = 0;
-        let moved = false;
         let resizeDir = null;
         let startWidth, startHeight, startXpos, startYpos, startClientX, startClientY;
 
         box.addEventListener('pointerdown', e => {
           if (e.target === delBtn || e.target === connectToggle || e.target.classList.contains('resize-handle')) return;
-          moved = false;
+          dragging = true;
           offsetX = e.clientX - box.getBoundingClientRect().left;
           offsetY = e.clientY - box.getBoundingClientRect().top;
           box.setPointerCapture(e.pointerId);
+          e.preventDefault();
         });
 
         box.addEventListener('pointermove', e => {
-          if (!box.hasPointerCapture(e.pointerId) || resizing) return;
-          if (!dragging) {
-            const dx = e.clientX - offsetX - box.getBoundingClientRect().left;
-            const dy = e.clientY - offsetY - box.getBoundingClientRect().top;
-            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-              dragging = true;
-              content.blur();
-              box.style.cursor = 'grabbing';
-              box.style.userSelect = 'none';
-            }
-          }
-          if (dragging) {
-            moved = true;
-            const newX = (e.clientX - offsetX - panX) / scale;
-            const newY = (e.clientY - offsetY - panY) / scale;
-            box.style.left = newX + 'px';
-            box.style.top = newY + 'px';
-            drawConnections();
-          }
+          if (!dragging || resizing) return;
+          const newX = (e.clientX - offsetX - panX) / scale;
+          const newY = (e.clientY - offsetY - panY) / scale;
+          box.style.left = newX + 'px';
+          box.style.top = newY + 'px';
+          drawConnections();
+          e.preventDefault();
         });
 
         box.addEventListener('pointerup', async e => {
-          if (box.hasPointerCapture(e.pointerId)) {
+          if (dragging) {
+            dragging = false;
+            await saveBox(box, content);
+            drawConnections();
             box.releasePointerCapture(e.pointerId);
-            if (dragging) {
-              dragging = false;
-              box.style.cursor = 'text';
-              box.style.userSelect = 'auto';
-              await saveBox(box, content);
-              drawConnections();
-            }
           }
         });
 
@@ -527,6 +470,7 @@
             startClientX = e.clientX;
             startClientY = e.clientY;
             box.setPointerCapture(e.pointerId);
+            e.preventDefault();
           });
 
           handle.addEventListener('pointermove', e => {
@@ -560,15 +504,14 @@
 
             smoothAdjustFontSize(content, box);
             drawConnections();
+            e.preventDefault();
           });
 
           handle.addEventListener('pointerup', async e => {
             if (box.hasPointerCapture(e.pointerId)) {
               box.releasePointerCapture(e.pointerId);
-              if (resizing) {
-                resizing = false;
-                await saveBox(box, content);
-              }
+              resizing = false;
+              await saveBox(box, content);
             }
           });
         });
@@ -599,35 +542,48 @@
           }
         });
 
+        // Connect toggle click
         connectToggle.addEventListener('click', e => {
+          e.stopPropagation();
           if (connectToggle.classList.contains('active')) {
             connectToggle.classList.remove('active');
-            selectedBoxForConnection = null;
+            selectedBoxesForConnection.delete(box.dataset.id);
           } else {
-            resetAllToggles();
             connectToggle.classList.add('active');
-            selectedBoxForConnection = box.dataset.id;
+            selectedBoxesForConnection.add(box.dataset.id);
           }
         });
 
-        // Handle creating connections
-        content.addEventListener('focus', () => {
-          resetAllToggles();
-          selectedBoxForConnection = null;
-        });
-
+        // Click on box to try to create connections if two or more toggles active
         box.addEventListener('click', async e => {
           if (e.target === connectToggle) return;
-          if (!selectedBoxForConnection) return;
-          const fromId = selectedBoxForConnection;
-          const toId = box.dataset.id;
-          if (fromId !== toId && !connections.some(c => (c.fromId === fromId && c.toId === toId) || (c.fromId === toId && c.toId === fromId))) {
-            connections.push({ fromId, toId });
-            resetAllToggles();
-            selectedBoxForConnection = null;
-            await saveConnections();
-            drawConnections();
-          }
+
+          if (selectedBoxesForConnection.size < 2) return;
+
+          // Get IDs from selectedBoxesForConnection set
+          const ids = Array.from(selectedBoxesForConnection);
+          // Try connect last two toggled boxes
+          // For simplicity, connect the first two boxes selected
+          const [fromId, toId] = ids;
+
+          // Don't create duplicate or self connection
+          if (fromId === toId) return;
+
+          const exists = connections.some(c =>
+            (c.fromId === fromId && c.toId === toId) ||
+            (c.fromId === toId && c.toId === fromId)
+          );
+          if (exists) return;
+
+          // Add connection both ways? Just one way for now.
+          connections.push({ fromId, toId });
+          // Clear all connect toggles
+          selectedBoxesForConnection.clear();
+          // Remove all active states from toggles
+          document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
+
+          await saveConnections();
+          drawConnections();
         });
 
         // Save content on input with debounce
@@ -637,7 +593,7 @@
           if (inputTimeout) clearTimeout(inputTimeout);
           inputTimeout = setTimeout(() => {
             saveBox(box, content);
-          }, 500);
+          }, 600);
         });
 
         box.dataset.id = id || generateId();
@@ -647,7 +603,6 @@
         resolve(box);
 
         if (!id) {
-          // new box, save immediately
           saveBox(box, content);
         }
       });
@@ -657,12 +612,13 @@
       if (undoStack.length === 0) return;
       const last = undoStack.pop();
       undoBtn.disabled = undoStack.length === 0;
+
       if (last.type === 'deleteBox') {
         const b = last.boxData;
         const box = await addBox(b.x, b.y, b.text, b.id, b.width, b.height, b.fontSize);
         currentBoxes.set(b.id, box);
         last.connections.forEach(c => connections.push(c));
-        await boxesCollection.doc(b.id).set({
+        await db.collection('boxes').doc(b.id).set({
           x: b.x,
           y: b.y,
           width: b.width,
@@ -675,70 +631,85 @@
       }
     });
 
-    goCenterBtn.addEventListener('click', () => {
-      panX = 0;
-      panY = 0;
-      scale = 1;
-      updateTransform();
-    });
+    // Draw connections as SVG lines with arrows and text labels
+    function drawConnections() {
+      // Clear
+      while (connectionLayer.firstChild) connectionLayer.removeChild(connectionLayer.firstChild);
 
-    // Realtime Firestore syncing
-    boxesCollection.onSnapshot(snapshot => {
-      snapshot.docChanges().forEach(change => {
-        const doc = change.doc;
-        const data = doc.data();
-        if (change.type === 'added' || change.type === 'modified') {
-          if (currentBoxes.has(doc.id)) {
-            const box = currentBoxes.get(doc.id);
-            if (!box) return;
-            box.style.left = data.x + 'px';
-            box.style.top = data.y + 'px';
-            box.style.width = data.width + 'px';
-            box.style.height = data.height + 'px';
-            const content = box.querySelector('.box-content');
-            if (content.textContent !== data.text) {
-              content.textContent = data.text;
-              content.style.fontSize = data.fontSize || '16px';
-              smoothAdjustFontSize(content, box);
-            }
-          } else {
-            addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize).then(box => {
-              currentBoxes.set(doc.id, box);
-              drawConnections();
-            });
-          }
-        } else if (change.type === 'removed') {
-          if (currentBoxes.has(doc.id)) {
-            currentBoxes.get(doc.id).remove();
-            currentBoxes.delete(doc.id);
-            drawConnections();
-          }
-        }
+      connections.forEach(conn => {
+        const fromBox = currentBoxes.get(conn.fromId);
+        const toBox = currentBoxes.get(conn.toId);
+        if (!fromBox || !toBox) return;
+
+        const fromRect = fromBox.getBoundingClientRect();
+        const toRect = toBox.getBoundingClientRect();
+        const canvasRect = canvas.getBoundingClientRect();
+
+        // Compute coordinates relative to SVG connectionLayer
+        const fromX = (fromRect.left + fromRect.width / 2 - canvasRect.left);
+        const fromY = (fromRect.top + fromRect.height / 2 - canvasRect.top);
+        const toX = (toRect.left + toRect.width / 2 - canvasRect.left);
+        const toY = (toRect.top + toRect.height / 2 - canvasRect.top);
+
+        // Draw line
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute('x1', fromX);
+        line.setAttribute('y1', fromY);
+        line.setAttribute('x2', toX);
+        line.setAttribute('y2', toY);
+        line.setAttribute('stroke', 'black');
+        line.setAttribute('stroke-width', '2');
+        connectionLayer.appendChild(line);
+
+        // Draw arrowhead marker
+        line.setAttribute('marker-end', 'url(#arrowhead)');
       });
-    });
+    }
 
-    connectionsCollection.onSnapshot(snapshot => {
+    // Add arrowhead marker to SVG defs
+    const svgNS = "http://www.w3.org/2000/svg";
+    const defs = document.createElementNS(svgNS, "defs");
+    const marker = document.createElementNS(svgNS, "marker");
+    marker.setAttribute("id", "arrowhead");
+    marker.setAttribute("markerWidth", "10");
+    marker.setAttribute("markerHeight", "7");
+    marker.setAttribute("refX", "10");
+    marker.setAttribute("refY", "3.5");
+    marker.setAttribute("orient", "auto");
+    marker.setAttribute("fill", "black");
+
+    const path = document.createElementNS(svgNS, "path");
+    path.setAttribute("d", "M0,0 L10,3.5 L0,7 Z");
+    marker.appendChild(path);
+    defs.appendChild(marker);
+    connectionLayer.appendChild(defs);
+
+    // Load boxes and connections from Firestore
+    async function loadBoxes() {
+      const snapshot = await db.collection('boxes').get();
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize);
+      });
+    }
+    async function loadConnections() {
+      const snapshot = await db.collection('connections').get();
       connections.length = 0;
       snapshot.forEach(doc => {
         const data = doc.data();
         connections.push({ id: doc.id, fromId: data.fromId, toId: data.toId });
       });
       drawConnections();
-    });
-
-    // Prevent context menu on long press on boxes
-    viewport.addEventListener('contextmenu', e => {
-      if (e.target.closest('.box')) {
-        e.preventDefault();
-      }
-    });
-
-    // Initialize
-    function init() {
-      updateTransform();
     }
 
+    // Init
+    async function init() {
+      await loadBoxes();
+      await loadConnections();
+      updateTransform();
+    }
     init();
+
   </script>
 </body>
 </html>
