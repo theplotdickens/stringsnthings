@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>stringsnthings - Simple Fixes</title>
+<title>stringsnthings - Improved Connections & Drag</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   html, body, #viewport {
@@ -33,10 +33,6 @@
     cursor: grab;
     display: flex;
     flex-direction: column;
-  }
-  .box.selected {
-    outline: 3px solid #3377ff;
-    outline-offset: -3px;
   }
   .box-header {
     background: #ddd;
@@ -264,7 +260,7 @@
 
     // Drag entire box by clicking anywhere inside except buttons and resize handle
     box.addEventListener('pointerdown', e => {
-      if(e.target === connectToggle || e.target === deleteBtn || e.target === resizeHandle || e.target === content) return;
+      if(e.target === connectToggle || e.target === deleteBtn || e.target === resizeHandle) return;
       dragging = true;
       dragOffsetX = e.clientX - box.offsetLeft;
       dragOffsetY = e.clientY - box.offsetTop;
@@ -401,6 +397,7 @@
     undoBtn.disabled = undoStack.length === 0;
   });
 
+  // Draw smooth cubic Bezier connections between box centers
   function drawConnections() {
     connectionLayer.innerHTML = '';
     connections.forEach(conn => {
@@ -408,34 +405,22 @@
       const toBox = document.querySelector(`.box[data-id="${conn.to}"]`);
       if(!fromBox || !toBox) return;
 
-      const p1 = {
-        x: fromBox.offsetLeft + fromBox.offsetWidth / 2,
-        y: fromBox.offsetTop + fromBox.offsetHeight / 2,
-      };
-      const p2 = {
-        x: toBox.offsetLeft + toBox.offsetWidth / 2,
-        y: toBox.offsetTop + toBox.offsetHeight / 2,
-      };
+      const startX = fromBox.offsetLeft + fromBox.offsetWidth / 2;
+      const startY = fromBox.offsetTop + fromBox.offsetHeight / 2;
+      const endX = toBox.offsetLeft + toBox.offsetWidth / 2;
+      const endY = toBox.offsetTop + toBox.offsetHeight / 2;
 
-      // Wavy line path:
-      const waveCount = 4;
-      const amplitude = 6;
-      const length = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      // Control points for smooth cubic bezier
+      const controlOffsetX = Math.abs(endX - startX) / 2;
+      const controlPoint1X = startX + controlOffsetX;
+      const controlPoint1Y = startY;
+      const controlPoint2X = endX - controlOffsetX;
+      const controlPoint2Y = endY;
 
-      let pathData = `M${p1.x} ${p1.y} `;
-      const segmentLength = length / (waveCount * 2);
-
-      for(let i = 1; i <= waveCount * 2; i++) {
-        const dx = segmentLength * i;
-        const dy = (i % 2 === 0) ? 0 : (i % 4 === 1 ? amplitude : -amplitude);
-        const x = p1.x + dx * Math.cos(angle) - dy * Math.sin(angle);
-        const y = p1.y + dx * Math.sin(angle) + dy * Math.cos(angle);
-        pathData += `L${x} ${y} `;
-      }
+      const d = `M${startX} ${startY} C${controlPoint1X} ${controlPoint1Y}, ${controlPoint2X} ${controlPoint2Y}, ${endX} ${endY}`;
 
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute('d', pathData.trim());
+      path.setAttribute('d', d);
       path.classList.add('connection');
       path.dataset.id = conn.id;
       connectionLayer.appendChild(path);
