@@ -82,7 +82,7 @@
     }
     .box-content {
       flex: 1;
-      padding: 6px 8px;
+      padding: 2px 4px;
       white-space: pre-wrap;
       font-family: monospace, monospace;
       overflow: hidden; /* no scrollbars */
@@ -397,8 +397,8 @@
 
     // Autosize text to fit inside box with padding - using hidden clone
     function autosizeText(contentDiv, box) {
-      const paddingH = 16; // left+right padding approx
-      const paddingV = 12; // top+bottom padding approx
+      const paddingH = 12; // left+right padding approx
+      const paddingV = 8; // top+bottom padding approx
       const maxWidth = box.clientWidth - paddingH;
       const maxHeight = box.clientHeight - paddingV;
 
