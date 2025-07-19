@@ -97,22 +97,24 @@
       justify-content: center;
     }
     .box-content {
-      flex: 1;
-      padding: 4px 4px 4px 4px;  /* Added padding to create space below header */
-      white-space: pre-wrap;
-      font-family: monospace, monospace;
-      overflow-wrap: break-word;
-      outline: none;
-      cursor: text;
-      user-select: text;
-      line-height: 1.1;
-      min-height: 24px;
-      box-sizing: border-box;
-      resize: none;
-      display: block; /* changed from flex to block to avoid vertical centering */
-      text-align: left; /* align text normally */
-      word-break: break-word;
-    }
+  flex: 1;
+  padding: 4px;
+  white-space: pre-wrap;
+  font-family: monospace, monospace;
+  overflow-wrap: break-word;
+  outline: none;
+  cursor: text;
+  user-select: text;
+  line-height: 1.1;
+  min-height: 24px;
+  box-sizing: border-box;
+  resize: none;
+  display: flex;          /* Change back to flex */
+  justify-content: center; /* Center horizontally */
+  align-items: center;    /* Center vertically */
+  text-align: center;     /* Center multiline text */
+  word-break: break-word;
+}
     .resize-handle {
       width: 16px;
       height: 16px;
