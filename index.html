@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV7</title>
+  <title>stringsnthingsV8</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -190,8 +190,8 @@
   let scale = 1, panX = 0, panY = 0;
   let isPanning = false, startX, startY;
 
-  const undoStack = [];
-  const connections = [];
+  let undoStack = [];
+  let connections = [];
   const boxesMap = new Map();
 
   let editMode = true;
@@ -373,8 +373,7 @@
     });
 
     const connectionsData = JSON.parse(localStorage.getItem('connectionsData') || '[]');
-    connections.push(...connectionsData);
-
+    connections = connectionsData || [];
     drawConnections();
   }
 
@@ -481,9 +480,10 @@
     let dragStartX, dragStartY, boxStartLeft, boxStartTop, dragging = false;
 
     box.addEventListener('pointerdown', e => {
-      if (e.target.closest('.delete-btn') || e.target.closest('.connect-toggle') || e.target.classList.contains('resize-handle') || e.target === box.querySelector('.box-content')) return;
-
+      if (e.target.closest('.box-header') || e.target.classList.contains('resize-handle') || e.target.classList.contains('delete-btn') || e.target.classList.contains('connect-toggle')) return;
+      if (!editMode) return;
       e.preventDefault();
+
       dragStartX = e.clientX;
       dragStartY = e.clientY;
       boxStartLeft = parseFloat(box.style.left);
@@ -571,20 +571,19 @@
     const maxWidth = box.clientWidth - 12;  // padding
     const maxHeight = box.clientHeight - headerHeight - 8; // padding
 
-    let fontSize = 20; // start big
-
+    let fontSize = 40; // max font size
     content.style.fontSize = fontSize + 'px';
     content.style.lineHeight = '1.1';
     content.style.display = 'block';
 
-    // Shrink font until it fits
-    while ((content.scrollWidth > maxWidth || content.scrollHeight > maxHeight) && fontSize > 8) {
+    // Shrink font until it fits or minimum size reached
+    while ((content.scrollWidth > maxWidth || content.scrollHeight > maxHeight) && fontSize > 6) {
       fontSize--;
       content.style.fontSize = fontSize + 'px';
     }
 
-    // Try to grow font if there is room
-    while (fontSize < 20) {
+    // Try to grow font if there is room, up to max size 40
+    while (fontSize < 40) {
       content.style.fontSize = (fontSize + 1) + 'px';
       if (content.scrollWidth > maxWidth || content.scrollHeight > maxHeight) {
         content.style.fontSize = fontSize + 'px';
@@ -593,7 +592,7 @@
       fontSize++;
     }
 
-    // Center text
+    // Center text vertically and horizontally
     content.style.display = 'flex';
     content.style.justifyContent = 'center';
     content.style.alignItems = 'center';
