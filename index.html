@@ -175,7 +175,6 @@
 
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
 
   <script>
     const firebaseConfig = {
@@ -188,12 +187,6 @@
     };
 
     firebase.initializeApp(firebaseConfig);
-
-    // Minimal added part: sign in anonymously to allow Firestore reads/writes
-    firebase.auth().signInAnonymously().catch((error) => {
-      console.error('Firebase auth error:', error);
-    });
-
     const db = firebase.firestore();
 
     const canvas = document.getElementById('canvas');
@@ -301,7 +294,6 @@
     const connectionsCollection = db.collection('connections');
 
     function smoothAdjustFontSize(contentDiv, box) {
-      // Faster, smoother font scaling by binary search on font size
       const padding = 14;
       const maxWidth = box.clientWidth - padding;
       const maxHeight = box.clientHeight - padding;
@@ -346,15 +338,13 @@
         const endY = by * scale + panY;
 
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        // Quadratic bezier curve with control point offset perpendicular to line
         const dx = endX - startX;
         const dy = endY - startY;
         const distance = Math.sqrt(dx*dx + dy*dy);
         const normX = dx / distance;
         const normY = dy / distance;
-        const cpOffset = 40; // curve bend amount
+        const cpOffset = 40;
 
-        // Perpendicular vector
         const cpX = (startX + endX) / 2 - normY * cpOffset;
         const cpY = (startY + endY) / 2 + normX * cpOffset;
 
@@ -364,11 +354,11 @@
         path.setAttribute('fill', 'none');
         path.style.cursor = 'pointer';
 
-        path.addEventListener('click', async () => {
+        path.addEventListener('click', () => {
           const idx = connections.findIndex(c => c.fromId === fromId && c.toId === toId);
           if (idx !== -1) {
             connections.splice(idx, 1);
-            await saveConnections();
+            saveConnections();
             drawConnections();
           }
         });
@@ -377,28 +367,30 @@
       });
     }
 
-    async function saveConnections() {
+    function saveConnections() {
       const batch = db.batch();
-      const snap = await connectionsCollection.get();
-      snap.forEach(doc => batch.delete(doc.ref));
-      connections.forEach(conn => {
-        const docRef = connectionsCollection.doc();
-        batch.set(docRef, { fromId: conn.fromId, toId: conn.toId });
-      });
-      await batch.commit();
+      connectionsCollection.get().then(snap => {
+        snap.forEach(doc => batch.delete(doc.ref));
+        connections.forEach(conn => {
+          const docRef = connectionsCollection.doc();
+          batch.set(docRef, { fromId: conn.fromId, toId: conn.toId });
+        });
+        batch.commit();
+      }).catch(e => console.error("Error saving connections:", e));
     }
 
-    async function loadConnections() {
+    function loadConnections() {
       connections.length = 0;
-      const snapshot = await connectionsCollection.get();
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        connections.push({ id: doc.id, fromId: data.fromId, toId: data.toId });
-      });
-      drawConnections();
+      return connectionsCollection.get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          connections.push({ id: doc.id, fromId: data.fromId, toId: data.toId });
+        });
+        drawConnections();
+      }).catch(e => console.error("Error loading connections:", e));
     }
 
-    async function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px') {
+    function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='16px') {
       const box = document.createElement('div');
       box.className = 'box';
       box.style.left = `${x}px`;
@@ -476,62 +468,42 @@
         }
       });
 
-      box.addEventListener('pointerup', async e => {
+      box.addEventListener('pointerup', e => {
         if (!box.hasPointerCapture(e.pointerId)) return;
         box.releasePointerCapture(e.pointerId);
-        if (!dragging && !resizing && e.target === content) {
-          content.focus();
-        }
-        if (dragging || resizing) {
+        if (dragging) {
           dragging = false;
-          resizing = false;
           box.style.cursor = 'text';
           box.style.userSelect = 'text';
-          await saveBox(box);
+          content.focus();
+          saveBox(box, content); // no await here
           drawConnections();
+        } else if (!moved) {
+          content.focus();
         }
       });
 
-      content.addEventListener('input', () => {
-        smoothAdjustFontSize(content, box);
-        saveBox(box);
-      });
+      for (const pos in handles) {
+        const handle = handles[pos];
 
-      connectToggle.addEventListener('click', e => {
-        e.stopPropagation();
-        if (connectToggle.classList.contains('active')) {
-          connectToggle.classList.remove('active');
-          selectedBoxForConnection = null;
-        } else {
-          resetAllToggles();
-          connectToggle.classList.add('active');
-          selectedBoxForConnection = box;
-        }
-      });
-
-      delBtn.addEventListener('click', async e => {
-        e.stopPropagation();
-        if (!box.dataset.id) return;
-        undoStack.push({ action: 'deleteBox', boxData: await getBoxData(box) });
-        undoBtn.disabled = false;
-        await deleteBox(box);
-      });
-
-      Object.entries(handles).forEach(([pos, handle]) => {
         handle.addEventListener('pointerdown', e => {
           e.stopPropagation();
           resizing = true;
           resizeDir = pos;
+          startClientX = e.clientX;
+          startClientY = e.clientY;
           startWidth = box.offsetWidth;
           startHeight = box.offsetHeight;
           startXpos = parseFloat(box.style.left);
           startYpos = parseFloat(box.style.top);
-          startClientX = e.clientX;
-          startClientY = e.clientY;
           box.setPointerCapture(e.pointerId);
+          content.blur();
+          e.preventDefault();
         });
+
         handle.addEventListener('pointermove', e => {
           if (!resizing || !box.hasPointerCapture(e.pointerId)) return;
+          e.preventDefault();
           let dx = (e.clientX - startClientX) / scale;
           let dy = (e.clientY - startClientY) / scale;
 
@@ -540,105 +512,139 @@
           let newLeft = startXpos;
           let newTop = startYpos;
 
-          if (resizeDir.includes('e')) newWidth = Math.max(80, startWidth + dx);
-          if (resizeDir.includes('s')) newHeight = Math.max(40, startHeight + dy);
+          if (resizeDir.includes('e')) {
+            newWidth = Math.max(40, startWidth + dx);
+          }
+          if (resizeDir.includes('s')) {
+            newHeight = Math.max(24, startHeight + dy);
+          }
           if (resizeDir.includes('w')) {
-            newWidth = Math.max(80, startWidth - dx);
+            newWidth = Math.max(40, startWidth - dx);
             newLeft = startXpos + dx;
           }
           if (resizeDir.includes('n')) {
-            newHeight = Math.max(40, startHeight - dy);
+            newHeight = Math.max(24, startHeight - dy);
             newTop = startYpos + dy;
           }
-          box.style.width = newWidth + 'px';
-          box.style.height = newHeight + 'px';
-          box.style.left = newLeft + 'px';
-          box.style.top = newTop + 'px';
+
+          box.style.width = `${newWidth}px`;
+          box.style.height = `${newHeight}px`;
+          box.style.left = `${newLeft}px`;
+          box.style.top = `${newTop}px`;
           smoothAdjustFontSize(content, box);
           drawConnections();
         });
-        handle.addEventListener('pointerup', async e => {
+
+        handle.addEventListener('pointerup', e => {
           if (!box.hasPointerCapture(e.pointerId)) return;
           box.releasePointerCapture(e.pointerId);
           if (resizing) {
             resizing = false;
-            await saveBox(box);
-            drawConnections();
+            saveBox(box, content); // no await here
           }
         });
+      }
+
+      delBtn.addEventListener('click', () => {
+        undoStack.push({
+          id: box.dataset.id,
+          x: parseFloat(box.style.left),
+          y: parseFloat(box.style.top),
+          width: box.offsetWidth,
+          height: box.offsetHeight,
+          text: content.textContent,
+          fontSize: content.style.fontSize
+        });
+        undoBtn.disabled = false;
+        removeBox(box);
       });
+
+      connectToggle.addEventListener('click', () => {
+        if (!selectedBoxForConnection) {
+          selectedBoxForConnection = box;
+          connectToggle.classList.add('active');
+        } else if (selectedBoxForConnection === box) {
+          selectedBoxForConnection = null;
+          connectToggle.classList.remove('active');
+        } else {
+          connections.push({ fromId: selectedBoxForConnection.dataset.id, toId: box.dataset.id });
+          saveConnections(); // no await here
+          drawConnections();
+          resetAllToggles();
+          selectedBoxForConnection = null;
+        }
+      });
+
+      if (id) box.dataset.id = id;
+      else box.dataset.id = 'box_' + Math.random().toString(36).substr(2, 9);
 
       canvas.appendChild(box);
 
-      if (id) {
-        box.dataset.id = id;
-      } else {
-        const docRef = await boxesCollection.add({
-          text: text,
-          x: x,
-          y: y,
-          width: width,
-          height: height,
-          fontSize: fontSize
-        });
-        box.dataset.id = docRef.id;
-      }
-
       smoothAdjustFontSize(content, box);
-      drawConnections();
+
+      if (!id) saveBox(box, content); // no await here
+
       return box;
     }
 
-    async function saveBox(box) {
-      if (!box.dataset.id) return;
-      const content = box.querySelector('.box-content');
-      await boxesCollection.doc(box.dataset.id).set({
-        text: content.textContent,
-        x: parseFloat(box.style.left),
-        y: parseFloat(box.style.top),
-        width: box.offsetWidth,
-        height: box.offsetHeight,
-        fontSize: content.style.fontSize || '16px'
-      });
+    function removeBox(box) {
+      const id = box.dataset.id;
+      box.remove();
+      removeConnectionsForBox(id);
+      removeBoxFromDb(id);
     }
 
-    async function deleteBox(box) {
-      if (!box.dataset.id) return;
-      // Remove connections referencing this box
+    function removeConnectionsForBox(boxId) {
       let changed = false;
       for (let i = connections.length - 1; i >= 0; i--) {
-        if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
+        if (connections[i].fromId === boxId || connections[i].toId === boxId) {
           connections.splice(i, 1);
           changed = true;
         }
       }
-      if (changed) await saveConnections();
-      await boxesCollection.doc(box.dataset.id).delete();
-      box.remove();
-      drawConnections();
+      if (changed) {
+        saveConnections(); // no await here
+        drawConnections();
+      }
     }
 
-    async function getBoxData(box) {
-      const content = box.querySelector('.box-content');
-      return {
-        id: box.dataset.id,
-        text: content.textContent,
+    function removeBoxFromDb(id) {
+      if (!id) return;
+      boxesCollection.doc(id).delete().catch(e => console.error("Remove box error:", e));
+    }
+
+    function saveBox(box, content) {
+      const id = box.dataset.id;
+      if (!id) return;
+      const data = {
         x: parseFloat(box.style.left),
         y: parseFloat(box.style.top),
         width: box.offsetWidth,
         height: box.offsetHeight,
+        text: content.textContent,
         fontSize: content.style.fontSize || '16px'
       };
+      boxesCollection.doc(id).set(data).catch(e => console.error("Save box error:", e));
     }
 
-    undoBtn.addEventListener('click', async () => {
+    function loadBoxes() {
+      canvas.innerHTML = '';
+      undoStack.length = 0;
+      undoBtn.disabled = true;
+
+      boxesCollection.get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          addBox(data.x, data.y, data.text, doc.id, data.width || 180, data.height || 80, data.fontSize || '16px');
+        });
+      }).catch(e => console.error("Load boxes error:", e));
+    }
+
+    undoBtn.addEventListener('click', () => {
       if (undoStack.length === 0) return;
       const last = undoStack.pop();
-      if (last.action === 'deleteBox') {
-        const b = last.boxData;
-        await addBox(b.x, b.y, b.text, b.id, b.width, b.height, b.fontSize);
-      }
-      if (undoStack.length === 0) undoBtn.disabled = true;
+      addBox(last.x, last.y, last.text, last.id, last.width, last.height, last.fontSize);
+      undoBtn.disabled = undoStack.length === 0;
     });
 
     goCenterBtn.addEventListener('click', () => {
@@ -648,61 +654,10 @@
       updateTransform();
     });
 
-    async function loadBoxes() {
-      const snapshot = await boxesCollection.get();
-      for (const doc of snapshot.docs) {
-        const data = doc.data();
-        await addBox(data.x, data.y, data.text, doc.id, data.width, data.height, data.fontSize);
-      }
-    }
-
-    // Handle connection selection logic
-    connectionLayer.addEventListener('click', e => {
-      // Click on empty space clears connection selection
-      resetAllToggles();
-      selectedBoxForConnection = null;
-    });
-
-    // When clicking boxes' connect buttons: add connection if a box is selected
-    function tryCreateConnection(toBox) {
-      if (!selectedBoxForConnection || !toBox.dataset.id || selectedBoxForConnection === toBox) return;
-      const fromId = selectedBoxForConnection.dataset.id;
-      const toId = toBox.dataset.id;
-      if (connections.find(c => c.fromId === fromId && c.toId === toId)) {
-        resetAllToggles();
-        selectedBoxForConnection = null;
-        return; // Already exists
-      }
-      connections.push({ fromId, toId });
-      saveConnections().then(() => {
-        drawConnections();
-      });
-      resetAllToggles();
-      selectedBoxForConnection = null;
-    }
-
-    // Delegate connect-toggle click to create connections
-    canvas.addEventListener('click', e => {
-      const toggle = e.target.closest('.connect-toggle');
-      if (!toggle) return;
-      const box = toggle.closest('.box');
-      if (!box) return;
-      if (toggle.classList.contains('active')) {
-        // Wait for second click on another box's toggle to connect
-        // Actually handled by connectToggle click event on addBox()
-        return;
-      } else if (selectedBoxForConnection && selectedBoxForConnection !== box) {
-        tryCreateConnection(box);
-      }
-    });
-
-    async function init() {
-      await loadBoxes();
-      await loadConnections();
-      updateTransform();
-    }
-
-    init();
+    // Initial load
+    loadBoxes();
+    loadConnections();
+    updateTransform();
 
   </script>
 </body>
