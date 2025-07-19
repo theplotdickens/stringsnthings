@@ -1,161 +1,169 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>stringsnthingsv40</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<style>
-  html, body {
-    margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
-    touch-action: none;
-  }
-  #viewport {
-    width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
-    overflow: hidden;
-    box-sizing: border-box;
-  }
-  #canvas {
-    position: absolute; top: 0; left: 0; transform-origin: 0 0;
-    z-index: 10;
-  }
-  .box {
-    position: absolute;
-    background: white;
-    border: 1px solid black;
-    min-width: 80px;
-    min-height: 40px;
-    user-select: none;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    cursor: text;
-    overflow: hidden;
-    transition: width 0.1s ease, height 0.1s ease;
-  }
-  .box-header {
-    background: #ddd;
-    padding: 1px 4px;
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 4px;
-    user-select: none;
-    cursor: default;
-    border-bottom: 1px solid #bbb;
-    font-size: 12px;
-    height: 18px;
-    box-sizing: border-box;
-    flex-shrink: 0;
-  }
-  .delete-btn {
-    color: red;
-    font-weight: bold;
-    cursor: pointer;
-    font-size: 14px;
-    line-height: 1;
-    user-select: none;
-    padding: 0;
-    margin: 0;
-    border: none;
-    background: transparent;
-    width: 18px;
-    height: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .connect-toggle {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    border: none;
-    background-color: blue;
-    cursor: pointer;
-    user-select: none;
-    transition: background-color 0.25s ease;
-    padding: 0;
-    margin: 0;
-    flex-shrink: 0;
-  }
-  .connect-toggle.active {
-    background-color: green;
-  }
-  .box-content {
-    flex: 1;
-    padding: 2px 6px 2px 6px; /* less top/bottom padding */
-    font-family: monospace, monospace;
-    overflow-wrap: break-word;
-    outline: none;
-    cursor: text;
-    user-select: text;
-    line-height: 1.1;
-    box-sizing: border-box;
-    resize: none;
-    overflow: hidden;
-    white-space: pre-wrap;
-  }
-  .resize-handle {
-    width: 16px;
-    height: 16px;
-    background: transparent;
-    position: absolute;
-    z-index: 20;
-    touch-action: none;
-  }
-  .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
-  .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
-  .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
-  .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
+  <meta charset="UTF-8" />
+  <title>stringsnthingsv41</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    html, body {
+      margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
+      touch-action: none;
+    }
+    #viewport {
+      width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    #canvas {
+      position: absolute; top: 0; left: 0; transform-origin: 0 0;
+      z-index: 10;
+    }
+    .box {
+      position: absolute;
+      background: white;
+      border: 1px solid black;
+      min-width: 80px;
+      min-height: 40px;
+      user-select: none;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      cursor: text;
+      overflow: hidden;
+      transition: width 0.1s ease, height 0.1s ease;
+    }
+    .box-header {
+      background: #ddd;
+      padding: 1px 4px;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 4px;
+      user-select: none;
+      cursor: default;
+      border-bottom: 1px solid #bbb;
+      font-size: 12px;
+      height: 18px;
+      box-sizing: border-box;
+      flex-shrink: 0;
+    }
+    .delete-btn {
+      color: red;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      user-select: none;
+      padding: 0;
+      margin: 0;
+      border: none;
+      background: transparent;
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .connect-toggle {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: none;
+      background-color: blue;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.25s ease;
+      padding: 0;
+      margin: 0;
+      flex-shrink: 0;
+    }
+    .connect-toggle.active {
+      background-color: green;
+    }
+    .box-content {
+      flex: 1;
+      padding-top: var(--padding-top, 4px);
+      padding-bottom: var(--padding-bottom, 4px);
+      padding-left: 6px;
+      padding-right: 6px;
+      white-space: pre-wrap;
+      font-family: monospace, monospace;
+      overflow-wrap: break-word;
+      outline: none;
+      cursor: text;
+      user-select: text;
+      line-height: 1.1;
+      min-height: 24px;
+      box-sizing: border-box;
+      resize: none;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      word-break: break-word;
+    }
+    .resize-handle {
+      width: 16px;
+      height: 16px;
+      background: transparent;
+      position: absolute;
+      z-index: 20;
+      touch-action: none;
+    }
+    .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
+    .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
+    .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
+    .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
 
-  #buttonContainer {
-    position: fixed;
-    bottom: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 12px;
-    z-index: 1000;
-  }
-  .floatingBtn {
-    background: rgba(100, 100, 100, 0.5);
-    color: #eee;
-    font-family: monospace, monospace;
-    font-size: 16px;
-    padding: 6px 12px;
-    border: 1px solid #555;
-    border-radius: 4px;
-    cursor: pointer;
-    user-select: none;
-    min-width: 100px;
-    text-align: center;
-    box-shadow: 0 0 6px rgba(0,0,0,0.3);
-    touch-action: manipulation;
-    transition: background 0.2s ease;
-  }
-  .floatingBtn:active {
-    background: rgba(80, 80, 80, 0.7);
-  }
-  .floatingBtn:disabled {
-    background: rgba(150, 150, 150, 0.3);
-    cursor: default;
-    color: #999;
-    border-color: #999;
-    box-shadow: none;
-  }
-  #zoomDisplay {
-    position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
-    background: rgba(0,0,0,0.5); color: white; font-family: monospace;
-    padding: 4px 8px; border-radius: 4px;
-    user-select: none; pointer-events: none; z-index: 1001;
-  }
-  #connectionLayer {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-    z-index: 1; /* behind boxes */
-  }
-</style>
+    #buttonContainer {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      z-index: 1000;
+    }
+    .floatingBtn {
+      background: rgba(100, 100, 100, 0.5);
+      color: #eee;
+      font-family: monospace, monospace;
+      font-size: 16px;
+      padding: 6px 12px;
+      border: 1px solid #555;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+      min-width: 100px;
+      text-align: center;
+      box-shadow: 0 0 6px rgba(0,0,0,0.3);
+      touch-action: manipulation;
+      transition: background 0.2s ease;
+    }
+    .floatingBtn:active {
+      background: rgba(80, 80, 80, 0.7);
+    }
+    .floatingBtn:disabled {
+      background: rgba(150, 150, 150, 0.3);
+      cursor: default;
+      color: #999;
+      border-color: #999;
+      box-shadow: none;
+    }
+    #zoomDisplay {
+      position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.5); color: white; font-family: monospace;
+      padding: 4px 8px; border-radius: 4px;
+      user-select: none; pointer-events: none; z-index: 1001;
+    }
+    #connectionLayer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 1; /* behind boxes */
+    }
+  </style>
 </head>
 <body>
   <div id="viewport">
@@ -191,6 +199,10 @@
 
   let editMode = true;
   let connectionStartBoxId = null;
+
+  // Adjustable padding in px for text boxes top and bottom
+  const paddingTopPx = 2;
+  const paddingBottomPx = 2;
 
   function getClientCoords(e) {
     if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -355,7 +367,7 @@
         width: box.offsetWidth,
         height: box.offsetHeight,
         text: contentDiv.textContent,
-        fontSize: parseFloat(contentDiv.style.fontSize) || 18,
+        fontSize: contentDiv.style.fontSize || '18px',
       });
     });
     localStorage.setItem('boxesData', JSON.stringify(boxesData));
@@ -378,7 +390,7 @@
     return 'id-' + Math.random().toString(36).substr(2, 9);
   }
 
-  function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize=18, save=true) {
+  function addBox(x, y, text = 'Text box', id = null, width=180, height=80, fontSize='18px', save=true) {
     const box = document.createElement('div');
     box.className = 'box';
     box.style.left = `${x}px`;
@@ -412,7 +424,10 @@
     content.contentEditable = editMode;
     content.className = 'box-content';
     content.textContent = text;
-    content.style.fontSize = fontSize + 'px';
+
+    // Set adjustable padding CSS vars for this content div
+    content.style.setProperty('--padding-top', paddingTopPx + 'px');
+    content.style.setProperty('--padding-bottom', paddingBottomPx + 'px');
 
     box.appendChild(header);
     box.appendChild(content);
@@ -459,14 +474,14 @@
             let newHeight = startHeight + dy;
             if (newHeight >= 40) box.style.height = newHeight + 'px';
           }
-          adjustFontSizeToFit(content, box);
+          resizeBoxFont(box);
           drawConnections();
         }
 
         function onPointerUp() {
           window.removeEventListener('pointermove', onPointerMove);
           window.removeEventListener('pointerup', onPointerUp);
-          if(save) saveAll();
+          saveAll();
         }
 
         window.addEventListener('pointermove', onPointerMove);
@@ -474,12 +489,65 @@
       });
     });
 
+    // Dragging the whole box except on header and resize handles
+    let dragStartX, dragStartY, boxStartLeft, boxStartTop;
+    box.addEventListener('pointerdown', e => {
+      if (!editMode) return;
+      if (e.target.closest('.box-header') || e.target.classList.contains('resize-handle') || e.target === content) return;
+      e.preventDefault();
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      boxStartLeft = parseFloat(box.style.left);
+      boxStartTop = parseFloat(box.style.top);
+
+      function onDragMove(e) {
+        let dx = (e.clientX - dragStartX) / scale;
+        let dy = (e.clientY - dragStartY) / scale;
+        box.style.left = (boxStartLeft + dx) + 'px';
+        box.style.top = (boxStartTop + dy) + 'px';
+        drawConnections();
+      }
+
+      function onDragEnd() {
+        window.removeEventListener('pointermove', onDragMove);
+        window.removeEventListener('pointerup', onDragEnd);
+        saveAll();
+      }
+
+      window.addEventListener('pointermove', onDragMove);
+      window.addEventListener('pointerup', onDragEnd);
+    });
+
     delBtn.addEventListener('click', e => {
       e.stopPropagation();
-      undoStack.push({ action: 'deleteBox', boxData: serializeBox(box) });
-      removeBox(box);
+      undoStack.push({
+        id: box.dataset.id,
+        x: parseFloat(box.style.left),
+        y: parseFloat(box.style.top),
+        width: box.offsetWidth,
+        height: box.offsetHeight,
+        text: content.textContent,
+        fontSize: content.style.fontSize,
+      });
       undoBtn.disabled = false;
-      if(save) saveAll();
+      boxesMap.delete(box.dataset.id);
+      box.remove();
+      // Remove connections from or to this box
+      for (let i = connections.length - 1; i >= 0; i--) {
+        if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
+          connections.splice(i, 1);
+        }
+      }
+      drawConnections();
+      saveAll();
+    });
+
+    undoBtn.addEventListener('click', () => {
+      if (undoStack.length === 0) return;
+      const last = undoStack.pop();
+      addBox(last.x, last.y, last.text, last.id, last.width, last.height, last.fontSize, false);
+      undoBtn.disabled = undoStack.length === 0;
+      saveAll();
     });
 
     connectToggle.addEventListener('click', e => {
@@ -491,144 +559,98 @@
         connectionStartBoxId = null;
         connectToggle.classList.remove('active');
       } else {
+        // Create connection from connectionStartBoxId to this box
         connections.push({ fromId: connectionStartBoxId, toId: box.dataset.id });
+        // Reset all toggles
+        document.querySelectorAll('.connect-toggle.active').forEach(t => t.classList.remove('active'));
         connectionStartBoxId = null;
-        document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
         drawConnections();
-        if(save) saveAll();
+        saveAll();
       }
     });
 
     content.addEventListener('input', () => {
-      adjustFontSizeToFit(content, box);
-      if(save) saveAll();
+      resizeBoxFont(box);
+      saveAll();
     });
 
-    // Dragging box
-    let dragging = false, dragStartX, dragStartY, boxStartLeft, boxStartTop;
-    header.addEventListener('pointerdown', e => {
-      if (!editMode) return;
-      e.preventDefault();
-      dragging = true;
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      boxStartLeft = parseFloat(box.style.left);
-      boxStartTop = parseFloat(box.style.top);
-      document.body.style.cursor = 'grabbing';
-      box.style.cursor = 'grabbing';
-
-      function onPointerMove(e) {
-        if (!dragging) return;
-        let dx = (e.clientX - dragStartX) / scale;
-        let dy = (e.clientY - dragStartY) / scale;
-        box.style.left = boxStartLeft + dx + 'px';
-        box.style.top = boxStartTop + dy + 'px';
-        drawConnections();
-      }
-
-      function onPointerUp() {
-        dragging = false;
-        document.body.style.cursor = 'default';
-        box.style.cursor = 'text';
-        window.removeEventListener('pointermove', onPointerMove);
-        window.removeEventListener('pointerup', onPointerUp);
-        if(save) saveAll();
-      }
-
-      window.addEventListener('pointermove', onPointerMove);
-      window.addEventListener('pointerup', onPointerUp);
-    });
-
+    // Initial font resize
+    box.style.fontSize = '18px'; // default
     canvas.appendChild(box);
-    boxesMap.set(id, box);
-    adjustFontSizeToFit(content, box);
+    boxesMap.set(box.dataset.id, box);
+    resizeBoxFont(box);
+
+    if (save) saveAll();
+
     return box;
   }
 
-  function serializeBox(box) {
-    const contentDiv = box.querySelector('.box-content');
-    return {
-      id: box.dataset.id,
-      x: parseFloat(box.style.left),
-      y: parseFloat(box.style.top),
-      width: box.offsetWidth,
-      height: box.offsetHeight,
-      text: contentDiv.textContent,
-      fontSize: parseFloat(contentDiv.style.fontSize) || 18,
-    };
-  }
+  // Resize font to fill the box width and height, with binary search approach
+  function resizeBoxFont(box) {
+    const content = box.querySelector('.box-content');
+    const paddingTop = paddingTopPx;
+    const paddingBottom = paddingBottomPx;
 
-  function removeBox(box) {
-    const id = box.dataset.id;
-    boxesMap.delete(id);
-    box.remove();
-    connections.filter(c => c.fromId !== id && c.toId !== id);
-    // Also remove connections linked to this box:
-    for(let i = connections.length - 1; i >= 0; i--) {
-      if(connections[i].fromId === id || connections[i].toId === id) {
-        connections.splice(i, 1);
+    if (!content) return;
+    // Remove inline font-size to reset if any
+    content.style.fontSize = '';
+
+    const boxWidth = box.clientWidth - 12; // padding left/right 6 + 6
+    const boxHeight = box.clientHeight - (paddingTop + paddingBottom);
+
+    if (boxWidth <= 0 || boxHeight <= 0) {
+      content.style.fontSize = '12px';
+      return;
+    }
+
+    let min = 4, max = 200;
+    let bestSize = min;
+
+    // Prepare test div offscreen
+    let testDiv = document.getElementById('fontTestDiv');
+    if (!testDiv) {
+      testDiv = document.createElement('div');
+      testDiv.id = 'fontTestDiv';
+      testDiv.style.position = 'fixed';
+      testDiv.style.visibility = 'hidden';
+      testDiv.style.whiteSpace = 'pre-wrap';
+      testDiv.style.fontFamily = 'monospace, monospace';
+      testDiv.style.padding = '0';
+      testDiv.style.margin = '0';
+      testDiv.style.lineHeight = '1.1';
+      testDiv.style.width = boxWidth + 'px';
+      testDiv.style.boxSizing = 'border-box';
+      document.body.appendChild(testDiv);
+    }
+    testDiv.style.width = boxWidth + 'px';
+    testDiv.style.padding = '0';
+    testDiv.textContent = content.textContent || ' '; // fallback to space
+
+    while (min <= max) {
+      let mid = Math.floor((min + max) / 2);
+      testDiv.style.fontSize = mid + 'px';
+      const height = testDiv.scrollHeight;
+      const width = testDiv.scrollWidth;
+
+      if (height <= boxHeight && width <= boxWidth) {
+        bestSize = mid;
+        min = mid + 1;
+      } else {
+        max = mid - 1;
       }
     }
-    drawConnections();
+    content.style.fontSize = bestSize + 'px';
   }
 
-  undoBtn.addEventListener('click', () => {
-    if (undoStack.length === 0) return;
-    const last = undoStack.pop();
-    if (last.action === 'deleteBox') {
-      const b = last.boxData;
-      addBox(b.x, b.y, b.text, b.id, b.width, b.height, b.fontSize);
-    }
-    undoBtn.disabled = undoStack.length === 0;
-    saveAll();
-  });
-
-  // Dynamic font size adjustment:
-  function adjustFontSizeToFit(content, box) {
-    if (!content || !box) return;
-    const maxFontSize = 200;
-    const minFontSize = 6;
-    const paddingTopBottom = 4; // padding top+bottom total from box-content style
-    const paddingLeftRight = 12; // left + right padding from box-content style
-
-    // Target width & height inside box content area:
-    const targetWidth = box.clientWidth - paddingLeftRight;
-    const targetHeight = box.clientHeight - paddingTopBottom - box.querySelector('.box-header').offsetHeight;
-
-    let fontSize = maxFontSize;
-
-    content.style.fontSize = fontSize + 'px';
-    content.style.lineHeight = 1;
-
-    function fits() {
-      return content.scrollWidth <= targetWidth && content.scrollHeight <= targetHeight;
-    }
-
-    // Use binary search to find best font size that fits:
-    let low = minFontSize;
-    let high = maxFontSize;
-    while (low <= high) {
-      let mid = Math.floor((low + high) / 2);
-      content.style.fontSize = mid + 'px';
-      if (fits()) low = mid + 1;
-      else high = mid - 1;
-    }
-
-    // high is best fitting font size
-    content.style.fontSize = high + 'px';
-  }
-
+  // Resize fonts on window resize for all boxes
   window.addEventListener('resize', () => {
-    boxesMap.forEach(box => {
-      const content = box.querySelector('.box-content');
-      adjustFontSizeToFit(content, box);
-    });
+    boxesMap.forEach(box => resizeBoxFont(box));
   });
 
-  window.addEventListener('beforeunload', saveAll);
-
+  // Load saved boxes on start
   loadAll();
   updateTransform();
+
 </script>
 </body>
 </html>
