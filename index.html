@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV9</title>
+  <title>stringsnthingsV10</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -79,6 +79,22 @@
     }
     .connect-toggle.active {
       background-color: green;
+    }
+    .font-size-btn {
+      font-size: 14px;
+      width: 18px;
+      height: 18px;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+      background: transparent;
+      border: none;
+      color: black;
+      padding: 0;
+      margin: 0 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .box-content {
       flex: 1;
@@ -307,6 +323,9 @@
     document.querySelectorAll('.connect-toggle').forEach(toggle => {
       toggle.style.display = editMode ? 'inline-block' : 'none';
     });
+    document.querySelectorAll('.font-size-btn').forEach(btn => {
+      btn.style.display = editMode ? 'flex' : 'none';
+    });
     document.querySelectorAll('.box-content').forEach(content => {
       content.contentEditable = editMode;
       content.style.cursor = editMode ? 'text' : 'default';
@@ -364,6 +383,7 @@
         width: box.offsetWidth,
         height: box.offsetHeight,
         text: contentDiv.textContent,
+        fontSize: window.getComputedStyle(contentDiv).fontSize
       });
     });
     localStorage.setItem('boxesData', JSON.stringify(boxesData));
@@ -373,7 +393,7 @@
   function loadAll() {
     const boxesData = JSON.parse(localStorage.getItem('boxesData') || '[]');
     boxesData.forEach(b => {
-      addBox(b.x, b.y, b.text, b.id, b.width, b.height, false);
+      addBox(b.x, b.y, b.text, b.id, b.width, b.height, false, b.fontSize);
     });
 
     const connectionsData = JSON.parse(localStorage.getItem('connectionsData') || '[]');
@@ -386,7 +406,7 @@
     return 'id-' + Math.random().toString(36).substr(2, 9);
   }
 
-  function addBox(x, y, text = 'Text box', id = null, width=180, height=80, save=true) {
+  function addBox(x, y, text = 'Text box', id = null, width=180, height=80, save=true, fontSize = null) {
     const box = document.createElement('div');
     box.className = 'box';
     box.style.left = `${x}px`;
@@ -401,25 +421,44 @@
     const header = document.createElement('div');
     header.className = 'box-header';
 
+    const connectToggle = document.createElement('button');
+    connectToggle.className = 'connect-toggle';
+    connectToggle.title = 'Toggle Connection';
+
+    const decreaseBtn = document.createElement('button');
+    decreaseBtn.className = 'font-size-btn';
+    decreaseBtn.textContent = '▼';
+    decreaseBtn.title = 'Decrease font size';
+
+    const increaseBtn = document.createElement('button');
+    increaseBtn.className = 'font-size-btn';
+    increaseBtn.textContent = '▲';
+    increaseBtn.title = 'Increase font size';
+
     const delBtn = document.createElement('button');
     delBtn.className = 'delete-btn';
     delBtn.textContent = '×';
 
-    const connectToggle = document.createElement('button');
-    connectToggle.className = 'connect-toggle';
-    connectToggle.title = 'Toggle Connection';
     header.appendChild(connectToggle);
+    header.appendChild(decreaseBtn);
+    header.appendChild(increaseBtn);
     header.appendChild(delBtn);
 
     if (!editMode) {
       header.style.display = 'none';
       connectToggle.style.display = 'none';
+      decreaseBtn.style.display = 'none';
+      increaseBtn.style.display = 'none';
     }
 
     const content = document.createElement('div');
     content.contentEditable = editMode;
     content.className = 'box-content';
     content.textContent = text;
+
+    if (fontSize) {
+      content.style.fontSize = fontSize;
+    }
 
     box.appendChild(header);
     box.appendChild(content);
@@ -466,7 +505,6 @@
             let newHeight = startHeight + dy;
             if (newHeight >= 40) box.style.height = newHeight + 'px';
           }
-          resizeBoxFont(box);
           drawConnections();
         }
 
@@ -481,27 +519,29 @@
       });
     });
 
-    // Dragging the whole box except on header and resize handles and content
-    box.addEventListener('pointerdown', e => {
-      if (e.target.closest('.resize-handle') || e.target.classList.contains('box-content') || e.target.closest('.box-header')) return;
+    // Dragging
+    header.addEventListener('pointerdown', e => {
+      if (e.target.closest('button')) return; // Ignore clicks on buttons in header
       e.preventDefault();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const startLeft = parseFloat(box.style.left);
-      const startTop = parseFloat(box.style.top);
+      let startX = e.clientX;
+      let startY = e.clientY;
+      let origLeft = parseFloat(box.style.left);
+      let origTop = parseFloat(box.style.top);
 
       function onPointerMove(e) {
-        const dx = (e.clientX - startX) / scale;
-        const dy = (e.clientY - startY) / scale;
-        box.style.left = startLeft + dx + 'px';
-        box.style.top = startTop + dy + 'px';
+        let dx = (e.clientX - startX) / scale;
+        let dy = (e.clientY - startY) / scale;
+        box.style.left = (origLeft + dx) + 'px';
+        box.style.top = (origTop + dy) + 'px';
         drawConnections();
       }
+
       function onPointerUp() {
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
         saveAll();
       }
+
       window.addEventListener('pointermove', onPointerMove);
       window.addEventListener('pointerup', onPointerUp);
     });
@@ -509,121 +549,95 @@
     // Delete button
     delBtn.addEventListener('click', e => {
       e.stopPropagation();
-      undoStack.push({
-        action: 'delete',
-        boxData: {
-          id: box.dataset.id,
-          x: parseFloat(box.style.left),
-          y: parseFloat(box.style.top),
-          width: box.offsetWidth,
-          height: box.offsetHeight,
-          text: content.textContent,
-        }
-      });
+      canvas.removeChild(box);
+      undoStack.push(box);
       undoBtn.disabled = false;
-      removeBox(box.dataset.id);
+
+      // Remove connections related to this box
+      for (let i = connections.length - 1; i >= 0; i--) {
+        if (connections[i].fromId === box.dataset.id || connections[i].toId === box.dataset.id) {
+          connections.splice(i, 1);
+        }
+      }
+
+      boxesMap.delete(box.dataset.id);
+      drawConnections();
+      saveAll();
+    });
+
+    // Undo delete
+    undoBtn.addEventListener('click', () => {
+      if (undoStack.length === 0) return;
+      const lastDeleted = undoStack.pop();
+      canvas.appendChild(lastDeleted);
+      boxesMap.set(lastDeleted.dataset.id, lastDeleted);
+      undoBtn.disabled = undoStack.length === 0;
+      drawConnections();
       saveAll();
     });
 
     // Connect toggle
     connectToggle.addEventListener('click', e => {
       e.stopPropagation();
-      const boxId = box.dataset.id;
-      if (connectionStartBoxId === boxId) {
+      if (!editMode) return;
+
+      if (connectionStartBoxId === null) {
+        connectionStartBoxId = box.dataset.id;
+        connectToggle.classList.add('active');
+      } else if (connectionStartBoxId === box.dataset.id) {
+        // Cancel connecting if clicking same box
         connectionStartBoxId = null;
         connectToggle.classList.remove('active');
-      } else if (connectionStartBoxId) {
-        if (connectionStartBoxId !== boxId) {
-          // create connection if not exists
-          if (!connections.some(c => (c.fromId === connectionStartBoxId && c.toId === boxId) || (c.fromId === boxId && c.toId === connectionStartBoxId))) {
-            connections.push({ fromId: connectionStartBoxId, toId: boxId });
-            saveAll();
-          }
+      } else {
+        // Add connection
+        const fromId = connectionStartBoxId;
+        const toId = box.dataset.id;
+        // Prevent duplicate
+        if (!connections.some(c => (c.fromId === fromId && c.toId === toId) || (c.fromId === toId && c.toId === fromId))) {
+          connections.push({ fromId, toId });
         }
-        document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
+        // Reset toggle
+        const oldBox = boxesMap.get(connectionStartBoxId);
+        if (oldBox) {
+          const oldToggle = oldBox.querySelector('.connect-toggle');
+          oldToggle.classList.remove('active');
+        }
         connectionStartBoxId = null;
         drawConnections();
-      } else {
-        connectionStartBoxId = boxId;
-        connectToggle.classList.add('active');
+        saveAll();
       }
     });
 
-    // Content editing event - resize font on input
+    // Font size buttons
+    increaseBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const currentSize = parseInt(window.getComputedStyle(content).fontSize);
+      if (currentSize < 40) {
+        content.style.fontSize = (currentSize + 1) + 'px';
+        saveAll();
+      }
+    });
+    decreaseBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const currentSize = parseInt(window.getComputedStyle(content).fontSize);
+      if (currentSize > 6) {
+        content.style.fontSize = (currentSize - 1) + 'px';
+        saveAll();
+      }
+    });
+
+    // Content editing saves on input
     content.addEventListener('input', () => {
-      resizeBoxFont(box);
       saveAll();
     });
 
-    // Initial font resize on creation
-    setTimeout(() => resizeBoxFont(box), 0);
-
     canvas.appendChild(box);
-    boxesMap.set(box.dataset.id, box);
+    boxesMap.set(id, box);
+
+    if (save) saveAll();
     return box;
   }
 
-  function removeBox(id) {
-    const box = boxesMap.get(id);
-    if (!box) return;
-    box.remove();
-    boxesMap.delete(id);
-
-    // Remove connections related to this box
-    for (let i = connections.length - 1; i >= 0; i--) {
-      if (connections[i].fromId === id || connections[i].toId === id) {
-        connections.splice(i, 1);
-      }
-    }
-    drawConnections();
-  }
-
-  undoBtn.addEventListener('click', () => {
-    if (undoStack.length === 0) return;
-    const last = undoStack.pop();
-    if (last.action === 'delete') {
-      const data = last.boxData;
-      addBox(data.x, data.y, data.text, data.id, data.width, data.height, false);
-      saveAll();
-    }
-    if (undoStack.length === 0) undoBtn.disabled = true;
-  });
-
-  // Font resizing function - dynamic font size between 6 and 40 px
-  function resizeBoxFont(box) {
-    const contentDiv = box.querySelector('.box-content');
-    if (!contentDiv) return;
-    const minFontSize = 6;
-    const maxFontSize = 40;
-
-    const boxWidth = box.clientWidth - 12; // padding 6px left & right
-    const boxHeight = box.clientHeight - 12; // padding 6px top & bottom
-
-    let fontSize = maxFontSize;
-    contentDiv.style.fontSize = fontSize + 'px';
-
-    // We shrink font size until content fits in box (rough check)
-    while (fontSize > minFontSize && (contentDiv.scrollWidth > boxWidth || contentDiv.scrollHeight > boxHeight)) {
-      fontSize -= 1;
-      contentDiv.style.fontSize = fontSize + 'px';
-    }
-    // Also grow font size if small content & space available
-    while (fontSize < maxFontSize && contentDiv.scrollWidth < boxWidth && contentDiv.scrollHeight < boxHeight) {
-      fontSize++;
-      contentDiv.style.fontSize = fontSize + 'px';
-      if (contentDiv.scrollWidth > boxWidth || contentDiv.scrollHeight > boxHeight) {
-        fontSize--;
-        contentDiv.style.fontSize = fontSize + 'px';
-        break;
-      }
-    }
-  }
-
-  window.addEventListener('resize', () => {
-    boxesMap.forEach(box => resizeBoxFont(box));
-  });
-
-  // Initial load
   loadAll();
   updateTransform();
 </script>
