@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV3</title>
+  <title>stringsnthingsV3-multiselect-full</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -32,9 +32,12 @@
       overflow: hidden;
       transition: width 0.1s ease, height 0.1s ease;
     }
+    .box.selected {
+      outline: 2px dashed blue;
+    }
     .box-header {
       background: #ddd;
-      padding-left: 24px; /* space for drag handle */
+      padding-left: 24px;
       min-width: 40px;
       min-height: 18px;
       height: 18px;
@@ -194,7 +197,7 @@
       top: 0; left: 0;
       width: 100%; height: 100%;
       pointer-events: none;
-      z-index: 1; /* behind boxes */
+      z-index: 1;
     }
     #footerInfo {
       position: fixed;
@@ -235,14 +238,14 @@
        background:white; border: 2px solid black; padding: 20px; z-index: 2000; width: 80vw; max-width: 600px; max-height: 70vh; overflow-y: auto; font-family: monospace;">
     <h2>How to Use</h2>
     <p id="howToContent" contenteditable="false" style="white-space: pre-wrap; user-select: text;">
-      <!-- Put your instructions here, edit in code -->
       Double click anywhere to create a new text box.
       Toggle edit mode on and off to make or prevent changes.
       Use the ✥ symbol in the top left corner to move boxes.
       Use the red x to delete boxes.
-      Use the blue button to connect boxes with lines. Click one blue button, turn it green, then click the blue button on your target box. 
+      Use the blue button to connect boxes with lines. Click one blue button, turn it green, then click the blue button on your target box.
       Use the resize handles at the corners to resize boxes.
       On the bottom of the screen, use "mark center" to fix yourself a return point.
+      **New:** Shift+click any part of the header (including ✥) to multi-select boxes. Drag any selected box to move the group.
     </p>
     <button id="closeHowToBtn" style="margin-top: 12px; padding: 6px 12px; cursor: pointer;">Close</button>
   </div>
@@ -269,6 +272,7 @@
 
   let editMode = true;
   let connectionStartBoxId = null;
+  const selectedBoxes = new Set();
 
   function getClientCoords(e) {
     if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -276,12 +280,15 @@
   }
 
   viewport.addEventListener('pointerdown', e => {
-    if (e.target.closest('.box') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn, howToBtn].includes(e.target)) return;
+    if (e.target.closest('.box-header') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn, howToBtn].includes(e.target)) return;
     isPanning = true;
     const coords = getClientCoords(e);
     startX = coords.x;
     startY = coords.y;
     viewport.setPointerCapture(e.pointerId);
+    // deselect on background click
+    selectedBoxes.forEach(b => b.classList.remove('selected'));
+    selectedBoxes.clear();
   });
 
   viewport.addEventListener('pointermove', e => {
@@ -306,22 +313,16 @@
     e.preventDefault();
     const zoomFactor = 1.1;
     const dir = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
-
     let newScale = scale * dir;
     newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, newScale));
-
     const rect = viewport.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-
     const wx = (mouseX - panX) / scale;
     const wy = (mouseY - panY) / scale;
-
     scale = newScale;
-
     panX = mouseX - wx * scale;
     panY = mouseY - wy * scale;
-
     updateTransform();
   });
 
@@ -330,7 +331,6 @@
     drawConnections();
   }
 
-  // Double click to add box
   let lastTap = 0;
   viewport.addEventListener('pointerdown', e => {
     if ([undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn, howToBtn].includes(e.target)) return;
@@ -346,10 +346,9 @@
   markCenterBtn.addEventListener('click', () => {
     const rect = viewport.getBoundingClientRect();
     const centerX = (rect.width / 2 - panX) / scale;
-    const centerY = (rect.height / 2 - panY) / scale;
-
+    const centerY = (rect.height
+      / 2 - panY) / scale;
     localStorage.setItem('markedCenter', JSON.stringify({ x: centerX, y: centerY }));
-
     alert('Center marked at: ' + Math.round(centerX) + ', ' + Math.round(centerY));
   });
 
@@ -391,7 +390,6 @@
   howToBtn.addEventListener('click', () => {
     howToModal.style.display = 'block';
   });
-
   closeHowToBtn.addEventListener('click', () => {
     howToModal.style.display = 'none';
   });
@@ -402,17 +400,14 @@
       const boxA = boxesMap.get(fromId);
       const boxB = boxesMap.get(toId);
       if (!boxA || !boxB) return;
-
       const ax = parseFloat(boxA.style.left) + boxA.offsetWidth / 2;
       const ay = parseFloat(boxA.style.top) + boxA.offsetHeight / 2;
       const bx = parseFloat(boxB.style.left) + boxB.offsetWidth / 2;
       const by = parseFloat(boxB.style.top) + boxB.offsetHeight / 2;
-
       const startX = ax * scale + panX;
       const startY = ay * scale + panY;
       const endX = bx * scale + panX;
       const endY = by * scale + panY;
-
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       const dx = endX - startX;
       const dy = endY - startY;
@@ -421,16 +416,13 @@
       const normX = dx / distance;
       const normY = dy / distance;
       const cpOffset = 40;
-
       const cpX = (startX + endX) / 2 - normY * cpOffset;
       const cpY = (startY + endY) / 2 + normX * cpOffset;
-
       path.setAttribute('d', `M${startX},${startY} Q${cpX},${cpY} ${endX},${endY}`);
       path.setAttribute('stroke', 'black');
       path.setAttribute('stroke-width', '2');
       path.setAttribute('fill', 'none');
       path.style.cursor = 'pointer';
-
       connectionLayer.appendChild(path);
     });
   }
@@ -458,10 +450,8 @@
     boxesData.forEach(b => {
       addBox(b.x, b.y, b.text, b.id, b.width, b.height, false, b.fontSize);
     });
-
     const connectionsData = JSON.parse(localStorage.getItem('connectionsData') || '[]');
     connections.push(...connectionsData);
-
     drawConnections();
   }
 
@@ -519,7 +509,6 @@
     content.textContent = text;
     box.appendChild(content);
 
-    // Resize handles
     ['nw', 'ne', 'sw', 'se'].forEach(pos => {
       const handle = document.createElement('div');
       handle.className = 'resize-handle ' + pos;
@@ -529,39 +518,60 @@
     canvas.appendChild(box);
     boxesMap.set(id, box);
 
-    // Show or hide header controls based on editMode
     header.style.display = editMode ? 'flex' : 'none';
     connectToggle.style.display = editMode ? 'inline-block' : 'none';
     fontIncBtn.style.display = editMode ? 'flex' : 'none';
     fontDecBtn.style.display = editMode ? 'flex' : 'none';
     dragHandle.style.display = editMode ? 'flex' : 'none';
 
-    // Dragging box on dragHandle
+    header.addEventListener('pointerdown', e => {
+      if (!editMode) return;
+      if (e.shiftKey) {
+        e.stopPropagation();
+        if (selectedBoxes.has(box)) {
+          selectedBoxes.delete(box);
+          box.classList.remove('selected');
+        } else {
+          selectedBoxes.add(box);
+          box.classList.add('selected');
+        }
+      }
+    });
+
     dragHandle.addEventListener('pointerdown', e => {
       if (!editMode) return;
       e.stopPropagation();
-      let startX = e.clientX;
-      let startY = e.clientY;
-      const origX = parseFloat(box.style.left);
-      const origY = parseFloat(box.style.top);
+      if (e.shiftKey) return;
+
+      const dragGroup = selectedBoxes.has(box) ? Array.from(selectedBoxes) : [box];
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const origPositions = dragGroup.map(b => ({
+        box: b,
+        left: parseFloat(b.style.left),
+        top: parseFloat(b.style.top)
+      }));
 
       function onPointerMove(ev) {
         const dx = ev.clientX - startX;
         const dy = ev.clientY - startY;
-        box.style.left = origX + dx + 'px';
-        box.style.top = origY + dy + 'px';
+        origPositions.forEach(pos => {
+          pos.box.style.left = pos.left + dx + 'px';
+          pos.box.style.top = pos.top + dy + 'px';
+        });
         drawConnections();
       }
-      function onPointerUp() {
+
+      function onPointerUp(ev) {
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
         saveAll();
       }
+
       window.addEventListener('pointermove', onPointerMove);
       window.addEventListener('pointerup', onPointerUp);
     });
 
-    // Resize box
     box.querySelectorAll('.resize-handle').forEach(handle => {
       handle.addEventListener('pointerdown', e => {
         if (!editMode) return;
@@ -572,7 +582,7 @@
         const origH = box.offsetHeight;
         const origLeft = parseFloat(box.style.left);
         const origTop = parseFloat(box.style.top);
-        const dir = handle.classList[1]; // nw, ne, sw, se
+        const dir = handle.classList[1];
 
         function onPointerMove(ev) {
           let dx = ev.clientX - startX;
@@ -605,17 +615,18 @@
           }
           drawConnections();
         }
+
         function onPointerUp() {
           window.removeEventListener('pointermove', onPointerMove);
           window.removeEventListener('pointerup', onPointerUp);
           saveAll();
         }
+
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
       });
     });
 
-    // Delete button
     deleteBtn.addEventListener('click', e => {
       e.stopPropagation();
       undoStack.push({
@@ -623,8 +634,6 @@
         connections: connections.filter(c => c.fromId === id || c.toId === id)
       });
       undoBtn.disabled = false;
-
-      // Remove connections involving this box
       for (let i = connections.length - 1; i >= 0; i--) {
         if (connections[i].fromId === id || connections[i].toId === id) {
           connections.splice(i, 1);
@@ -636,11 +645,9 @@
       saveAll();
     });
 
-    // Connect toggle
     connectToggle.addEventListener('click', e => {
       e.stopPropagation();
       if (!editMode) return;
-
       if (connectionStartBoxId === null) {
         connectionStartBoxId = id;
         connectToggle.classList.add('active');
@@ -649,7 +656,6 @@
         connectToggle.classList.remove('active');
       } else {
         connections.push({ fromId: connectionStartBoxId, toId: id });
-        // Reset toggles
         document.querySelectorAll('.connect-toggle').forEach(t => t.classList.remove('active'));
         connectionStartBoxId = null;
         drawConnections();
@@ -657,13 +663,11 @@
       }
     });
 
-    // Font size increase/decrease
     fontIncBtn.addEventListener('click', e => {
       e.stopPropagation();
       const style = window.getComputedStyle(content);
       let size = parseInt(style.fontSize);
-      size += 1;
-      if (size > 36) size = 36;
+      size = Math.min(size + 1, 36);
       content.style.fontSize = size + 'px';
       saveAll();
     });
@@ -671,16 +675,12 @@
       e.stopPropagation();
       const style = window.getComputedStyle(content);
       let size = parseInt(style.fontSize);
-      size -= 1;
-      if (size < 8) size = 8;
+      size = Math.max(size - 1, 8);
       content.style.fontSize = size + 'px';
       saveAll();
     });
 
-    // Content editable save on blur
-    content.addEventListener('input', e => {
-      saveAll();
-    });
+    content.addEventListener('input', e => { saveAll(); });
 
     if (save) saveAll();
     return box;
@@ -692,24 +692,15 @@
     const box = last.box;
     canvas.appendChild(box);
     boxesMap.set(box.dataset.id, box);
-
-    last.connections.forEach(c => {
-      connections.push(c);
-    });
+    last.connections.forEach(c => connections.push(c));
     undoBtn.disabled = undoStack.length === 0;
     drawConnections();
     saveAll();
   });
 
-  // Initialize
   loadAll();
   updateTransform();
 
-  // Open in edit mode by default - just keep editMode true and do not toggle off
-  // Disabled auto toggle line below so it stays in edit mode
-  // toggleEditModeBtn.click(); // disabled to start in edit mode
-
-  // Show controls for initial editMode
   document.querySelectorAll('.box-header').forEach(header => {
     header.style.display = editMode ? 'flex' : 'none';
   });
@@ -726,7 +717,6 @@
     content.contentEditable = editMode;
     content.style.cursor = editMode ? 'text' : 'default';
   });
-
 </script>
 </body>
 </html>
