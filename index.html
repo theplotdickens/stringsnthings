@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV5</title>
+  <title>stringsnthingsV6</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -104,7 +104,7 @@
       background-color: green;
     }
     .font-size-btn {
-      font-size: 14px;
+      font-size: 16px;
       width: 18px;
       height: 18px;
       line-height: 1;
@@ -118,6 +118,9 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      font-weight: bold;
+      user-select: none;
+      flex-shrink: 0;
     }
     .box-content {
       flex: 1;
@@ -289,6 +292,7 @@
       Shift+click any part of the header (including ✥) to multi-select boxes. Drag any selected box to move the group.
       Use the top menu to save, rename, delete, or create new mind maps.
       Selecting a mind map from the dropdown will load it automatically.
+      Use the + and – buttons in the box header to increase or decrease font size.
     </p>
     <button id="closeHowToBtn" style="margin-top: 12px; padding: 6px 12px; cursor: pointer;">Close</button>
   </div>
@@ -335,16 +339,11 @@
   let connectionStartBoxId = null;
   const selectedBoxes = new Set();
 
-  // Current loaded map info
-  let currentMapId = 'id-te4y6fgv6'; // Your landing map ID plugged in here
-  let currentMapName = '';
-
   function getClientCoords(e) {
     if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
     return { x: e.clientX, y: e.clientY };
   }
 
-  // Panning handlers
   viewport.addEventListener('pointerdown', e => {
     if (e.target.closest('.box-header') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn, howToBtn].includes(e.target)) return;
     isPanning = true;
@@ -396,7 +395,6 @@
     drawConnections();
   }
 
-  let lastTap = 0;
   viewport.addEventListener('dblclick', e => {
     if ([undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn, howToBtn].includes(e.target)) return;
     if (e.target.closest('.box')) return;
@@ -405,7 +403,8 @@
     addBox(x, y);
   });
 
-  function addBox(x, y, text = "", id = null, fontSize = 14, width = 120, height = 60) {
+  function addBox(x, y, text = '', boxId = null, fontSize = 14, width = 120, height = 60) {
+    boxId = boxId || `box-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     const box = document.createElement('div');
     box.className = 'box';
     box.style.left = x + 'px';
@@ -413,44 +412,55 @@
     box.style.width = width + 'px';
     box.style.height = height + 'px';
     box.style.fontSize = fontSize + 'px';
-
-    const boxId = id || 'box-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
     box.dataset.id = boxId;
 
-    // Header
     const header = document.createElement('div');
     header.className = 'box-header';
 
     const dragHandle = document.createElement('div');
     dragHandle.className = 'drag-handle';
+    dragHandle.title = 'Drag box';
     dragHandle.textContent = '✥';
-    header.appendChild(dragHandle);
 
-    // Connect toggle button
-    const connectToggle = document.createElement('button');
-    connectToggle.className = 'connect-toggle';
-    connectToggle.title = 'Connect/Disconnect Boxes';
-    header.appendChild(connectToggle);
+    const fontMinusBtn = document.createElement('button');
+    fontMinusBtn.className = 'font-size-btn';
+    fontMinusBtn.title = 'Decrease font size';
+    fontMinusBtn.textContent = '−';
 
-    // Delete button
+    const fontPlusBtn = document.createElement('button');
+    fontPlusBtn.className = 'font-size-btn';
+    fontPlusBtn.title = 'Increase font size';
+    fontPlusBtn.textContent = '+';
+
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'delete-btn';
-    deleteBtn.textContent = '×';
     deleteBtn.title = 'Delete box';
-    header.appendChild(deleteBtn);
+    deleteBtn.textContent = '×';
 
-    box.appendChild(header);
+    const connectToggle = document.createElement('button');
+    connectToggle.className = 'connect-toggle';
+    connectToggle.title = 'Connect boxes';
 
-    // Content area
     const content = document.createElement('div');
     content.className = 'box-content';
     content.contentEditable = editMode;
     content.spellcheck = false;
+    content.style.fontSize = fontSize + 'px';
     content.textContent = text;
+    content.style.textAlign = 'center';
+
+    // Append in order: drag handle left, then font minus, font plus, delete, connect toggle right
+    header.appendChild(dragHandle);
+    header.appendChild(fontMinusBtn);
+    header.appendChild(fontPlusBtn);
+    header.appendChild(deleteBtn);
+    header.appendChild(connectToggle);
+
+    box.appendChild(header);
     box.appendChild(content);
 
     // Resize handles
-    ['nw', 'ne', 'sw', 'se'].forEach(pos => {
+    ['nw','ne','sw','se'].forEach(pos => {
       const handle = document.createElement('div');
       handle.className = 'resize-handle ' + pos;
       box.appendChild(handle);
@@ -492,7 +502,6 @@
       selectedBoxes.forEach(b => {
         const id = b.dataset.id;
         const bb = boxesMap.get(id);
-        const oldRect = bb.box.getBoundingClientRect();
         const oldX = parseFloat(bb.box.style.left);
         const oldY = parseFloat(bb.box.style.top);
         const dx = newX - oldX;
@@ -535,19 +544,15 @@
       if (!editMode) return;
       e.stopPropagation();
       if (connectionStartBoxId === boxId) {
-        // Cancel connection mode
         connectionStartBoxId = null;
         connectToggle.classList.remove('active');
       } else if (connectionStartBoxId === null) {
-        // Start connection from this box
         connectionStartBoxId = boxId;
         connectToggle.classList.add('active');
       } else {
-        // Connect start box to this box
         if (connectionStartBoxId !== boxId) {
           addConnection(connectionStartBoxId, boxId);
         }
-        // Reset toggles
         const startBox = boxesMap.get(connectionStartBoxId);
         if (startBox) startBox.connectToggle.classList.remove('active');
         connectionStartBoxId = null;
@@ -600,9 +605,29 @@
       window.removeEventListener('pointerup', onResizeEnd);
     }
 
+    // Font size buttons
+    fontMinusBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      let currentSize = parseFloat(box.style.fontSize) || 14;
+      if (currentSize > 8) {
+        currentSize -= 1;
+        box.style.fontSize = currentSize + 'px';
+        content.style.fontSize = currentSize + 'px';
+      }
+    });
+    fontPlusBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      let currentSize = parseFloat(box.style.fontSize) || 14;
+      if (currentSize < 48) {
+        currentSize += 1;
+        box.style.fontSize = currentSize + 'px';
+        content.style.fontSize = currentSize + 'px';
+      }
+    });
+
     // Content editable focus and styling
     content.addEventListener('input', () => {
-      // could save autosave here if wanted
+      // autosave could go here
     });
 
     // Disable text selection drag on drag handle
@@ -630,7 +655,6 @@
   }
 
   function addConnection(fromId, toId) {
-    // Prevent duplicates and self-connections
     if (fromId === toId) return;
     if (connections.some(c => c.from === fromId && c.to === toId)) return;
     connections.push({ from: fromId, to: toId });
@@ -643,9 +667,6 @@
       const bbFrom = boxesMap.get(from);
       const bbTo = boxesMap.get(to);
       if (!bbFrom || !bbTo) return;
-      const rectFrom = bbFrom.box.getBoundingClientRect();
-      const rectTo = bbTo.box.getBoundingClientRect();
-      // Calculate positions relative to viewport & canvas offset
       const startX = parseFloat(bbFrom.box.style.left) + bbFrom.box.offsetWidth / 2;
       const startY = parseFloat(bbFrom.box.style.top) + bbFrom.box.offsetHeight / 2;
       const endX = parseFloat(bbTo.box.style.left) + bbTo.box.offsetWidth / 2;
@@ -681,12 +702,10 @@
       alert('No map selected');
       return;
     }
-    // Collect boxes
     const boxesData = [];
     boxesMap.forEach((val, key) => {
       boxesData.push(getBoxData(key));
     });
-    // Save center + zoom
     const mapDoc = doc(db, 'mindmaps', currentMapId);
     await setDoc(mapDoc, {
       name: currentMapName,
@@ -695,7 +714,7 @@
       center: { panX, panY, scale }
     });
     alert('Map saved.');
-    await loadMapsList(); // refresh list to update name if changed
+    await loadMapsList();
   }
 
   async function loadMapsList() {
@@ -708,7 +727,6 @@
       option.textContent = docSnap.data().name || docSnap.id;
       mindMapSelect.appendChild(option);
     });
-    // Select current if present
     if (currentMapId) {
       const opt = [...mindMapSelect.options].find(o => o.value === currentMapId);
       if (opt) opt.selected = true;
@@ -759,7 +777,6 @@
     if (action.type === 'deleteBox') {
       const d = action.data;
       addBox(d.x, d.y, d.text, d.id, d.fontSize, d.width, d.height);
-      // restore connections
       if (Array.isArray(d.connectedTo)) {
         d.connectedTo.forEach(toId => {
           addConnection(d.id, toId);
@@ -780,7 +797,6 @@
   });
 
   markCenterBtn.addEventListener('click', () => {
-    // Save current pan and scale as "center"
     if (!currentMapId) return;
     const mapDoc = doc(db, 'mindmaps', currentMapId);
     setDoc(mapDoc, {
@@ -795,7 +811,6 @@
     boxesMap.forEach(({ content, connectToggle, box }) => {
       content.contentEditable = editMode;
       connectToggle.style.display = editMode ? 'inline-block' : 'none';
-      // Show or hide box header based on mode
       box.querySelector('.box-header').style.display = editMode ? 'flex' : 'none';
     });
   });
@@ -847,14 +862,12 @@
     const newName = prompt('Enter new map name:', 'New Mind Map');
     if (!newName || newName.trim().length === 0) return;
     const col = collection(db, 'mindmaps');
-    // Generate a random id
     const newId = 'map-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
     currentMapId = newId;
     currentMapName = newName.trim();
     clearCanvas();
     panX = 0; panY = 0; scale = 1;
     updateTransform();
-    // Save immediately with empty boxes/connections
     await setDoc(doc(db, 'mindmaps', newId), {
       name: currentMapName,
       boxes: [],
