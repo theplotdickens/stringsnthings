@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>stringsnthingsV3withFirebase</title>
+  <title>tryingfirebaseagain</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     html, body {
@@ -158,7 +158,9 @@
       transform: translateX(-50%);
       display: flex;
       gap: 12px;
+      flex-wrap: wrap;
       z-index: 1000;
+      max-width: 95vw;
     }
     .floatingBtn {
       background: rgba(100, 100, 100, 0.5);
@@ -175,6 +177,7 @@
       box-shadow: 0 0 6px rgba(0,0,0,0.3);
       touch-action: manipulation;
       transition: background 0.2s ease;
+      flex-shrink: 0;
     }
     .floatingBtn:active {
       background: rgba(80, 80, 80, 0.7);
@@ -232,8 +235,8 @@
     <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
     <button id="toggleEditModeBtn" class="floatingBtn">Toggle Edit Mode</button>
     <button id="howToBtn" class="floatingBtn">How to Use</button>
-    <button id="saveBtn" class="floatingBtn">Save to Firebase</button>
-    <button id="loadBtn" class="floatingBtn">Load from Firebase</button>
+    <button id="saveBtn" class="floatingBtn">Save</button>
+    <button id="loadBtn" class="floatingBtn">Load</button>
   </div>
 
   <div id="howToModal" style="display:none; position:fixed; top:50%; left:50%; transform: translate(-50%, -50%);
@@ -243,21 +246,19 @@
       Double click anywhere to create a new text box.
       Toggle edit mode on and off to make or prevent changes.
       Use the ✥ symbol in the top left corner to move boxes.
-      Use the red × to delete boxes.
+      Use the red x to delete boxes.
       Use the blue button to connect boxes with lines. Click one blue button, turn it green, then click the blue button on your target box.
       Use the resize handles at the corners to resize boxes.
       On the bottom of the screen, use "mark center" to fix yourself a return point.
-      The page loads at the saved center from Firebase.
       **New:** Shift+click any part of the header (including ✥) to multi-select boxes. Drag any selected box to move the group.
-      Use "Save to Firebase" to save your work; "Load from Firebase" to reload.
+      Use the Save and Load buttons to persist your data to Firebase.
     </p>
     <button id="closeHowToBtn" style="margin-top: 12px; padding: 6px 12px; cursor: pointer;">Close</button>
   </div>
 
 <script type="module">
-  // Firebase SDK import from CDN
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
-  import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCpp42OH-1mTZxu5iq44dmMQc8ahQdvnL0",
@@ -269,9 +270,7 @@
   };
 
   const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-
-  // --- Main app code below ---
+  const db = getFirestore(app);
 
   const canvas = document.getElementById('canvas');
   const viewport = document.getElementById('viewport');
@@ -282,9 +281,10 @@
   const howToBtn = document.getElementById('howToBtn');
   const howToModal = document.getElementById('howToModal');
   const closeHowToBtn = document.getElementById('closeHowToBtn');
+  const howToContent = document.getElementById('howToContent');
+  const connectionLayer = document.getElementById('connectionLayer');
   const saveBtn = document.getElementById('saveBtn');
   const loadBtn = document.getElementById('loadBtn');
-  const connectionLayer = document.getElementById('connectionLayer');
 
   let scale = 1, panX = 0, panY = 0;
   let isPanning = false, startX, startY;
@@ -370,28 +370,34 @@
     const rect = viewport.getBoundingClientRect();
     const centerX = (rect.width / 2 - panX) / scale;
     const centerY = (rect.height / 2 - panY) / scale;
+    panX = rect.width / 2 - centerX * scale;
+    panY = rect.height / 2 - centerY * scale;
+    updateTransform();
+
     try {
-      await set(ref(db, 'appState/center'), { x: centerX, y: centerY });
-      alert('Center marked and saved to Firebase at: ' + Math.round(centerX) + ', ' + Math.round(centerY));
-    } catch (e) {
-      alert('Failed to save center to Firebase: ' + e.message);
+      await setDoc(doc(db, 'userData', 'center'), { x: centerX, y: centerY });
+      alert('Center marked at: ' + Math.round(centerX) + ', ' + Math.round(centerY));
+    } catch (err) {
+      console.error('Error saving center:', err);
+      alert('Failed to save center');
     }
   });
 
   goCenterBtn.addEventListener('click', async () => {
     try {
-      const snapshot = await get(child(ref(db), 'appState/center'));
-      if (snapshot.exists()) {
-        const c = snapshot.val();
+      const centerDoc = await getDoc(doc(db, 'userData', 'center'));
+      if (centerDoc.exists()) {
+        const c = centerDoc.data();
         const rect = viewport.getBoundingClientRect();
         panX = rect.width / 2 - c.x * scale;
         panY = rect.height / 2 - c.y * scale;
         updateTransform();
       } else {
-        alert('No center saved in Firebase yet.');
+        alert('No center saved yet');
       }
-    } catch (e) {
-      alert('Failed to load center from Firebase: ' + e.message);
+    } catch (err) {
+      console.error('Error loading center:', err);
+      alert('Failed to load center');
     }
   });
 
@@ -433,193 +439,94 @@
       const ay = parseFloat(boxA.style.top) + boxA.offsetHeight / 2;
       const bx = parseFloat(boxB.style.left) + boxB.offsetWidth / 2;
       const by = parseFloat(boxB.style.top) + boxB.offsetHeight / 2;
-      const startX = ax * scale + panX;
-      const startY = ay * scale + panY;
-      const endX = bx * scale + panX;
-      const endY = by * scale + panY;
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      const dx = endX - startX;
-      const dy = endY - startY;
-      const distance = Math.sqrt(dx*dx + dy*dy);
-      if (distance === 0) return;
-      const normX = dx / distance;
-      const normY = dy / distance;
-      const cpOffset = 40;
-      const cp1X = startX + normX * cpOffset;
-      const cp1Y = startY + normY * cpOffset;
-      const cp2X = endX - normX * cpOffset;
-      const cp2Y = endY - normY * cpOffset;
-      path.setAttribute('d', `M${startX},${startY} C${cp1X},${cp1Y} ${cp2X},${cp2Y} ${endX},${endY}`);
-      path.setAttribute('stroke', 'black');
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke-width', '2');
-      connectionLayer.appendChild(path);
+
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", ax);
+      line.setAttribute("y1", ay);
+      line.setAttribute("x2", bx);
+      line.setAttribute("y2", by);
+      line.setAttribute("stroke", "black");
+      line.setAttribute("stroke-width", "1");
+      connectionLayer.appendChild(line);
     });
   }
 
-  function addBox(x, y, id = null, content = '', fontSize = 14, width = 120, height = 60) {
-    if (!id) id = 'box_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
-    if (boxesMap.has(id)) return;
+  function addBox(x, y, text = '', id = null, width = 150, height = 80, selectNew = true, fontSize = '16px') {
+    if (!id) id = 'box-' + Math.random().toString(36).slice(2, 10);
+
+    if (boxesMap.has(id)) {
+      console.warn('Box with this ID already exists:', id);
+      return;
+    }
+
     const box = document.createElement('div');
-    box.className = 'box';
+    box.classList.add('box');
+    box.dataset.id = id;
     box.style.left = x + 'px';
     box.style.top = y + 'px';
     box.style.width = width + 'px';
     box.style.height = height + 'px';
-    box.dataset.id = id;
 
-    // Header
     const header = document.createElement('div');
-    header.className = 'box-header';
+    header.classList.add('box-header');
+    header.title = 'Drag header. Shift+click for multi-select';
 
-    // Drag handle (✥)
     const dragHandle = document.createElement('div');
-    dragHandle.className = 'drag-handle';
+    dragHandle.classList.add('drag-handle');
     dragHandle.textContent = '✥';
     header.appendChild(dragHandle);
 
-    // Font size buttons: - and +
-    const fontMinus = document.createElement('button');
-    fontMinus.className = 'font-size-btn';
-    fontMinus.textContent = '−';
-    header.appendChild(fontMinus);
-    const fontPlus = document.createElement('button');
-    fontPlus.className = 'font-size-btn';
-    fontPlus.textContent = '+';
-    header.appendChild(fontPlus);
-
-    // Connection toggle button (blue circle)
     const connectToggle = document.createElement('button');
-    connectToggle.className = 'connect-toggle';
-    connectToggle.title = 'Connect this box';
+    connectToggle.classList.add('connect-toggle');
+    connectToggle.title = 'Click to start/finish connection';
+    connectToggle.tabIndex = -1;
     header.appendChild(connectToggle);
 
-    // Delete button (red ×)
+    const minusBtn = document.createElement('button');
+    minusBtn.classList.add('font-size-btn');
+    minusBtn.textContent = '−';
+    minusBtn.title = 'Decrease font size';
+    header.appendChild(minusBtn);
+
+    const plusBtn = document.createElement('button');
+    plusBtn.classList.add('font-size-btn');
+    plusBtn.textContent = '+';
+    plusBtn.title = 'Increase font size';
+    header.appendChild(plusBtn);
+
     const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'delete-btn';
+    deleteBtn.classList.add('delete-btn');
     deleteBtn.textContent = '×';
+    deleteBtn.title = 'Delete box';
     header.appendChild(deleteBtn);
 
+    const content = document.createElement('div');
+    content.classList.add('box-content');
+    content.contentEditable = editMode;
+    content.textContent = text;
+    content.style.fontSize = fontSize;
+    content.style.justifyContent = 'center';
+    content.style.alignItems = 'center';
+    content.style.textAlign = 'center';
+
     box.appendChild(header);
+    box.appendChild(content);
 
-    // Content editable div centered text
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'box-content';
-    contentDiv.contentEditable = editMode;
-    contentDiv.style.fontSize = fontSize + 'px';
-    contentDiv.textContent = content;
-    box.appendChild(contentDiv);
-
-    // Resize handles (only bottom-right corner for simplicity)
-    const resizeHandle = document.createElement('div');
-    resizeHandle.className = 'resize-handle se';
-    box.appendChild(resizeHandle);
+    // Resize handles
+    ['nw', 'ne', 'sw', 'se'].forEach(corner => {
+      const resizeHandle = document.createElement('div');
+      resizeHandle.classList.add('resize-handle', corner);
+      box.appendChild(resizeHandle);
+    });
 
     canvas.appendChild(box);
     boxesMap.set(id, box);
 
-    // Font size events
-    fontMinus.addEventListener('click', () => {
-      let currentSize = parseInt(contentDiv.style.fontSize) || 14;
-      currentSize = Math.max(8, currentSize - 1);
-      contentDiv.style.fontSize = currentSize + 'px';
-      saveNeeded = true;
-    });
-    fontPlus.addEventListener('click', () => {
-      let currentSize = parseInt(contentDiv.style.fontSize) || 14;
-      currentSize = Math.min(48, currentSize + 1);
-      contentDiv.style.fontSize = currentSize + 'px';
-      saveNeeded = true;
-    });
-
-    // Delete event
-    deleteBtn.addEventListener('click', () => {
-      deleteBox(id);
-    });
-
-    // Connect toggle event
-    connectToggle.addEventListener('click', () => {
-      if (!editMode) return;
-      if (connectionStartBoxId === null) {
-        connectionStartBoxId = id;
-        connectToggle.classList.add('active');
-      } else if (connectionStartBoxId === id) {
-        connectionStartBoxId = null;
-        connectToggle.classList.remove('active');
-      } else {
-        // Add connection
-        connections.push({ fromId: connectionStartBoxId, toId: id });
-        clearConnectToggles();
-        connectionStartBoxId = null;
-        drawConnections();
-        saveNeeded = true;
-      }
-    });
-
-    // Dragging the box
-    let isDragging = false;
-    let dragOffsetX, dragOffsetY;
-
-    function dragStart(e) {
-      if (!editMode) return;
-      e.preventDefault();
-      isDragging = true;
-      const rect = box.getBoundingClientRect();
-      const coords = getClientCoords(e);
-      dragOffsetX = coords.x - rect.left;
-      dragOffsetY = coords.y - rect.top;
-      if (e.shiftKey) {
-        // Multi-select drag
-        if (!selectedBoxes.has(box)) {
-          selectedBoxes.forEach(b => b.classList.remove('selected'));
-          selectedBoxes.clear();
-          selectedBoxes.add(box);
-          box.classList.add('selected');
-        }
-        dragGroupStart(coords.x, coords.y);
-      } else {
-        // Normal drag
-        if (!selectedBoxes.has(box)) {
-          selectedBoxes.forEach(b => b.classList.remove('selected'));
-          selectedBoxes.clear();
-          selectedBoxes.add(box);
-          box.classList.add('selected');
-        }
-      }
-      window.addEventListener('pointermove', dragging);
-      window.addEventListener('pointerup', dragEnd);
-    }
-
-    function dragging(e) {
-      if (!isDragging) return;
-      e.preventDefault();
-      const coords = getClientCoords(e);
-      if (draggingGroup) {
-        dragGroupMove(coords.x, coords.y);
-      } else {
-        const newX = (coords.x - dragOffsetX - panX) / scale;
-        const newY = (coords.y - dragOffsetY - panY) / scale;
-        box.style.left = newX + 'px';
-        box.style.top = newY + 'px';
-        drawConnections();
-        saveNeeded = true;
-      }
-    }
-
-    function dragEnd(e) {
-      isDragging = false;
-      window.removeEventListener('pointermove', dragging);
-      window.removeEventListener('pointerup', dragEnd);
-      draggingGroup = false;
-    }
-
-    dragHandle.addEventListener('pointerdown', dragStart);
-
-    // Multi-select via Shift+click on header (including drag handle)
+    // Select logic for multi-select (Shift+click on header)
     header.addEventListener('click', e => {
       if (!editMode) return;
+      if (e.target === deleteBtn) return; // delete handled separately
       if (e.shiftKey) {
-        e.preventDefault();
         if (selectedBoxes.has(box)) {
           selectedBoxes.delete(box);
           box.classList.remove('selected');
@@ -627,234 +534,300 @@
           selectedBoxes.add(box);
           box.classList.add('selected');
         }
+      } else {
+        selectedBoxes.forEach(b => b.classList.remove('selected'));
+        selectedBoxes.clear();
+        selectedBoxes.add(box);
+        box.classList.add('selected');
+      }
+      e.stopPropagation();
+    });
+
+    // Dragging boxes by drag handle or header with shift+click
+    let dragOffsetX, dragOffsetY, draggingBoxes = false;
+
+    function onDragStart(e) {
+      if (!editMode) return;
+      if (e.button !== 0) return;
+      if (e.target.closest('.resize-handle')) return;
+
+      if (e.target === dragHandle || e.target.closest('.drag-handle') || e.currentTarget === header) {
+        if (!selectedBoxes.has(box)) {
+          selectedBoxes.forEach(b => b.classList.remove('selected'));
+          selectedBoxes.clear();
+          selectedBoxes.add(box);
+          box.classList.add('selected');
+        }
+        draggingBoxes = true;
+        const coords = getClientCoords(e);
+        dragOffsetX = coords.x;
+        dragOffsetY = coords.y;
+        e.preventDefault();
+      }
+    }
+    function onDragMove(e) {
+      if (!draggingBoxes) return;
+      e.preventDefault();
+      const coords = getClientCoords(e);
+      const dx = (coords.x - dragOffsetX) / scale;
+      const dy = (coords.y - dragOffsetY) / scale;
+      dragOffsetX = coords.x;
+      dragOffsetY = coords.y;
+
+      selectedBoxes.forEach(b => {
+        const newX = parseFloat(b.style.left) + dx;
+        const newY = parseFloat(b.style.top) + dy;
+        b.style.left = newX + 'px';
+        b.style.top = newY + 'px';
+      });
+      drawConnections();
+    }
+    function onDragEnd(e) {
+      if (!draggingBoxes) return;
+      draggingBoxes = false;
+    }
+
+    header.addEventListener('pointerdown', onDragStart);
+    window.addEventListener('pointermove', onDragMove);
+    window.addEventListener('pointerup', onDragEnd);
+
+    // Delete button
+    deleteBtn.addEventListener('click', () => {
+      undoStack.push({
+        boxes: Array.from(boxesMap.entries()).map(([id, b]) => ({
+          id,
+          x: parseFloat(b.style.left),
+          y: parseFloat(b.style.top),
+          width: b.offsetWidth,
+          height: b.offsetHeight,
+          text: b.querySelector('.box-content').textContent,
+          fontSize: window.getComputedStyle(b.querySelector('.box-content')).fontSize
+        })),
+        connections: [...connections]
+      });
+      undoBtn.disabled = false;
+
+      // Remove connections related to this box
+      for (let i = connections.length - 1; i >= 0; i--) {
+        if (connections[i].fromId === id || connections[i].toId === id) connections.splice(i, 1);
+      }
+      canvas.removeChild(box);
+      boxesMap.delete(id);
+      drawConnections();
+    });
+
+    // Connect toggle
+    connectToggle.addEventListener('click', () => {
+      if (!editMode) return;
+      if (connectionStartBoxId === id) {
+        connectionStartBoxId = null;
+        connectToggle.classList.remove('active');
+      } else if (connectionStartBoxId) {
+        if (connectionStartBoxId !== id) {
+          connections.push({ fromId: connectionStartBoxId, toId: id });
+          connectionStartBoxId = null;
+          document.querySelectorAll('.connect-toggle').forEach(t => t.classList.remove('active'));
+          drawConnections();
+        }
+      } else {
+        connectionStartBoxId = id;
+        document.querySelectorAll('.connect-toggle').forEach(t => t.classList.remove('active'));
+        connectToggle.classList.add('active');
       }
     });
 
-    // Resize handling
-    let isResizing = false;
-    let resizeStartX, resizeStartY, startWidth, startHeight;
-    resizeHandle.addEventListener('pointerdown', e => {
+    // Font size buttons
+    minusBtn.addEventListener('click', () => {
+      const currSize = parseInt(window.getComputedStyle(content).fontSize);
+      if (currSize > 8) content.style.fontSize = (currSize - 1) + 'px';
+    });
+    plusBtn.addEventListener('click', () => {
+      const currSize = parseInt(window.getComputedStyle(content).fontSize);
+      if (currSize < 48) content.style.fontSize = (currSize + 1) + 'px';
+    });
+
+    // Resizing
+    let resizing = false;
+    let resizeDir = null;
+    let resizeStartX, resizeStartY;
+    let startWidth, startHeight;
+    let startLeft, startTop;
+
+    function onResizeStart(e) {
       if (!editMode) return;
-      e.preventDefault();
-      isResizing = true;
-      const rect = box.getBoundingClientRect();
+      resizing = true;
+      resizeDir = e.target.classList.contains('nw') ? 'nw' :
+                  e.target.classList.contains('ne') ? 'ne' :
+                  e.target.classList.contains('sw') ? 'sw' : 'se';
       resizeStartX = e.clientX;
       resizeStartY = e.clientY;
-      startWidth = rect.width;
-      startHeight = rect.height;
-      window.addEventListener('pointermove', resizing);
-      window.addEventListener('pointerup', resizeEnd);
-    });
-
-    function resizing(e) {
-      if (!isResizing) return;
+      startWidth = box.offsetWidth;
+      startHeight = box.offsetHeight;
+      startLeft = parseFloat(box.style.left);
+      startTop = parseFloat(box.style.top);
       e.preventDefault();
-      const dx = e.clientX - resizeStartX;
-      const dy = e.clientY - resizeStartY;
-      const newWidth = Math.max(50, startWidth + dx / scale);
-      const newHeight = Math.max(30, startHeight + dy / scale);
+      e.stopPropagation();
+    }
+    function onResizeMove(e) {
+      if (!resizing) return;
+      e.preventDefault();
+      const dx = (e.clientX - resizeStartX) / scale;
+      const dy = (e.clientY - resizeStartY) / scale;
+
+      let newWidth = startWidth;
+      let newHeight = startHeight;
+      let newLeft = startLeft;
+      let newTop = startTop;
+
+      if (resizeDir.includes('n')) {
+        newHeight = startHeight - dy;
+        newTop = startTop + dy;
+        if (newHeight < 40) {
+          newHeight = 40;
+          newTop = startTop + (startHeight - 40);
+        }
+      }
+      if (resizeDir.includes('s')) {
+        newHeight = startHeight + dy;
+        if (newHeight < 40) newHeight = 40;
+      }
+      if (resizeDir.includes('w')) {
+        newWidth = startWidth - dx;
+        newLeft = startLeft + dx;
+        if (newWidth < 80) {
+          newWidth = 80;
+          newLeft = startLeft + (startWidth - 80);
+        }
+      }
+      if (resizeDir.includes('e')) {
+        newWidth = startWidth + dx;
+        if (newWidth < 80) newWidth = 80;
+      }
+
       box.style.width = newWidth + 'px';
       box.style.height = newHeight + 'px';
+      box.style.left = newLeft + 'px';
+      box.style.top = newTop + 'px';
       drawConnections();
-      saveNeeded = true;
+    }
+    function onResizeEnd(e) {
+      if (!resizing) return;
+      resizing = false;
     }
 
-    function resizeEnd(e) {
-      isResizing = false;
-      window.removeEventListener('pointermove', resizing);
-      window.removeEventListener('pointerup', resizeEnd);
-    }
-
-    // Content editable change triggers saveNeeded
-    contentDiv.addEventListener('input', () => {
-      saveNeeded = true;
+    box.querySelectorAll('.resize-handle').forEach(handle => {
+      handle.addEventListener('pointerdown', onResizeStart);
     });
+    window.addEventListener('pointermove', onResizeMove);
+    window.addEventListener('pointerup', onResizeEnd);
+
+    if (selectNew) {
+      selectedBoxes.forEach(b => b.classList.remove('selected'));
+      selectedBoxes.clear();
+      selectedBoxes.add(box);
+      box.classList.add('selected');
+    }
+
+    drawConnections();
 
     return box;
   }
 
-  function deleteBox(id) {
-    const box = boxesMap.get(id);
-    if (!box) return;
-    undoStack.push({
-      id: id,
-      left: parseFloat(box.style.left),
-      top: parseFloat(box.style.top),
-      width: parseFloat(box.style.width),
-      height: parseFloat(box.style.height),
-      content: box.querySelector('.box-content').textContent,
-      fontSize: parseInt(box.querySelector('.box-content').style.fontSize) || 14,
-      connectionsFrom: connections.filter(c => c.fromId === id),
-      connectionsTo: connections.filter(c => c.toId === id)
-    });
-    undoBtn.disabled = false;
-
-    // Remove connections involving this box
-    for (let i = connections.length -1; i >= 0; i--) {
-      if (connections[i].fromId === id || connections[i].toId === id) {
-        connections.splice(i, 1);
-      }
-    }
-
-    box.remove();
-    boxesMap.delete(id);
-    drawConnections();
-    saveNeeded = true;
-  }
-
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
-    const last = undoStack.pop();
-    const restoredBox = addBox(last.left, last.top, last.id, last.content, last.fontSize, last.width, last.height);
-    last.connectionsFrom.forEach(c => connections.push(c));
-    last.connectionsTo.forEach(c => connections.push(c));
+    const lastState = undoStack.pop();
+    // Clear current
+    boxesMap.forEach(box => canvas.removeChild(box));
+    boxesMap.clear();
+    connections.length = 0;
+
+    lastState.boxes.forEach(b => {
+      addBox(b.x, b.y, b.text, b.id, b.width, b.height, false, b.fontSize);
+    });
+    connections.push(...lastState.connections);
     drawConnections();
-    if (undoStack.length === 0) undoBtn.disabled = true;
-    saveNeeded = true;
+    undoBtn.disabled = undoStack.length === 0;
   });
 
-  // Clear connect toggles
-  function clearConnectToggles() {
-    document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
-  }
-
-  // Multi-drag support
-  let draggingGroup = false;
-  let dragGroupOrigin = null;
-  let dragGroupOffsets = new Map();
-
-  function dragGroupStart(clientX, clientY) {
-    draggingGroup = true;
-    dragGroupOrigin = { x: clientX, y: clientY };
-    dragGroupOffsets.clear();
-    selectedBoxes.forEach(box => {
-      const left = parseFloat(box.style.left);
-      const top = parseFloat(box.style.top);
-      dragGroupOffsets.set(box, { left, top });
-    });
-  }
-
-  function dragGroupMove(clientX, clientY) {
-    if (!draggingGroup) return;
-    const dx = (clientX - dragGroupOrigin.x) / scale;
-    const dy = (clientY - dragGroupOrigin.y) / scale;
-    selectedBoxes.forEach(box => {
-      const orig = dragGroupOffsets.get(box);
-      box.style.left = (orig.left + dx) + 'px';
-      box.style.top = (orig.top + dy) + 'px';
-    });
-    drawConnections();
-    saveNeeded = true;
-  }
-
-  // Save/load data to/from Firebase
-  let saveNeeded = false;
-
-  async function saveToFirebase() {
-    const allBoxes = [];
-    boxesMap.forEach(box => {
-      allBoxes.push({
-        id: box.dataset.id,
-        left: parseFloat(box.style.left),
-        top: parseFloat(box.style.top),
-        width: parseFloat(box.style.width),
-        height: parseFloat(box.style.height),
-        content: box.querySelector('.box-content').textContent,
-        fontSize: parseInt(box.querySelector('.box-content').style.fontSize) || 14
+  // SAVE function to Firebase
+  saveBtn.addEventListener('click', async () => {
+    try {
+      const boxesData = [];
+      boxesMap.forEach(box => {
+        const contentDiv = box.querySelector('.box-content');
+        boxesData.push({
+          id: box.dataset.id,
+          x: parseFloat(box.style.left),
+          y: parseFloat(box.style.top),
+          width: box.offsetWidth,
+          height: box.offsetHeight,
+          text: contentDiv.textContent,
+          fontSize: window.getComputedStyle(contentDiv).fontSize
+        });
       });
-    });
 
-    try {
-      await set(ref(db, 'appState'), {
-        boxes: allBoxes,
-        connections,
-        center: await getCenterFromFirebase() || {x:0,y:0}
-      });
-      alert('Saved to Firebase!');
-      saveNeeded = false;
-    } catch (e) {
-      alert('Save failed: ' + e.message);
+      await setDoc(doc(db, 'userData', 'boxesData'), { boxes: boxesData });
+      await setDoc(doc(db, 'userData', 'connectionsData'), { connections: connections });
+      alert('Saved successfully!');
+      console.log('Save successful');
+    } catch (error) {
+      console.error('Error saving data:', error);
+      alert('Error saving data. See console.');
     }
-  }
+  });
 
-  async function getCenterFromFirebase() {
+  // LOAD function from Firebase
+  loadBtn.addEventListener('click', async () => {
     try {
-      const snapshot = await get(child(ref(db), 'appState/center'));
-      if (snapshot.exists()) {
-        return snapshot.val();
-      }
-    } catch (e) {
-      // ignore
-    }
-    return null;
-  }
+      const boxesDoc = await getDoc(doc(db, 'userData', 'boxesData'));
+      if (boxesDoc.exists()) {
+        // Clear existing
+        boxesMap.forEach(box => canvas.removeChild(box));
+        boxesMap.clear();
+        connections.length = 0;
 
-  async function loadFromFirebase() {
-    try {
-      const snapshot = await get(ref(db, 'appState'));
-      if (!snapshot.exists()) {
-        alert('No saved data found in Firebase.');
+        const boxesData = boxesDoc.data().boxes || [];
+        boxesData.forEach(b => {
+          addBox(b.x, b.y, b.text, b.id, b.width, b.height, false, b.fontSize);
+        });
+      } else {
+        alert('No saved boxes data found');
         return;
       }
-      const data = snapshot.val();
-      // Clear current
-      boxesMap.forEach(box => box.remove());
-      boxesMap.clear();
-      connections.length = 0;
-      undoStack.length = 0;
-      undoBtn.disabled = true;
-      selectedBoxes.clear();
-      clearConnectToggles();
 
-      // Load boxes
-      if (data.boxes && Array.isArray(data.boxes)) {
-        data.boxes.forEach(b => {
-          addBox(b.left, b.top, b.id, b.content, b.fontSize, b.width, b.height);
-        });
+      const connectionsDoc = await getDoc(doc(db, 'userData', 'connectionsData'));
+      if (connectionsDoc.exists()) {
+        connections.length = 0;
+        connections.push(...(connectionsDoc.data().connections || []));
+        drawConnections();
+      } else {
+        alert('No saved connections data found');
       }
-      // Load connections
-      if (data.connections && Array.isArray(data.connections)) {
-        connections.push(...data.connections);
-      }
-      drawConnections();
 
-      // Load center and set viewport
-      if (data.center) {
+      // Load center and update view
+      const centerDoc = await getDoc(doc(db, 'userData', 'center'));
+      if (centerDoc.exists()) {
+        const c = centerDoc.data();
         const rect = viewport.getBoundingClientRect();
-        panX = rect.width / 2 - data.center.x * scale;
-        panY = rect.height / 2 - data.center.y * scale;
+        panX = rect.width / 2 - c.x * scale;
+        panY = rect.height / 2 - c.y * scale;
         updateTransform();
       }
 
-      alert('Loaded from Firebase!');
-      saveNeeded = false;
-    } catch (e) {
-      alert('Load failed: ' + e.message);
+      alert('Load successful!');
+      console.log('Load successful');
+    } catch (error) {
+      console.error('Error loading data:', error);
+      alert('Error loading data. See console.');
     }
-  }
-
-  saveBtn.addEventListener('click', () => {
-    saveToFirebase();
   });
 
-  loadBtn.addEventListener('click', () => {
-    loadFromFirebase();
-  });
+  // Initial UI setup
+  toggleEditModeBtn.click(); // set edit mode true by default (shows controls)
 
-  // Initial setup
-  toggleEditModeBtn.click();
-
-  // Draw connections on window resize
-  window.addEventListener('resize', () => {
-    drawConnections();
-  });
-
-  // Periodic autosave every 20 seconds if changes pending
-  setInterval(() => {
-    if (saveNeeded) {
-      saveToFirebase();
-    }
-  }, 20000);
+  // Load data on start (optional)
+  // Uncomment below if you want to auto load on page load:
+  // loadBtn.click();
 
 </script>
 </body>
