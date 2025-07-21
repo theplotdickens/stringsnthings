@@ -1,298 +1,302 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>stringsnthingsv3</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>
-    html, body {
-      margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
-      touch-action: none;
-    }
-    #viewport {
-      width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
-      overflow: hidden;
-      box-sizing: border-box;
-    }
-    #canvas {
-      position: absolute; top: 0; left: 0; transform-origin: 0 0;
-      z-index: 10;
-    }
-    .box {
-      position: absolute;
-      background: white;
-      border: 1px solid black;
-      min-width: 80px;
-      min-height: 40px;
-      user-select: none;
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-      cursor: text;
-      overflow: hidden;
-      transition: width 0.1s ease, height 0.1s ease;
-    }
-    .box.selected {
-      outline: 2px dashed blue;
-    }
-    .box-header {
-      background: #ddd;
-      padding-left: 24px;
-      min-width: 40px;
-      min-height: 18px;
-      height: 18px;
-      box-sizing: border-box;
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 4px;
-      position: relative;
-      user-select: none;
-      cursor: default;
-      border-bottom: 1px solid #bbb;
-      font-size: 12px;
-      flex-shrink: 0;
-    }
-    .drag-handle {
-      position: absolute;
-      left: 4px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 14px;
-      cursor: move;
-      user-select: none;
-      width: 16px;
-      height: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #333;
-      white-space: nowrap;
-      z-index: 5;
-    }
-    .delete-btn {
-      color: red;
-      font-weight: bold;
-      cursor: pointer;
-      font-size: 14px;
-      line-height: 1;
-      user-select: none;
-      padding: 0;
-      margin: 0;
-      border: none;
-      background: transparent;
-      width: 18px;
-      height: 18px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .connect-toggle {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      border: none;
-      background-color: blue;
-      cursor: pointer;
-      user-select: none;
-      transition: background-color 0.25s ease;
-      padding: 0;
-      margin: 0;
-      flex-shrink: 0;
-    }
-    .connect-toggle.active {
-      background-color: green;
-    }
-    .font-size-btn {
-      font-size: 14px;
-      width: 18px;
-      height: 18px;
-      line-height: 1;
-      cursor: pointer;
-      user-select: none;
-      background: transparent;
-      border: none;
-      color: black;
-      padding: 0;
-      margin: 0 2px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .box-content {
-      flex: 1;
-      padding: 2px;
-      white-space: pre-wrap;
-      font-family: monospace, monospace;
-      overflow-wrap: break-word;
-      outline: none;
-      cursor: text;
-      user-select: text;
-      line-height: 1.1;
-      min-height: 24px;
-      box-sizing: border-box;
-      resize: none;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-      word-break: break-word;
-    }
-    .resize-handle {
-      width: 16px;
-      height: 16px;
-      background: transparent;
-      position: absolute;
-      z-index: 20;
-      touch-action: none;
-    }
-    .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
-    .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
-    .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
-    .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
+<meta charset="UTF-8" />
+<title>stringsnthingsv8</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
+    touch-action: none;
+  }
+  #viewport {
+    width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  #canvas {
+    position: absolute; top: 0; left: 0; transform-origin: 0 0;
+    z-index: 10;
+  }
+  .box {
+    position: absolute;
+    background: white;
+    border: 1px solid black;
+    min-width: 80px;
+    min-height: 40px;
+    user-select: none;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    cursor: text;
+    overflow: hidden;
+    transition: width 0.1s ease, height 0.1s ease;
+  }
+  .box.selected {
+    outline: 2px dashed blue;
+  }
+  .box-header {
+    background: #ddd;
+    padding-left: 24px;
+    min-width: 40px;
+    min-height: 18px;
+    height: 18px;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+    user-select: none;
+    cursor: default;
+    border-bottom: 1px solid #bbb;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  /* Hide header immediately in view mode */
+  .box.viewmode-header-hidden > .box-header {
+    display: none !important;
+  }
+  .drag-handle {
+    position: absolute;
+    left: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    cursor: move;
+    user-select: none;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #333;
+    white-space: nowrap;
+    z-index: 5;
+  }
+  .delete-btn {
+    color: red;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    user-select: none;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .connect-toggle {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: none;
+    background-color: blue;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.25s ease;
+    padding: 0;
+    margin: 0;
+    flex-shrink: 0;
+  }
+  .connect-toggle.active {
+    background-color: green;
+  }
+  .font-size-btn {
+    font-size: 14px;
+    width: 18px;
+    height: 18px;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    background: transparent;
+    border: none;
+    color: black;
+    padding: 0;
+    margin: 0 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .box-content {
+    flex: 1;
+    padding: 2px;
+    white-space: pre-wrap;
+    font-family: monospace, monospace;
+    overflow-wrap: break-word;
+    outline: none;
+    cursor: text;
+    user-select: text;
+    line-height: 1.1;
+    min-height: 24px;
+    box-sizing: border-box;
+    resize: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    word-break: break-word;
+  }
+  .resize-handle {
+    width: 16px;
+    height: 16px;
+    background: transparent;
+    position: absolute;
+    z-index: 20;
+    touch-action: none;
+  }
+  .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
+  .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
+  .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
+  .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
 
-    #topMenu {
-      position: fixed;
-      top: 8px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(240, 240, 240, 0.95);
-      border: 1px solid #bbb;
-      border-radius: 6px;
-      padding: 6px 12px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-family: monospace;
-      z-index: 10000;
-      box-shadow: 0 0 8px rgba(0,0,0,0.1);
-      user-select: none;
-    }
-    #mapSelect {
-      font-family: monospace;
-      font-size: 14px;
-      padding: 2px 4px;
-      border-radius: 4px;
-      border: 1px solid #888;
-      cursor: pointer;
-      min-width: 150px;
-    }
-    #saveMapBtn, #renameMapBtn, #deleteMapBtn, #newMapBtn {
-      background: #555;
-      color: #eee;
-      border: none;
-      border-radius: 4px;
-      padding: 4px 10px;
-      cursor: pointer;
-      font-family: monospace;
-      font-size: 14px;
-      user-select: none;
-      transition: background-color 0.2s ease;
-    }
-    #saveMapBtn:hover, #renameMapBtn:hover, #deleteMapBtn:hover, #newMapBtn:hover {
-      background: #333;
-    }
-    #saveStatus {
-      font-size: 13px;
-      color: green;
-      min-width: 90px;
-      user-select: none;
-    }
+  #topMenu {
+    position: fixed;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(240, 240, 240, 0.95);
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: monospace;
+    z-index: 10000;
+    box-shadow: 0 0 8px rgba(0,0,0,0.1);
+    user-select: none;
+  }
+  #mapSelect {
+    font-family: monospace;
+    font-size: 14px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    border: 1px solid #888;
+    cursor: pointer;
+    min-width: 150px;
+  }
+  #saveMapBtn, #renameMapBtn, #deleteMapBtn, #newMapBtn {
+    background: #555;
+    color: #eee;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 14px;
+    user-select: none;
+    transition: background-color 0.2s ease;
+  }
+  #saveMapBtn:hover, #renameMapBtn:hover, #deleteMapBtn:hover, #newMapBtn:hover {
+    background: #333;
+  }
+  #saveStatus {
+    font-size: 13px;
+    color: green;
+    min-width: 90px;
+    user-select: none;
+  }
 
-    #buttonContainer {
-      position: fixed;
-      bottom: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 12px;
-      z-index: 1000;
-      user-select: none;
-    }
-    .floatingBtn {
-      background: rgba(100, 100, 100, 0.5);
-      color: #eee;
-      font-family: monospace, monospace;
-      font-size: 16px;
-      padding: 6px 12px;
-      border: 1px solid #555;
-      border-radius: 4px;
-      cursor: pointer;
-      min-width: 100px;
-      text-align: center;
-      box-shadow: 0 0 6px rgba(0,0,0,0.3);
-      touch-action: manipulation;
-      transition: background 0.2s ease;
-    }
-    .floatingBtn:active {
-      background: rgba(80, 80, 80, 0.7);
-    }
-    .floatingBtn:disabled {
-      background: rgba(150, 150, 150, 0.3);
-      cursor: default;
-      color: #999;
-      border-color: #999;
-      box-shadow: none;
-    }
-    #zoomDisplay {
-      position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.5); color: white; font-family: monospace;
-      padding: 4px 8px; border-radius: 4px;
-      user-select: none; pointer-events: none; z-index: 1001;
-    }
-    #connectionLayer {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      pointer-events: none;
-      z-index: 1;
-    }
-    #footerInfo {
-      position: fixed;
-      bottom: 60px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-family: monospace, monospace;
-      font-size: 14px;
-      color: #555;
-      user-select: none;
-      z-index: 1002;
-      background: rgba(255,255,255,0.9);
-      padding: 4px 8px;
-      border-radius: 4px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.1);
-      pointer-events: none;
-      width: max-content;
-      max-width: 90vw;
-      text-align: center;
-    }
-    #howToModal {
-      display:none;
-      position:fixed; top:50%; left:50%;
-      transform: translate(-50%, -50%);
-      background:white;
-      border: 2px solid black;
-      padding: 20px;
-      z-index: 2000;
-      width: 80vw;
-      max-width: 600px;
-      max-height: 70vh;
-      overflow-y: auto;
-      font-family: monospace;
-    }
-    #howToModal h2 {
-      margin-top: 0;
-    }
-    #howToContent {
-      white-space: pre-wrap;
-      user-select: text;
-    }
-    #closeHowToBtn {
-      margin-top: 12px;
-      padding: 6px 12px;
-      cursor: pointer;
-    }
-  </style>
+  #buttonContainer {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    z-index: 1000;
+    user-select: none;
+  }
+  .floatingBtn {
+    background: rgba(100, 100, 100, 0.5);
+    color: #eee;
+    font-family: monospace, monospace;
+    font-size: 16px;
+    padding: 6px 12px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 100px;
+    text-align: center;
+    box-shadow: 0 0 6px rgba(0,0,0,0.3);
+    touch-action: manipulation;
+    transition: background 0.2s ease;
+  }
+  .floatingBtn:active {
+    background: rgba(80, 80, 80, 0.7);
+  }
+  .floatingBtn:disabled {
+    background: rgba(150, 150, 150, 0.3);
+    cursor: default;
+    color: #999;
+    border-color: #999;
+    box-shadow: none;
+  }
+  #zoomDisplay {
+    position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.5); color: white; font-family: monospace;
+    padding: 4px 8px; border-radius: 4px;
+    user-select: none; pointer-events: none; z-index: 1001;
+  }
+  #connectionLayer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+  #footerInfo {
+    position: fixed;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: monospace, monospace;
+    font-size: 14px;
+    color: #555;
+    user-select: none;
+    z-index: 1002;
+    background: rgba(255,255,255,0.9);
+    padding: 4px 8px;
+    border-radius: 4px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    pointer-events: none;
+    width: max-content;
+    max-width: 90vw;
+    text-align: center;
+  }
+  #howToModal {
+    display:none;
+    position:fixed; top:50%; left:50%;
+    transform: translate(-50%, -50%);
+    background:white;
+    border: 2px solid black;
+    padding: 20px;
+    z-index: 2000;
+    width: 80vw;
+    max-width: 600px;
+    max-height: 70vh;
+    overflow-y: auto;
+    font-family: monospace;
+  }
+  #howToModal h2 {
+    margin-top: 0;
+  }
+  #howToContent {
+    white-space: pre-wrap;
+    user-select: text;
+  }
+  #closeHowToBtn {
+    margin-top: 12px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+</style>
 </head>
 <body>
   <div id="topMenu">
@@ -305,7 +309,7 @@
   </div>
 
   <div id="viewport">
-    <svg id="connectionLayer"></svg>
+    <svg id="connectionLayer" xmlns="http://www.w3.org/2000/svg"></svg>
     <div id="canvas"></div>
   </div>
 
@@ -320,15 +324,15 @@
   <div id="howToModal">
     <h2>How to Use</h2>
     <p id="howToContent" contenteditable="false">
-      Double click anywhere to create a new text box.
-      Toggle edit mode on and off to make or prevent changes.
-      Use the ✥ symbol in the top left corner to move boxes.
-      Use the red x to delete boxes.
-      Use the blue button to connect boxes with lines. Click one blue button, turn it green, then click the blue button on your target box.
-      Use the resize handles at the corners to resize boxes.
-      On the bottom of the screen, use "mark center" to fix yourself a return point.
-      Shift+click any part of the header (including ✥) to multi-select boxes. Drag any selected box to move the group.
-      Use the + and − buttons to increase or decrease font size inside the box.
+Double click anywhere to create a new text box.
+Toggle edit mode on and off to make or prevent changes.
+Use the ✥ symbol in the top left corner to move boxes.
+Use the red x to delete boxes.
+Use the blue button to connect boxes with lines. Click one blue button, turn it green, then click the blue button on your target box.
+Use the resize handles at the corners to resize boxes.
+On the bottom of the screen, use "mark center" to fix yourself a return point.
+Shift+click any part of the header (including ✥) to multi-select boxes. Drag any selected box to move the group.
+Use the + and − buttons to increase or decrease font size inside the box.
     </p>
     <button id="closeHowToBtn">Close</button>
   </div>
@@ -337,6 +341,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
   import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
 
+  // Firebase config and initialization
   const firebaseConfig = {
     apiKey: "AIzaSyCpp42OH-1mTZxu5iq44dmMQc8ahQdvnL0",
     authDomain: "stringsnthings-65aa0.firebaseapp.com",
@@ -348,6 +353,7 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
+  // DOM elements
   const canvas = document.getElementById('canvas');
   const viewport = document.getElementById('viewport');
   const undoBtn = document.getElementById('undoBtn');
@@ -365,6 +371,7 @@
   const saveStatus = document.getElementById('saveStatus');
   const connectionLayer = document.getElementById('connectionLayer');
 
+  // State
   let scale = 1, panX = 0, panY = 0;
   let isPanning = false, startX, startY;
 
@@ -377,7 +384,9 @@
   const selectedBoxes = new Set();
 
   let currentMapId = null;
-  let mapsCache = new Map();
+  let mapsCache = new Map(); // mapId => {name, boxes, connections, center}
+
+  // Helpers
 
   function getClientCoords(e) {
     if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -388,10 +397,14 @@
     return 'id-' + Math.random().toString(36).substr(2, 9);
   }
 
+  // Transform & pan/zoom
+
   function updateTransform() {
     canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     drawConnections();
   }
+
+  // Event handlers for panning and zooming
 
   viewport.addEventListener('pointerdown', e => {
     if (e.target.closest('.box-header') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn, howToBtn].includes(e.target) ||
@@ -430,6 +443,7 @@
     let newScale = scale * dir;
     newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, newScale));
 
+    // Zoom relative to mouse position
     const rect = viewport.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
@@ -441,17 +455,18 @@
     updateTransform();
   }, { passive: false });
 
-  function createBox(id, x, y, w = 120, h = 60, text = '', fontSize = 14) {
-    if (boxesMap.has(id)) return;
+  // Boxes management
 
+  function createBox(id, x = 100, y = 100, width = 150, height = 60, text = '', fontSize = 14) {
     const box = document.createElement('div');
-    box.classList.add('box');
+    box.className = 'box';
     box.style.left = x + 'px';
     box.style.top = y + 'px';
-    box.style.width = w + 'px';
-    box.style.height = h + 'px';
+    box.style.width = width + 'px';
+    box.style.height = height + 'px';
     box.dataset.id = id;
 
+    // Header
     const header = document.createElement('div');
     header.className = 'box-header';
 
@@ -460,34 +475,31 @@
     dragHandle.textContent = '✥';
     header.appendChild(dragHandle);
 
-    const connectBtn = document.createElement('button');
-    connectBtn.className = 'connect-toggle';
-    connectBtn.title = 'Connect boxes';
-    header.appendChild(connectBtn);
-
     const minusBtn = document.createElement('button');
     minusBtn.className = 'font-size-btn';
     minusBtn.textContent = '−';
-    minusBtn.title = 'Decrease font size';
     header.appendChild(minusBtn);
 
     const plusBtn = document.createElement('button');
     plusBtn.className = 'font-size-btn';
     plusBtn.textContent = '+';
-    plusBtn.title = 'Increase font size';
     header.appendChild(plusBtn);
 
-    const delBtn = document.createElement('button');
-    delBtn.className = 'delete-btn';
-    delBtn.textContent = '×';
-    delBtn.title = 'Delete box';
-    header.appendChild(delBtn);
+    const connectToggle = document.createElement('button');
+    connectToggle.className = 'connect-toggle';
+    header.appendChild(connectToggle);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'delete-btn';
+    deleteBtn.textContent = '×';
+    header.appendChild(deleteBtn);
 
     box.appendChild(header);
 
+    // Content editable
     const content = document.createElement('div');
     content.className = 'box-content';
-    content.contentEditable = editMode;
+    content.contentEditable = 'true';
     content.spellcheck = false;
     content.style.fontSize = fontSize + 'px';
     content.textContent = text;
@@ -502,578 +514,632 @@
 
     canvas.appendChild(box);
 
-    boxesMap.set(id, { box, dragHandle, header, connectBtn, delBtn, content, fontSize });
+    // Store box info
+    boxesMap.set(id, {
+      id,
+      box,
+      header,
+      dragHandle,
+      minusBtn,
+      plusBtn,
+      connectToggle,
+      deleteBtn,
+      content,
+      fontSize,
+      x,
+      y,
+      width,
+      height,
+      resizing: false,
+      dragging: false,
+      connections: new Set(),
+    });
 
     // Event listeners
-    delBtn.addEventListener('click', () => {
+    initBoxEvents(id);
+
+    return id;
+  }
+
+  // Get box center coordinates relative to canvas (not viewport)
+  function getBoxCenter(boxInfo) {
+    return {
+      x: boxInfo.x + boxInfo.width / 2,
+      y: boxInfo.y + boxInfo.height / 2
+    };
+  }
+
+  // Draw connections as smooth cubic Bezier curves with SVG
+
+  function drawConnections() {
+    // Clear SVG
+    while (connectionLayer.firstChild) {
+      connectionLayer.removeChild(connectionLayer.firstChild);
+    }
+    // Draw each connection
+    connections.forEach(({ fromId, toId }) => {
+      const fromBox = boxesMap.get(fromId);
+      const toBox = boxesMap.get(toId);
+      if (!fromBox || !toBox) return;
+
+      // Calculate positions in canvas coordinates
+      const fromX = fromBox.x + fromBox.width;
+      const fromY = fromBox.y + fromBox.height / 2;
+      const toX = toBox.x;
+      const toY = toBox.y + toBox.height / 2;
+
+      // Control points for smooth curve
+      const dx = toX - fromX;
+      const dy = toY - fromY;
+      const controlX1 = fromX + dx * 0.25;
+      const controlY1 = fromY;
+      const controlX2 = fromX + dx * 0.75;
+      const controlY2 = toY;
+
+      // Create SVG path
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute('d', `M${fromX} ${fromY} C${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${toX} ${toY}`);
+      path.setAttribute('stroke', 'black');
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('fill', 'none');
+      connectionLayer.appendChild(path);
+    });
+  }
+
+  // Update box style and position after move/resize
+
+  function updateBoxPosition(boxInfo) {
+    const { box, x, y, width, height } = boxInfo;
+    box.style.left = x + 'px';
+    box.style.top = y + 'px';
+    box.style.width = width + 'px';
+    box.style.height = height + 'px';
+  }
+
+  // Update box content font size
+
+  function updateFontSize(boxInfo, delta) {
+    const newSize = Math.min(40, Math.max(8, boxInfo.fontSize + delta));
+    boxInfo.fontSize = newSize;
+    boxInfo.content.style.fontSize = newSize + 'px';
+  }
+
+  // Box events initialization
+
+  function initBoxEvents(id) {
+    const boxInfo = boxesMap.get(id);
+    const { box, dragHandle, content, deleteBtn, connectToggle, minusBtn, plusBtn, header } = boxInfo;
+
+    // Dragging box
+
+    dragHandle.addEventListener('pointerdown', e => {
+      if (!editMode) return;
+      e.stopPropagation();
+      boxInfo.dragging = true;
+      const rect = box.getBoundingClientRect();
+      const startPos = { x: rect.left, y: rect.top };
+      const pointerStart = { x: e.clientX, y: e.clientY };
+
+      // Multi-select drag start: if shift is held, add or remove from selected
+      if (e.shiftKey) {
+        if (selectedBoxes.has(box)) {
+          selectedBoxes.delete(box);
+          box.classList.remove('selected');
+        } else {
+          selectedBoxes.add(box);
+          box.classList.add('selected');
+        }
+      } else if (!selectedBoxes.has(box)) {
+        // Clear selection and select only this box
+        selectedBoxes.forEach(b => b.classList.remove('selected'));
+        selectedBoxes.clear();
+        selectedBoxes.add(box);
+        box.classList.add('selected');
+      }
+
+      function onPointerMove(ev) {
+        if (!boxInfo.dragging) return;
+        const dx = (ev.clientX - pointerStart.x) / scale;
+        const dy = (ev.clientY - pointerStart.y) / scale;
+
+        if (selectedBoxes.size > 1) {
+          selectedBoxes.forEach(b => {
+            const info = boxesMap.get(b.dataset.id);
+            info.x += dx;
+            info.y += dy;
+            updateBoxPosition(info);
+          });
+        } else {
+          boxInfo.x = startPos.x - viewport.getBoundingClientRect().left + dx;
+          boxInfo.y = startPos.y - viewport.getBoundingClientRect().top + dy;
+          updateBoxPosition(boxInfo);
+        }
+        pointerStart.x = ev.clientX;
+        pointerStart.y = ev.clientY;
+        drawConnections();
+      }
+
+      function onPointerUp() {
+        boxInfo.dragging = false;
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        saveMapDebounced();
+      }
+
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+    });
+
+    // Delete box
+
+    deleteBtn.addEventListener('click', e => {
+      if (!editMode) return;
+      e.stopPropagation();
       deleteBox(id);
     });
 
-    connectBtn.addEventListener('click', () => {
+    // Connect toggle
+
+    connectToggle.addEventListener('click', e => {
       if (!editMode) return;
-      if (connectionStartBoxId === id) {
-        connectionStartBoxId = null;
-        connectBtn.classList.remove('active');
-      } else if (connectionStartBoxId === null) {
+      e.stopPropagation();
+      if (connectionStartBoxId === null) {
         connectionStartBoxId = id;
-        connectBtn.classList.add('active');
-      } else {
-        if (connectionStartBoxId !== id) {
-          addConnection(connectionStartBoxId, id);
-        }
-        const startBox = boxesMap.get(connectionStartBoxId);
-        if (startBox) startBox.connectBtn.classList.remove('active');
+        connectToggle.classList.add('active');
+      } else if (connectionStartBoxId === id) {
         connectionStartBoxId = null;
+        connectToggle.classList.remove('active');
+      } else {
+        // Create connection from start to this box
+        addConnection(connectionStartBoxId, id);
+        // Remove active state from previous start box connectToggle
+        const startBox = boxesMap.get(connectionStartBoxId);
+        if (startBox) startBox.connectToggle.classList.remove('active');
+        connectionStartBoxId = null;
+        drawConnections();
+        saveMapDebounced();
       }
-      drawConnections();
-      saveCurrentMap();
     });
 
-    plusBtn.addEventListener('click', () => {
-      changeFontSize(id, 1);
+    // Font size plus and minus
+
+    plusBtn.addEventListener('click', e => {
+      if (!editMode) return;
+      e.stopPropagation();
+      updateFontSize(boxInfo, 2);
+      saveMapDebounced();
     });
 
-    minusBtn.addEventListener('click', () => {
-      changeFontSize(id, -1);
+    minusBtn.addEventListener('click', e => {
+      if (!editMode) return;
+      e.stopPropagation();
+      updateFontSize(boxInfo, -2);
+      saveMapDebounced();
     });
+
+    // Content editable input saves
 
     content.addEventListener('input', () => {
-      saveCurrentMapDebounced();
+      boxInfo.text = content.textContent;
+      saveMapDebounced();
     });
 
-    // Dragging box
-    dragHandle.addEventListener('pointerdown', e => {
-      if (!editMode) return;
-      e.preventDefault();
-      if (!selectedBoxes.has(box)) {
-        clearSelectedBoxes();
-        selectBox(box, true);
-      }
-      startDragBoxes(e);
+    // Prevent ripple/outline on buttons - remove focus ring
+
+    [deleteBtn, connectToggle, plusBtn, minusBtn].forEach(btn => {
+      btn.addEventListener('mousedown', e => e.preventDefault());
     });
 
-    // Multi-select with shift+click header (including drag handle)
-    header.addEventListener('click', e => {
-      if (!editMode) return;
-      if (e.shiftKey) {
-        e.preventDefault();
-        if (selectedBoxes.has(box)) {
-          deselectBox(box);
-        } else {
-          selectBox(box, true);
-        }
-      } else {
-        clearSelectedBoxes();
-        selectBox(box, true);
-      }
-    });
+    // Resize handles
 
-    // Resize handling
-    let resizeData = null;
-    box.querySelectorAll('.resize-handle').forEach(handle => {
+    const resizeHandles = box.querySelectorAll('.resize-handle');
+
+    resizeHandles.forEach(handle => {
       handle.addEventListener('pointerdown', e => {
         if (!editMode) return;
-        e.preventDefault();
-        resizeData = {
-          id,
-          startX: e.clientX,
-          startY: e.clientY,
-          startW: box.offsetWidth,
-          startH: box.offsetHeight,
-          handlePos: handle.classList[1]
-        };
-        window.addEventListener('pointermove', doResize);
-        window.addEventListener('pointerup', stopResize);
+        e.stopPropagation();
+        boxInfo.resizing = true;
+        const startRect = { x: boxInfo.x, y: boxInfo.y, width: boxInfo.width, height: boxInfo.height };
+        const pointerStart = { x: e.clientX, y: e.clientY };
+        const pos = handle.classList[1]; // nw, ne, sw, se
+
+        function onPointerMove(ev) {
+          if (!boxInfo.resizing) return;
+          const dx = (ev.clientX - pointerStart.x) / scale;
+          const dy = (ev.clientY - pointerStart.y) / scale;
+          let newX = startRect.x;
+          let newY = startRect.y;
+          let newWidth = startRect.width;
+          let newHeight = startRect.height;
+
+          switch (pos) {
+            case 'nw':
+              newX = startRect.x + dx;
+              newY = startRect.y + dy;
+              newWidth = startRect.width - dx;
+              newHeight = startRect.height - dy;
+              break;
+            case 'ne':
+              newY = startRect.y + dy;
+              newWidth = startRect.width + dx;
+              newHeight = startRect.height - dy;
+              break;
+            case 'sw':
+              newX = startRect.x + dx;
+              newWidth = startRect.width - dx;
+              newHeight = startRect.height + dy;
+              break;
+            case 'se':
+              newWidth = startRect.width + dx;
+              newHeight = startRect.height + dy;
+              break;
+          }
+          newWidth = Math.max(40, newWidth);
+          newHeight = Math.max(24, newHeight);
+          boxInfo.x = newX;
+          boxInfo.y = newY;
+          boxInfo.width = newWidth;
+          boxInfo.height = newHeight;
+          updateBoxPosition(boxInfo);
+          drawConnections();
+        }
+
+        function onPointerUp() {
+          boxInfo.resizing = false;
+          window.removeEventListener('pointermove', onPointerMove);
+          window.removeEventListener('pointerup', onPointerUp);
+          saveMapDebounced();
+        }
+
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
       });
     });
 
-    function doResize(e) {
-      if (!resizeData) return;
-      const dx = e.clientX - resizeData.startX;
-      const dy = e.clientY - resizeData.startY;
-      let newW = resizeData.startW;
-      let newH = resizeData.startH;
-      const b = boxesMap.get(resizeData.id).box;
-      const rect = b.getBoundingClientRect();
+    // Focus content on double click on box (not header)
 
-      switch (resizeData.handlePos) {
-        case 'nw':
-          newW = resizeData.startW - dx;
-          newH = resizeData.startH - dy;
-          if (newW >= 60) {
-            b.style.width = newW + 'px';
-            b.style.left = (parseFloat(b.style.left) + dx) + 'px';
-          }
-          if (newH >= 40) {
-            b.style.height = newH + 'px';
-            b.style.top = (parseFloat(b.style.top) + dy) + 'px';
-          }
-          break;
-        case 'ne':
-          newW = resizeData.startW + dx;
-          newH = resizeData.startH - dy;
-          if (newW >= 60) b.style.width = newW + 'px';
-          if (newH >= 40) {
-            b.style.height = newH + 'px';
-            b.style.top = (parseFloat(b.style.top) + dy) + 'px';
-          }
-          break;
-        case 'sw':
-          newW = resizeData.startW - dx;
-          newH = resizeData.startH + dy;
-          if (newW >= 60) {
-            b.style.width = newW + 'px';
-            b.style.left = (parseFloat(b.style.left) + dx) + 'px';
-          }
-          if (newH >= 40) b.style.height = newH + 'px';
-          break;
-        case 'se':
-          newW = resizeData.startW + dx;
-          newH = resizeData.startH + dy;
-          if (newW >= 60) b.style.width = newW + 'px';
-          if (newH >= 40) b.style.height = newH + 'px';
-          break;
+    box.addEventListener('dblclick', e => {
+      if (e.target === box || e.target === box.querySelector('.box-content')) {
+        e.stopPropagation();
+        if (!editMode) return;
+        content.focus();
       }
-      drawConnections();
-    }
-    function stopResize(e) {
-      if (!resizeData) return;
-      window.removeEventListener('pointermove', doResize);
-      window.removeEventListener('pointerup', stopResize);
-      resizeData = null;
-      saveCurrentMap();
-    }
-
-    return box;
-  }
-
-  function selectBox(box, focus = false) {
-    selectedBoxes.add(box);
-    box.classList.add('selected');
-    if (focus) box.querySelector('.box-content').focus();
-  }
-  function deselectBox(box) {
-    selectedBoxes.delete(box);
-    box.classList.remove('selected');
-  }
-  function clearSelectedBoxes() {
-    selectedBoxes.forEach(b => b.classList.remove('selected'));
-    selectedBoxes.clear();
-  }
-
-  let dragData = null;
-
-  function startDragBoxes(e) {
-    dragData = {
-      startX: e.clientX,
-      startY: e.clientY,
-      boxPositions: new Map()
-    };
-    selectedBoxes.forEach(b => {
-      dragData.boxPositions.set(b.dataset.id, {
-        x: parseFloat(b.style.left),
-        y: parseFloat(b.style.top)
-      });
     });
-    window.addEventListener('pointermove', dragBoxes);
-    window.addEventListener('pointerup', stopDragBoxes);
-  }
 
-  function dragBoxes(e) {
-    if (!dragData) return;
-    const dx = e.clientX - dragData.startX;
-    const dy = e.clientY - dragData.startY;
-    dragData.boxPositions.forEach((pos, id) => {
-      const b = boxesMap.get(id).box;
-      b.style.left = (pos.x + dx) + 'px';
-      b.style.top = (pos.y + dy) + 'px';
+    // Select box on click on header (including drag handle)
+
+    header.addEventListener('click', e => {
+      e.stopPropagation();
+      if (e.shiftKey) {
+        if (selectedBoxes.has(box)) {
+          selectedBoxes.delete(box);
+          box.classList.remove('selected');
+        } else {
+          selectedBoxes.add(box);
+          box.classList.add('selected');
+        }
+      } else if (!selectedBoxes.has(box)) {
+        selectedBoxes.forEach(b => b.classList.remove('selected'));
+        selectedBoxes.clear();
+        selectedBoxes.add(box);
+        box.classList.add('selected');
+      }
     });
-    drawConnections();
-  }
-  function stopDragBoxes(e) {
-    window.removeEventListener('pointermove', dragBoxes);
-    window.removeEventListener('pointerup', stopDragBoxes);
-    dragData = null;
-    saveCurrentMap();
   }
 
-  function changeFontSize(id, delta) {
-    const info = boxesMap.get(id);
-    if (!info) return;
-    let newSize = info.fontSize + delta;
-    if (newSize < 8) newSize = 8;
-    if (newSize > 48) newSize = 48;
-    info.fontSize = newSize;
-    info.content.style.fontSize = newSize + 'px';
-    saveCurrentMap();
+  // Connections management
+
+  function addConnection(fromId, toId) {
+    if (fromId === toId) return;
+    if (connections.find(c => c.fromId === fromId && c.toId === toId)) return; // no duplicates
+    connections.push({ fromId, toId });
   }
 
   function deleteBox(id) {
-    const info = boxesMap.get(id);
-    if (!info) return;
+    const boxInfo = boxesMap.get(id);
+    if (!boxInfo) return;
     undoStack.push({
-      boxes: [{
-        id,
-        x: parseFloat(info.box.style.left),
-        y: parseFloat(info.box.style.top),
-        w: info.box.offsetWidth,
-        h: info.box.offsetHeight,
-        text: info.content.textContent,
-        fontSize: info.fontSize
-      }],
-      connections: connections.filter(c => c.from === id || c.to === id)
+      boxes: [{ ...boxInfo }],
+      connections: connections.filter(c => c.fromId === id || c.toId === id)
     });
     undoBtn.disabled = false;
 
-    // Remove connections involving this box
-    for (let i = connections.length -1; i >= 0; i--) {
-      if (connections[i].from === id || connections[i].to === id) {
-        connections.splice(i, 1);
-      }
+    // Remove connections related
+    for (let i = connections.length - 1; i >= 0; i--) {
+      if (connections[i].fromId === id || connections[i].toId === id) connections.splice(i, 1);
     }
-    canvas.removeChild(info.box);
+    // Remove box from DOM
+    boxInfo.box.remove();
     boxesMap.delete(id);
-    selectedBoxes.delete(info.box);
+    selectedBoxes.delete(boxInfo.box);
     drawConnections();
-    saveCurrentMap();
+    saveMapDebounced();
   }
 
-  function addConnection(fromId, toId) {
-    if (!connections.some(c => c.from === fromId && c.to === toId)) {
-      connections.push({ from: fromId, to: toId });
-    }
-  }
-
-  function serializeBox(id) {
-    const info = boxesMap.get(id);
-    if (!info) return null;
-    return {
-      id,
-      x: parseFloat(info.box.style.left),
-      y: parseFloat(info.box.style.top),
-      w: info.box.offsetWidth,
-      h: info.box.offsetHeight,
-      text: info.content.textContent,
-      fontSize: info.fontSize
-    };
-  }
-
-  function drawConnections() {
-    const svg = connectionLayer;
-    svg.innerHTML = '';
-    connections.forEach(c => {
-      const fromBox = boxesMap.get(c.from);
-      const toBox = boxesMap.get(c.to);
-      if (!fromBox || !toBox) return;
-
-      const fromRect = fromBox.box.getBoundingClientRect();
-      const toRect = toBox.box.getBoundingClientRect();
-
-      // Convert screen coords to canvas coords
-      const rect = viewport.getBoundingClientRect();
-      const fromX = (fromRect.left + fromRect.width / 2 - rect.left - panX) / scale;
-      const fromY = (fromRect.top + fromRect.height / 2 - rect.top - panY) / scale;
-      const toX = (toRect.left + toRect.width / 2 - rect.left - panX) / scale;
-      const toY = (toRect.top + toRect.height / 2 - rect.top - panY) / scale;
-
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-
-      const cp1x = fromX;
-      const cp1y = (fromY + toY) / 2;
-      const cp2x = toX;
-      const cp2y = (fromY + toY) / 2;
-
-      const d = `M${fromX},${fromY} C${cp1x},${cp1y} ${cp2x},${cp2y} ${toX},${toY}`;
-
-      path.setAttribute('d', d);
-      path.setAttribute('stroke', 'black');
-      path.setAttribute('stroke-width', '1.5');
-      path.setAttribute('fill', 'none');
-      svg.appendChild(path);
+  function undoDelete() {
+    if (undoStack.length === 0) return;
+    const last = undoStack.pop();
+    last.boxes.forEach(b => {
+      createBox(b.id, b.x, b.y, b.width, b.height, b.text || '', b.fontSize || 14);
     });
+    last.connections.forEach(c => connections.push(c));
+    undoBtn.disabled = undoStack.length === 0;
+    drawConnections();
+    saveMapDebounced();
   }
 
-  function saveCurrentMap() {
-    if (!currentMapId) return;
-    const boxesData = [];
-    boxesMap.forEach((info, id) => {
-      boxesData.push(serializeBox(id));
-    });
-    const mapData = mapsCache.get(currentMapId);
-    if (!mapData) {
-      alert('Map data missing in cache. Save aborted.');
-      return;
-    }
-    setDoc(doc(db, 'mindmaps', currentMapId), {
-      name: mapData.name || 'Untitled Map',
-      boxes: boxesData,
-      connections,
-      center: { panX, panY, scale },
-      updatedAt: new Date().toISOString()
-    }).then(() => {
-      saveStatus.textContent = 'Saved';
-      setTimeout(() => {
-        if (saveStatus.textContent === 'Saved') saveStatus.textContent = '';
-      }, 3000);
-      mapsCache.set(currentMapId, {
-        name: mapData.name || 'Untitled Map',
-        boxes: boxesData,
-        connections: [...connections],
-        center: { panX, panY, scale }
-      });
-    }).catch(() => {
-      saveStatus.textContent = 'Error saving';
-    });
-  }
-  const saveCurrentMapDebounced = debounce(saveCurrentMap, 400);
-
-  function debounce(func, wait) {
-    let timeout;
-    return function (...args) {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func.apply(this, args), wait);
-    };
-  }
+  // Save & Load maps
 
   async function loadMapsList() {
-    mapSelect.innerHTML = '';
+    const col = collection(db, 'mindmaps');
+    const docs = await getDocs(col);
     mapsCache.clear();
-    try {
-      const querySnapshot = await getDocs(collection(db, 'mindmaps'));
-      const options = [];
-      querySnapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        const id = docSnap.id;
-        mapsCache.set(id, data);
-        options.push({ id, name: data.name || 'Untitled Map' });
+    mapSelect.innerHTML = '';
+    docs.forEach(docSnap => {
+      const data = docSnap.data();
+      mapsCache.set(docSnap.id, {
+        name: data.name || docSnap.id,
+        boxes: data.boxes || {},
+        connections: data.connections || [],
+        center: data.center || { panX: 0, panY: 0, scale: 1 }
       });
-      options.sort((a,b) => a.name.localeCompare(b.name));
-      options.forEach(opt => {
-        const optionElem = document.createElement('option');
-        optionElem.value = opt.id;
-        optionElem.textContent = opt.name;
-        mapSelect.appendChild(optionElem);
-      });
-      if (options.length > 0) {
-        currentMapId = options[0].id;
-        mapSelect.value = currentMapId;
-        await loadMap(currentMapId);
-      }
-    } catch (e) {
-      alert('Error loading maps list');
+      const option = document.createElement('option');
+      option.value = docSnap.id;
+      option.textContent = data.name || docSnap.id;
+      mapSelect.appendChild(option);
+    });
+    if (mapSelect.options.length === 0) {
+      await createNewMap('Welcome Map!');
+    }
+    else {
+      currentMapId = mapSelect.value || mapSelect.options[0].value;
+      await loadMap(currentMapId);
     }
   }
 
   async function loadMap(id) {
-    clearCanvas();
-    selectedBoxes.clear();
-    undoStack.length = 0;
-    undoBtn.disabled = true;
-    const docSnap = await getDoc(doc(db, 'mindmaps', id));
-    if (!docSnap.exists()) {
-      alert('Map does not exist');
-      return;
+    clearAllBoxes();
+    connections.length = 0;
+    const mapData = mapsCache.get(id);
+    if (!mapData) return;
+    // Load boxes
+    for (const [bid, bdata] of Object.entries(mapData.boxes)) {
+      createBox(bid, bdata.x, bdata.y, bdata.width, bdata.height, bdata.text || '', bdata.fontSize || 14);
     }
-    const data = docSnap.data();
-    currentMapId = id;
-    mapsCache.set(id, data);
-    if (data.center) {
-      panX = data.center.panX || 0;
-      panY = data.center.panY || 0;
-      scale = data.center.scale || 1;
-    } else {
-      panX = 0; panY = 0; scale = 1;
-    }
+    // Load connections
+    mapData.connections.forEach(c => connections.push(c));
+    panX = mapData.center?.panX || 0;
+    panY = mapData.center?.panY || 0;
+    scale = mapData.center?.scale || 1;
     updateTransform();
-    connections.length = 0;
-    if (data.connections) {
-      data.connections.forEach(c => connections.push(c));
-    }
-    if (data.boxes) {
-      data.boxes.forEach(boxData => {
-        createBox(boxData.id, boxData.x, boxData.y, boxData.w, boxData.h, boxData.text, boxData.fontSize || 14);
-      });
-    }
     drawConnections();
+    currentMapId = id;
+    mapSelect.value = id;
+    saveStatus.textContent = '';
   }
 
-  function clearCanvas() {
-    connections.length = 0;
-    boxesMap.forEach(info => {
-      canvas.removeChild(info.box);
-    });
+  function clearAllBoxes() {
+    boxesMap.forEach(b => b.box.remove());
     boxesMap.clear();
-    connectionStartBoxId = null;
+    selectedBoxes.clear();
     drawConnections();
   }
 
-  function createNewMap() {
+  async function createNewMap(name) {
     const newId = generateId();
-    const newName = prompt('Enter new map name:', 'New Map');
-    if (!newName) return;
-    setDoc(doc(db, 'mindmaps', newId), {
-      name: newName,
-      boxes: [],
+    mapsCache.set(newId, {
+      name,
+      boxes: {},
       connections: [],
-      center: { panX: 0, panY: 0, scale: 1 },
-      updatedAt: new Date().toISOString()
-    }).then(() => {
-      mapsCache.set(newId, {
-        name: newName,
-        boxes: [],
-        connections: [],
-        center: { panX: 0, panY: 0, scale: 1 }
-      });
-      const option = document.createElement('option');
-      option.value = newId;
-      option.textContent = newName;
-      mapSelect.appendChild(option);
-      mapSelect.value = newId;
-      currentMapId = newId;
-      clearCanvas();
-      panX = 0; panY = 0; scale = 1;
-      updateTransform();
-      saveStatus.textContent = 'New map created';
-      setTimeout(() => { saveStatus.textContent = ''; }, 3000);
-    }).catch(() => {
-      alert('Error creating new map');
+      center: { panX: 0, panY: 0, scale: 1 }
     });
+    currentMapId = newId;
+    await saveMap(); // save empty new map
+    await loadMapsList();
+    mapSelect.value = newId;
+    await loadMap(newId);
   }
 
-  function renameCurrentMap() {
+  async function saveMap() {
     if (!currentMapId) return;
-    const currentName = mapsCache.get(currentMapId)?.name || 'Untitled Map';
-    const newName = prompt('Enter new name:', currentName);
-    if (!newName || newName === currentName) return;
-    setDoc(doc(db, 'mindmaps', currentMapId), {
-      ...mapsCache.get(currentMapId),
-      name: newName,
-      updatedAt: new Date().toISOString()
-    }).then(() => {
-      mapsCache.get(currentMapId).name = newName;
-      // Update dropdown
-      const options = [...mapSelect.options];
-      options.forEach(o => {
-        if (o.value === currentMapId) o.textContent = newName;
-      });
-      saveStatus.textContent = 'Renamed';
-      setTimeout(() => { saveStatus.textContent = ''; }, 3000);
-    }).catch(() => {
-      alert('Error renaming map');
+    saveStatus.textContent = 'Saving...';
+    const boxesObj = {};
+    boxesMap.forEach(b => {
+      boxesObj[b.id] = {
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+        text: b.content.textContent,
+        fontSize: b.fontSize
+      };
     });
+    try {
+      await setDoc(doc(db, 'mindmaps', currentMapId), {
+        name: mapsCache.get(currentMapId)?.name || currentMapId,
+        boxes: boxesObj,
+        connections: connections,
+        center: { panX, panY, scale }
+      });
+      mapsCache.set(currentMapId, {
+        name: mapsCache.get(currentMapId)?.name || currentMapId,
+        boxes: boxesObj,
+        connections: [...connections],
+        center: { panX, panY, scale }
+      });
+      saveStatus.textContent = 'Saved';
+      setTimeout(() => { saveStatus.textContent = ''; }, 1500);
+      await loadMapsList(); // update select options
+    } catch (e) {
+      saveStatus.textContent = 'Save failed';
+      console.error(e);
+    }
   }
 
-  function deleteCurrentMap() {
+  // Debounce save map on rapid changes
+
+  let saveTimeout;
+  function saveMapDebounced() {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(saveMap, 800);
+  }
+
+  // Rename map
+
+  async function renameMap() {
     if (!currentMapId) return;
-    if (!confirm('Delete this map? This cannot be undone.')) return;
-    deleteDoc(doc(db, 'mindmaps', currentMapId)).then(() => {
+    const newName = prompt('Enter new name for this mind map:', mapsCache.get(currentMapId)?.name || '');
+    if (!newName) return;
+    mapsCache.get(currentMapId).name = newName;
+    await saveMap();
+    await loadMapsList();
+    mapSelect.value = currentMapId;
+  }
+
+  // Delete map
+
+  async function deleteMap() {
+    if (!currentMapId) return;
+    if (!confirm('Delete this mind map? This cannot be undone.')) return;
+    try {
+      await deleteDoc(doc(db, 'mindmaps', currentMapId));
       mapsCache.delete(currentMapId);
-      // Remove option from select
-      const options = [...mapSelect.options];
-      const idx = options.findIndex(o => o.value === currentMapId);
-      if (idx !== -1) mapSelect.remove(idx);
-      if (mapSelect.options.length > 0) {
-        currentMapId = mapSelect.options[0].value;
-        mapSelect.value = currentMapId;
-        loadMap(currentMapId);
-      } else {
-        currentMapId = null;
-        clearCanvas();
-      }
-      saveStatus.textContent = 'Deleted';
-      setTimeout(() => { saveStatus.textContent = ''; }, 3000);
-    }).catch(() => {
-      alert('Error deleting map');
-    });
+      currentMapId = null;
+      await loadMapsList();
+      saveStatus.textContent = 'Deleted map';
+      clearAllBoxes();
+    } catch (e) {
+      saveStatus.textContent = 'Delete failed';
+      console.error(e);
+    }
   }
 
-  mapSelect.addEventListener('change', () => {
-    const val = mapSelect.value;
-    if (val === currentMapId) return;
-    loadMap(val);
-  });
-  saveMapBtn.addEventListener('click', saveCurrentMap);
-  renameMapBtn.addEventListener('click', renameCurrentMap);
-  deleteMapBtn.addEventListener('click', deleteCurrentMap);
-  newMapBtn.addEventListener('click', createNewMap);
+  // Multi-select dragging
 
-  undoBtn.addEventListener('click', () => {
-    if (undoStack.length === 0) return;
-    const last = undoStack.pop();
-    last.boxes.forEach(b => {
-      if (boxesMap.has(b.id)) {
-        const info = boxesMap.get(b.id);
-        canvas.removeChild(info.box);
-        boxesMap.delete(b.id);
-      }
-      createBox(b.id, b.x, b.y, b.w, b.h, b.text, b.fontSize);
-    });
-    last.connections.forEach(c => {
-      if (!connections.some(conn => conn.from === c.from && conn.to === c.to)) {
-        connections.push(c);
-      }
-    });
-    drawConnections();
-    undoBtn.disabled = undoStack.length === 0;
-    saveCurrentMap();
+  // (Handled in dragHandle pointerdown and move)
+
+  // Keyboard shortcuts
+
+  window.addEventListener('keydown', e => {
+    if (!editMode) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      selectedBoxes.forEach(box => {
+        deleteBox(box.dataset.id);
+      });
+      selectedBoxes.clear();
+    }
+    if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+      undoDelete();
+    }
   });
+
+  // Undo button
+
+  undoBtn.addEventListener('click', undoDelete);
+
+  // Go to center & mark center
+
+  let centerMark = { panX: 0, panY: 0, scale: 1 };
 
   goCenterBtn.addEventListener('click', () => {
-    panX = 0;
-    panY = 0;
-    scale = 1;
+    panX = centerMark.panX;
+    panY = centerMark.panY;
+    scale = centerMark.scale;
     updateTransform();
   });
 
-  let markedCenter = null;
   markCenterBtn.addEventListener('click', () => {
-    markedCenter = { panX, panY, scale };
-    alert('Center marked. Use "Go to Center" to return.');
+    centerMark = { panX, panY, scale };
   });
+
+  // Toggle edit mode
+
+  function updateEditModeUI() {
+    toggleEditModeBtn.textContent = editMode ? 'View Mode' : 'Edit Mode';
+
+    boxesMap.forEach(({ box, header, dragHandle, minusBtn, plusBtn, connectToggle, deleteBtn, content }) => {
+      content.contentEditable = editMode.toString();
+      dragHandle.style.display = editMode ? 'flex' : 'none';
+      minusBtn.style.display = editMode ? 'inline-block' : 'none';
+      plusBtn.style.display = editMode ? 'inline-block' : 'none';
+      connectToggle.style.display = editMode ? 'inline-block' : 'none';
+      deleteBtn.style.display = editMode ? 'inline-block' : 'none';
+      const boxElement = box;
+      if (!editMode) {
+        boxElement.classList.add('box', 'viewmode-header-hidden');
+      } else {
+        boxElement.classList.remove('viewmode-header-hidden');
+      }
+    });
+
+    if (!editMode) {
+      selectedBoxes.forEach(box => box.classList.remove('selected'));
+      selectedBoxes.clear();
+    }
+  }
 
   toggleEditModeBtn.addEventListener('click', () => {
     editMode = !editMode;
-    boxesMap.forEach(info => {
-      info.content.contentEditable = editMode;
-      info.connectBtn.disabled = !editMode;
-      info.delBtn.disabled = !editMode;
-      if (!editMode) {
-        clearSelectedBoxes();
-      }
-    });
-    toggleEditModeBtn.textContent = editMode ? 'Toggle Edit Mode' : 'View Mode';
+    updateEditModeUI();
   });
+
+  // How To Modal
 
   howToBtn.addEventListener('click', () => {
     howToModal.style.display = 'block';
   });
+
   closeHowToBtn.addEventListener('click', () => {
     howToModal.style.display = 'none';
   });
 
-  // Double click to create new box
+  // Map selection change
+
+  mapSelect.addEventListener('change', async () => {
+    const val = mapSelect.value;
+    if (!val) return;
+    if (editMode) {
+      if (!confirm('Switching maps will discard unsaved changes. Continue?')) {
+        mapSelect.value = currentMapId;
+        return;
+      }
+    }
+    currentMapId = val;
+    await loadMap(val);
+  });
+
+  // New map
+
+  newMapBtn.addEventListener('click', async () => {
+    const name = prompt('Enter name for new mind map:', 'New Map');
+    if (!name) return;
+    await createNewMap(name);
+  });
+
+  // On double click on viewport create new box
+
   viewport.addEventListener('dblclick', e => {
     if (!editMode) return;
-    if (e.target.closest('.box') || e.target.closest('#topMenu')) return;
-    const rect = viewport.getBoundingClientRect();
-    const cx = (e.clientX - rect.left - panX) / scale;
-    const cy = (e.clientY - rect.top - panY) / scale;
+    if (e.target.closest('.box')) return; // ignore if dblclick inside box
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
     const id = generateId();
-    createBox(id, cx, cy);
-    saveCurrentMap();
+    createBox(id, x, y);
+    saveMapDebounced();
   });
 
-  // Keyboard shortcuts
-  window.addEventListener('keydown', e => {
-    if (e.key === 'Delete' && editMode) {
-      selectedBoxes.forEach(box => deleteBox(box.dataset.id));
-      clearSelectedBoxes();
-    }
-  });
+  // Initialization
 
-  // Initial load
-  loadMapsList();
+  async function init() {
+    await loadMapsList();
+    updateTransform();
+    updateEditModeUI();
+  }
+
+  init();
 
 </script>
+
 </body>
 </html>
