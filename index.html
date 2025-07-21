@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>stringsnthingsmaybeg</title>
+<title>stringsnthingsfullworkingmaybe</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
   html, body {
@@ -16,7 +16,7 @@
   }
   #canvas {
     position: absolute; top: 0; left: 0;
-    width: 10000px; height: 10000px; /* Large canvas for panning */
+    width: 10000px; height: 10000px;
     transform-origin: 0 0;
     z-index: 10;
   }
@@ -54,6 +54,9 @@
     border-bottom: 1px solid #bbb;
     font-size: 12px;
     flex-shrink: 0;
+  }
+  .box-header.hidden {
+    display: none !important;
   }
   .drag-handle {
     position: absolute;
@@ -338,25 +341,21 @@
 
   let markedCenter = null; // store center coords here
 
-  // Helper to get pointer coords
   function getClientCoords(e) {
     if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
     return { x: e.clientX, y: e.clientY };
   }
 
-  // Generate unique ID for boxes and maps
   function generateId() {
     return 'id-' + Math.random().toString(36).slice(2, 11);
   }
 
-  // Update pan and zoom transform on canvas and connections layer
   function updateTransform() {
     canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     connectionLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     drawConnections();
   }
 
-  // Pan handling on empty canvas
   viewport.addEventListener('pointerdown', e => {
     if (e.target.closest('.box-header') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target) ||
         [saveMapBtn, renameMapBtn, deleteMapBtn, newMapBtn, mapSelect].includes(e.target)) return;
@@ -365,7 +364,6 @@
     startX = coords.x;
     startY = coords.y;
     viewport.setPointerCapture(e.pointerId);
-    // Clear selection on empty space click
     selectedBoxes.forEach(b => b.classList.remove('selected'));
     selectedBoxes.clear();
   });
@@ -385,7 +383,6 @@
     viewport.releasePointerCapture(e.pointerId);
   });
 
-  // Zoom with mouse wheel
   const MIN_SCALE = 0.5;
   const MAX_SCALE = 3;
 
@@ -407,7 +404,6 @@
     updateTransform();
   }, { passive: false });
 
-  // Create new box element
   function createBox(id, x, y, w = 120, h = 60, text = '', fontSize = 14) {
     if (boxesMap.has(id)) return;
 
@@ -420,17 +416,19 @@
     box.dataset.id = id;
     box.style.fontSize = fontSize + 'px';
 
-    // Header
     const header = document.createElement('div');
     header.classList.add('box-header');
 
-    // Drag handle "✥"
+    // Prevent double-click on header from creating new box
+    header.addEventListener('dblclick', e => {
+      e.stopPropagation();
+    });
+
     const dragHandle = document.createElement('div');
     dragHandle.classList.add('drag-handle');
     dragHandle.textContent = '✥';
     header.appendChild(dragHandle);
 
-    // Connect toggle
     const connectToggle = document.createElement('button');
     connectToggle.classList.add('connect-toggle');
     connectToggle.title = 'Toggle connection for this box';
@@ -451,7 +449,6 @@
     });
     header.appendChild(connectToggle);
 
-    // Font size buttons
     const fontDecrease = document.createElement('button');
     fontDecrease.classList.add('font-size-btn');
     fontDecrease.textContent = '−';
@@ -476,7 +473,6 @@
     });
     header.appendChild(fontIncrease);
 
-    // Delete button
     const deleteBtn = document.createElement('button');
     deleteBtn.classList.add('delete-btn');
     deleteBtn.title = 'Delete this box';
@@ -489,18 +485,14 @@
 
     box.appendChild(header);
 
-    // Content editable area
     const content = document.createElement('div');
     content.classList.add('box-content');
     content.contentEditable = editMode;
     content.spellcheck = false;
     content.textContent = text;
-    content.addEventListener('input', () => {
-      // Optionally save on input or mark dirty
-    });
+    content.addEventListener('input', () => { /* optional save or dirty mark */ });
     box.appendChild(content);
 
-    // Resize handles
     ['nw', 'ne', 'sw', 'se'].forEach(pos => {
       const handle = document.createElement('div');
       handle.classList.add('resize-handle', pos);
@@ -559,7 +551,6 @@
       });
     });
 
-    // Drag box
     dragHandle.addEventListener('pointerdown', e => {
       e.stopPropagation();
       if (!editMode) return;
@@ -586,7 +577,6 @@
       window.addEventListener('pointerup', onPointerUp);
     });
 
-    // Select on header click (allow shift for multi-select)
     header.addEventListener('click', e => {
       e.stopPropagation();
       if (e.shiftKey) {
@@ -605,14 +595,15 @@
       }
     });
 
-    // Add to canvas and tracking
     canvas.appendChild(box);
     boxesMap.set(id, box);
+
+    // Show or hide header based on editMode
+    box.querySelector('.box-header').style.display = editMode ? 'flex' : 'none';
 
     return box;
   }
 
-  // Delete box by id
   function deleteBox(id) {
     const box = boxesMap.get(id);
     if (!box) return;
@@ -628,7 +619,6 @@
     });
     boxesMap.delete(id);
     canvas.removeChild(box);
-    // Remove related connections
     for (let i = connections.length - 1; i >= 0; i--) {
       if (connections[i].from === id || connections[i].to === id) connections.splice(i, 1);
     }
@@ -636,7 +626,6 @@
     undoBtn.disabled = false;
   }
 
-  // Undo last delete
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
     const data = undoStack.pop();
@@ -646,7 +635,6 @@
     undoBtn.disabled = undoStack.length === 0;
   });
 
-  // Connections drawing as curved Bezier paths with labels
   function drawConnections() {
     connectionLayer.innerHTML = '';
     connections.forEach(({ from, to }) => {
@@ -654,11 +642,6 @@
       const toBox = boxesMap.get(to);
       if (!fromBox || !toBox) return;
 
-      const fromRect = fromBox.getBoundingClientRect();
-      const toRect = toBox.getBoundingClientRect();
-      const viewportRect = viewport.getBoundingClientRect();
-
-      // Calculate coords relative to connectionLayer (scaled and panned)
       const startX = parseFloat(fromBox.style.left) + fromBox.offsetWidth / 2;
       const startY = parseFloat(fromBox.style.top) + fromBox.offsetHeight / 2;
       const endX = parseFloat(toBox.style.left) + toBox.offsetWidth / 2;
@@ -669,7 +652,6 @@
       path.setAttribute("fill", "none");
       path.setAttribute("stroke-width", "2");
 
-      // Curved path with control points
       const dx = endX - startX;
       const dy = endY - startY;
       const curveFactor = 0.3;
@@ -685,21 +667,23 @@
     });
   }
 
-  // Add connection (avoid duplicates)
   function addConnection(from, to) {
     if (connections.some(c => c.from === from && c.to === to)) return;
     connections.push({ from, to });
   }
 
-  // Clear connection selection toggles
   function clearConnectionSelection() {
     connectionStartBoxId = null;
     document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
   }
 
-  // Double click to create a box at exact canvas coords
+  // Double click to create box only if dblclick target is NOT header or child
   viewport.addEventListener('dblclick', e => {
     if (!editMode) return;
+
+    // Prevent creating box if double-clicked inside header or its children
+    if (e.target.closest('.box-header')) return;
+
     const rect = viewport.getBoundingClientRect();
     const x = (e.clientX - rect.left - panX) / scale - 60;
     const y = (e.clientY - rect.top - panY) / scale - 30;
@@ -707,7 +691,6 @@
     createBox(id, x, y);
   });
 
-  // Mark center button just marks current viewport center coordinates
   markCenterBtn.addEventListener('click', () => {
     const centerX = (viewport.clientWidth / 2 - panX) / scale;
     const centerY = (viewport.clientHeight / 2 - panY) / scale;
@@ -716,7 +699,6 @@
     setTimeout(() => { saveStatus.textContent = ''; }, 3000);
   });
 
-  // Go to center button pans viewport to last marked center
   goCenterBtn.addEventListener('click', () => {
     if (!markedCenter) {
       saveStatus.textContent = 'No center marked yet';
@@ -730,17 +712,25 @@
     updateTransform();
   });
 
-  // Toggle edit mode
   toggleEditModeBtn.addEventListener('click', () => {
     editMode = !editMode;
+
+    // Update all box contents to editable or not
     document.querySelectorAll('.box-content').forEach(c => {
       c.contentEditable = editMode;
     });
+
+    // Show or hide all box headers immediately
+    document.querySelectorAll('.box-header').forEach(header => {
+      header.style.display = editMode ? 'flex' : 'none';
+    });
+
     saveStatus.textContent = editMode ? 'Edit Mode On' : 'Edit Mode Off';
     setTimeout(() => { saveStatus.textContent = ''; }, 2000);
   });
 
-  // Save/load mind maps to Firestore
+  // Load/save maps with Firestore code here (unchanged)...
+
   async function loadMaps() {
     const mapsCol = collection(db, 'maps');
     const snapshot = await getDocs(mapsCol);
@@ -755,7 +745,6 @@
       mapSelect.appendChild(opt);
     });
     if (mapsCache.size === 0) {
-      // Create default map
       const newId = 'id-19dmwrpql';
       await setDoc(doc(db, 'maps', newId), { name: 'Default Map', boxes: [], connections: [] });
       loadMaps();
@@ -858,7 +847,6 @@
   deleteMapBtn.addEventListener('click', deleteMap);
   newMapBtn.addEventListener('click', newMap);
 
-  // Clear all boxes and connections
   function clearAll() {
     boxesMap.forEach(box => canvas.removeChild(box));
     boxesMap.clear();
@@ -867,10 +855,7 @@
     selectedBoxes.clear();
   }
 
-  // Initial load
   loadMaps();
-
-  // Initial transform update
   updateTransform();
 </script>
 </body>
