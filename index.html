@@ -1,294 +1,296 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>stringsnthingsworking1</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>
-    html, body {
-      margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
-      touch-action: none;
-    }
-    #viewport {
-      width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
-      overflow: hidden;
-      box-sizing: border-box;
-    }
-    #canvas {
-      position: absolute; top: 0; left: 0; transform-origin: 0 0;
-      z-index: 10;
-    }
-    .box {
-      position: absolute;
-      background: white;
-      border: 1px solid black;
-      min-width: 80px;
-      min-height: 40px;
-      user-select: none;
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-      cursor: text;
-      overflow: hidden;
-      transition: width 0.1s ease, height 0.1s ease;
-    }
-    .box.selected {
-      outline: 2px dashed blue;
-    }
-    .box-header {
-      background: #ddd;
-      padding-left: 24px;
-      min-width: 40px;
-      min-height: 18px;
-      height: 18px;
-      box-sizing: border-box;
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 4px;
-      position: relative;
-      user-select: none;
-      cursor: default;
-      border-bottom: 1px solid #bbb;
-      font-size: 12px;
-      flex-shrink: 0;
-    }
-    .drag-handle {
-      position: absolute;
-      left: 4px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 14px;
-      cursor: move;
-      user-select: none;
-      width: 16px;
-      height: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #333;
-      white-space: nowrap;
-      z-index: 5;
-    }
-    .delete-btn {
-      color: red;
-      font-weight: bold;
-      cursor: pointer;
-      font-size: 14px;
-      line-height: 1;
-      user-select: none;
-      padding: 0;
-      margin: 0;
-      border: none;
-      background: transparent;
-      width: 18px;
-      height: 18px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .connect-toggle {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      border: none;
-      background-color: blue;
-      cursor: pointer;
-      user-select: none;
-      transition: background-color 0.25s ease;
-      padding: 0;
-      margin: 0;
-      flex-shrink: 0;
-    }
-    .connect-toggle.active {
-      background-color: green;
-    }
-    .font-size-btn {
-      font-size: 14px;
-      width: 18px;
-      height: 18px;
-      line-height: 1;
-      cursor: pointer;
-      user-select: none;
-      background: transparent;
-      border: none;
-      color: black;
-      padding: 0;
-      margin: 0 2px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .box-content {
-      flex: 1;
-      padding: 2px;
-      white-space: pre-wrap;
-      font-family: monospace, monospace;
-      overflow-wrap: break-word;
-      outline: none;
-      cursor: text;
-      user-select: text;
-      line-height: 1.1;
-      min-height: 24px;
-      box-sizing: border-box;
-      resize: none;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-      word-break: break-word;
-    }
-    .resize-handle {
-      width: 16px;
-      height: 16px;
-      background: transparent;
-      position: absolute;
-      z-index: 20;
-      touch-action: none;
-    }
-    .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
-    .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
-    .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
-    .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
+<meta charset="UTF-8" />
+<title>stringsnthingsworking43525245</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
+    touch-action: none;
+  }
+  #viewport {
+    width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  #canvas {
+    position: absolute; top: 0; left: 0;
+    width: 10000px; height: 10000px; /* Large canvas for panning */
+    transform-origin: 0 0;
+    z-index: 10;
+  }
+  .box {
+    position: absolute;
+    background: white;
+    border: 1px solid black;
+    min-width: 80px;
+    min-height: 40px;
+    user-select: none;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    cursor: text;
+    overflow: hidden;
+    transition: width 0.1s ease, height 0.1s ease;
+  }
+  .box.selected {
+    outline: 2px dashed blue;
+  }
+  .box-header {
+    background: #ddd;
+    padding-left: 24px;
+    min-width: 40px;
+    min-height: 18px;
+    height: 18px;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+    user-select: none;
+    cursor: default;
+    border-bottom: 1px solid #bbb;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .drag-handle {
+    position: absolute;
+    left: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    cursor: move;
+    user-select: none;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #333;
+    white-space: nowrap;
+    z-index: 5;
+  }
+  .delete-btn {
+    color: red;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    user-select: none;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .connect-toggle {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: none;
+    background-color: blue;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.25s ease;
+    padding: 0;
+    margin: 0;
+    flex-shrink: 0;
+  }
+  .connect-toggle.active {
+    background-color: green;
+  }
+  .font-size-btn {
+    font-size: 14px;
+    width: 18px;
+    height: 18px;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    background: transparent;
+    border: none;
+    color: black;
+    padding: 0;
+    margin: 0 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .box-content {
+    flex: 1;
+    padding: 2px;
+    white-space: pre-wrap;
+    font-family: monospace, monospace;
+    overflow-wrap: break-word;
+    outline: none;
+    cursor: text;
+    user-select: text;
+    line-height: 1.1;
+    min-height: 24px;
+    box-sizing: border-box;
+    resize: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    word-break: break-word;
+  }
+  .resize-handle {
+    width: 16px;
+    height: 16px;
+    background: transparent;
+    position: absolute;
+    z-index: 20;
+    touch-action: none;
+  }
+  .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
+  .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
+  .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
+  .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
 
-    #topMenu {
-      position: fixed;
-      top: 8px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(240, 240, 240, 0.95);
-      border: 1px solid #bbb;
-      border-radius: 6px;
-      padding: 6px 12px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-family: monospace;
-      z-index: 10000;
-      box-shadow: 0 0 8px rgba(0,0,0,0.1);
-      user-select: none;
-    }
-    #mapSelect {
-      font-family: monospace;
-      font-size: 14px;
-      padding: 2px 4px;
-      border-radius: 4px;
-      border: 1px solid #888;
-      cursor: pointer;
-      min-width: 150px;
-    }
-    #saveMapBtn, #renameMapBtn, #deleteMapBtn, #newMapBtn {
-      background: #555;
-      color: #eee;
-      border: none;
-      border-radius: 4px;
-      padding: 4px 10px;
-      cursor: pointer;
-      font-family: monospace;
-      font-size: 14px;
-      user-select: none;
-      transition: background-color 0.2s ease;
-    }
-    #saveMapBtn:hover, #renameMapBtn:hover, #deleteMapBtn:hover, #newMapBtn:hover {
-      background: #333;
-    }
-    #saveStatus {
-      font-size: 13px;
-      color: green;
-      min-width: 90px;
-      user-select: none;
-    }
+  #topMenu {
+    position: fixed;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(240, 240, 240, 0.95);
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: monospace;
+    z-index: 10000;
+    box-shadow: 0 0 8px rgba(0,0,0,0.1);
+    user-select: none;
+  }
+  #mapSelect {
+    font-family: monospace;
+    font-size: 14px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    border: 1px solid #888;
+    cursor: pointer;
+    min-width: 150px;
+  }
+  #saveMapBtn, #renameMapBtn, #deleteMapBtn, #newMapBtn {
+    background: #555;
+    color: #eee;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 14px;
+    user-select: none;
+    transition: background-color 0.2s ease;
+  }
+  #saveMapBtn:hover, #renameMapBtn:hover, #deleteMapBtn:hover, #newMapBtn:hover {
+    background: #333;
+  }
+  #saveStatus {
+    font-size: 13px;
+    color: green;
+    min-width: 90px;
+    user-select: none;
+  }
 
-    #buttonContainer {
-      position: fixed;
-      bottom: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 12px;
-      z-index: 1000;
-      user-select: none;
-    }
-    .floatingBtn {
-      background: rgba(100, 100, 100, 0.5);
-      color: #eee;
-      font-family: monospace, monospace;
-      font-size: 16px;
-      padding: 6px 12px;
-      border: 1px solid #555;
-      border-radius: 4px;
-      cursor: pointer;
-      min-width: 100px;
-      text-align: center;
-      box-shadow: 0 0 6px rgba(0,0,0,0.3);
-      touch-action: manipulation;
-      transition: background 0.2s ease;
-    }
-    .floatingBtn:active {
-      background: rgba(80, 80, 80, 0.7);
-    }
-    .floatingBtn:disabled {
-      background: rgba(150, 150, 150, 0.3);
-      cursor: default;
-      color: #999;
-      border-color: #999;
-      box-shadow: none;
-    }
-    #zoomDisplay {
-      position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.5); color: white; font-family: monospace;
-      padding: 4px 8px; border-radius: 4px;
-      user-select: none; pointer-events: none; z-index: 1001;
-    }
-    #connectionLayer {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      pointer-events: none;
-      z-index: 1;
-    }
-    #footerInfo {
-      position: fixed;
-      bottom: 60px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-family: monospace, monospace;
-      font-size: 14px;
-      color: #555;
-      user-select: none;
-      z-index: 1002;
-      background: rgba(255,255,255,0.9);
-      padding: 4px 8px;
-      border-radius: 4px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.1);
-      pointer-events: none;
-      width: max-content;
-      max-width: 90vw;
-      text-align: center;
-    }
-  </style>
+  #buttonContainer {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    z-index: 1000;
+    user-select: none;
+  }
+  .floatingBtn {
+    background: rgba(100, 100, 100, 0.5);
+    color: #eee;
+    font-family: monospace, monospace;
+    font-size: 16px;
+    padding: 6px 12px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 100px;
+    text-align: center;
+    box-shadow: 0 0 6px rgba(0,0,0,0.3);
+    touch-action: manipulation;
+    transition: background 0.2s ease;
+  }
+  .floatingBtn:active {
+    background: rgba(80, 80, 80, 0.7);
+  }
+  .floatingBtn:disabled {
+    background: rgba(150, 150, 150, 0.3);
+    cursor: default;
+    color: #999;
+    border-color: #999;
+    box-shadow: none;
+  }
+  #zoomDisplay {
+    position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.5); color: white; font-family: monospace;
+    padding: 4px 8px; border-radius: 4px;
+    user-select: none; pointer-events: none; z-index: 1001;
+  }
+  #connectionLayer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 10000px; height: 10000px;
+    pointer-events: none;
+    z-index: 1;
+  }
+  #footerInfo {
+    position: fixed;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: monospace, monospace;
+    font-size: 14px;
+    color: #555;
+    user-select: none;
+    z-index: 1002;
+    background: rgba(255,255,255,0.9);
+    padding: 4px 8px;
+    border-radius: 4px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    pointer-events: none;
+    width: max-content;
+    max-width: 90vw;
+    text-align: center;
+  }
+</style>
 </head>
 <body>
-  <div id="topMenu">
-    <select id="mapSelect" title="Select a mind map"></select>
-    <button id="saveMapBtn" title="Save current mind map">Save</button>
-    <button id="renameMapBtn" title="Rename current mind map">Rename</button>
-    <button id="deleteMapBtn" title="Delete current mind map">Delete</button>
-    <button id="newMapBtn" title="Create new mind map">New Map</button>
-    <div id="saveStatus"></div>
-  </div>
+<div id="topMenu">
+  <select id="mapSelect" title="Select a mind map"></select>
+  <button id="saveMapBtn" title="Save current mind map">Save</button>
+  <button id="renameMapBtn" title="Rename current mind map">Rename</button>
+  <button id="deleteMapBtn" title="Delete current mind map">Delete</button>
+  <button id="newMapBtn" title="Create new mind map">New Map</button>
+  <div id="saveStatus"></div>
+</div>
 
-  <div id="viewport">
-    <svg id="connectionLayer" width="100%" height="100%" viewBox="0 0 1000 1000" preserveAspectRatio="none"></svg>
-    <div id="canvas"></div>
-  </div>
+<div id="viewport">
+  <svg id="connectionLayer" width="10000" height="10000"></svg>
+  <div id="canvas"></div>
+</div>
 
-  <div id="buttonContainer">
-    <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
-    <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
-    <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
-    <button id="toggleEditModeBtn" class="floatingBtn">Toggle Edit Mode</button>
-  </div>
+<div id="buttonContainer">
+  <button id="undoBtn" class="floatingBtn" disabled>Undo Delete</button>
+  <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
+  <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
+  <button id="toggleEditModeBtn" class="floatingBtn">Toggle Edit Mode</button>
+</div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
@@ -344,6 +346,7 @@
 
   function updateTransform() {
     canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    connectionLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     drawConnections();
   }
 
@@ -405,6 +408,7 @@
     box.style.width = w + 'px';
     box.style.height = h + 'px';
     box.dataset.id = id;
+    box.style.fontSize = fontSize + 'px';
 
     // Header
     const header = document.createElement('div');
@@ -514,10 +518,32 @@
       }
     }
 
-    header.addEventListener('mousedown', e => {
+    function onDragStart(e) {
       e.stopPropagation();
       selectBox(e);
-      if (e.target === dragHandle) {
+      dragging = true;
+      const rect = box.getBoundingClientRect();
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      origX = parseFloat(box.style.left);
+      origY = parseFloat(box.style.top);
+      viewport.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
+    }
+
+    dragHandle.addEventListener('mousedown', onDragStart);
+
+    // Also allow dragging by holding shift + clicking anywhere on header (including drag handle)
+    header.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      if (e.target === dragHandle) return; // handled above
+      if (!e.shiftKey && !selectedBoxes.has(box)) {
+        selectedBoxes.forEach(b => b.classList.remove('selected'));
+        selectedBoxes.clear();
+        box.classList.add('selected');
+        selectedBoxes.add(box);
+      }
+      if (selectedBoxes.has(box)) {
         dragging = true;
         const rect = box.getBoundingClientRect();
         dragStartX = e.clientX;
@@ -534,7 +560,6 @@
       const dx = (e.clientX - dragStartX) / scale;
       const dy = (e.clientY - dragStartY) / scale;
       selectedBoxes.forEach(b => {
-        const idb = b.dataset.id;
         const oldX = parseFloat(b.style.left);
         const oldY = parseFloat(b.style.top);
         b.style.left = oldX + dx + 'px';
@@ -565,7 +590,18 @@
   function deleteBox(id) {
     const box = boxesMap.get(id);
     if (!box) return;
-    undoStack.push({ type: 'deleteBox', data: { id, x: parseFloat(box.style.left), y: parseFloat(box.style.top), w: box.offsetWidth, h: box.offsetHeight, text: box.querySelector('.box-content').textContent, fontSize: parseInt(box.style.fontSize) || 14 } });
+    undoStack.push({
+      type: 'deleteBox',
+      data: {
+        id,
+        x: parseFloat(box.style.left),
+        y: parseFloat(box.style.top),
+        w: box.offsetWidth,
+        h: box.offsetHeight,
+        text: box.querySelector('.box-content').textContent,
+        fontSize: parseInt(box.style.fontSize) || 14
+      }
+    });
     box.remove();
     boxesMap.delete(id);
 
@@ -606,7 +642,6 @@
   }
 
   function drawConnections() {
-    // Clear SVG
     while (connectionLayer.firstChild) connectionLayer.removeChild(connectionLayer.firstChild);
 
     connections.forEach(c => {
@@ -614,22 +649,17 @@
       const toBox = boxesMap.get(c.to);
       if (!fromBox || !toBox) return;
 
-      const rect1 = fromBox.getBoundingClientRect();
-      const rect2 = toBox.getBoundingClientRect();
-      const vpRect = viewport.getBoundingClientRect();
+      // Calculate center coords relative to canvas
+      const fromX = parseFloat(fromBox.style.left) + fromBox.offsetWidth / 2;
+      const fromY = parseFloat(fromBox.style.top) + fromBox.offsetHeight / 2;
+      const toX = parseFloat(toBox.style.left) + toBox.offsetWidth / 2;
+      const toY = parseFloat(toBox.style.top) + toBox.offsetHeight / 2;
 
-      // Convert screen to canvas coordinates considering pan/zoom
-      const x1 = (rect1.left - vpRect.left - panX) / scale + rect1.width / (2 * scale);
-      const y1 = (rect1.top - vpRect.top - panY) / scale + rect1.height / (2 * scale);
-      const x2 = (rect2.left - vpRect.left - panX) / scale + rect2.width / (2 * scale);
-      const y2 = (rect2.top - vpRect.top - panY) / scale + rect2.height / (2 * scale);
-
-      // Draw straight line
       const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      line.setAttribute('x1', x1);
-      line.setAttribute('y1', y1);
-      line.setAttribute('x2', x2);
-      line.setAttribute('y2', y2);
+      line.setAttribute('x1', fromX);
+      line.setAttribute('y1', fromY);
+      line.setAttribute('x2', toX);
+      line.setAttribute('y2', toY);
       line.setAttribute('stroke', 'black');
       line.setAttribute('stroke-width', '2');
       connectionLayer.appendChild(line);
