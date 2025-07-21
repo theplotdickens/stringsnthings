@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>stringsnthingsfinal</title>
+<title>stringsnthingsfullworkingalmost</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
   html, body {
@@ -490,126 +490,46 @@
 
     box.appendChild(header);
 
-    // Content editable area
+    // Content area
     const content = document.createElement('div');
     content.classList.add('box-content');
     content.contentEditable = editMode;
     content.spellcheck = false;
     content.textContent = text;
-
-    content.addEventListener('input', e => {
-      // Resize box height based on content scrollHeight
-      box.style.height = Math.max(40, content.scrollHeight + 24) + 'px';
-    });
-
     box.appendChild(content);
 
     // Resize handles
-    ['nw', 'ne', 'sw', 'se'].forEach(corner => {
+    ['nw', 'ne', 'sw', 'se'].forEach(pos => {
       const handle = document.createElement('div');
-      handle.classList.add('resize-handle', corner);
-      handle.dataset.corner = corner;
+      handle.classList.add('resize-handle', pos);
       box.appendChild(handle);
+      handle.addEventListener('pointerdown', e => {
+        e.stopPropagation();
+        startResize(box, pos, e);
+      });
     });
 
-    // Append to canvas and register
-    canvas.appendChild(box);
-    boxesMap.set(id, {element: box, content, header, connectToggle, dragHandle, fontIncrease, fontDecrease});
-
-    // Set initial height based on content
-    box.style.height = Math.max(40, content.scrollHeight + 24) + 'px';
-
-    setupBoxInteractions(box, id);
-
-    return box;
-  }
-
-  // Setup dragging, resizing, selection, multi-select for a box
-  function setupBoxInteractions(box, id) {
-    const { content, header, dragHandle } = boxesMap.get(id);
-
-    // Dragging variables
-    let dragging = false, dragStartX, dragStartY, origX, origY;
-
-    // Resize variables
-    let resizing = false, resizeCorner;
-    let resizeStartX, resizeStartY, origW, origH, origLeft, origTop;
-
-    // Multi-select drag variables
-    let multiDrag = false;
-
-    // Drag handle pointer events for moving boxes (including multi select)
+    // Dragging
     dragHandle.addEventListener('pointerdown', e => {
-      e.preventDefault();
-      if (!editMode) return;
-
-      if (!selectedBoxes.has(box)) {
-        // If shift not pressed, clear other selections
-        if (!e.shiftKey) {
-          selectedBoxes.forEach(b => b.classList.remove('selected'));
-          selectedBoxes.clear();
-        }
-        box.classList.add('selected');
-        selectedBoxes.add(box);
-      } else if (e.shiftKey) {
-        box.classList.remove('selected');
-        selectedBoxes.delete(box);
-        return;
-      }
-
-      dragging = true;
-      multiDrag = selectedBoxes.size > 1;
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      origX = parseFloat(box.style.left);
-      origY = parseFloat(box.style.top);
-
-      // For multi drag, save all original positions
-      if (multiDrag) {
-        selectedBoxes.forEach(b => {
-          b.dataset.origLeft = b.style.left;
-          b.dataset.origTop = b.style.top;
-        });
-      }
-
-      window.addEventListener('pointermove', onDragMove);
-      window.addEventListener('pointerup', onDragEnd);
+      e.stopPropagation();
+      startDrag(box, e);
     });
 
-    function onDragMove(e) {
-      if (!dragging) return;
-      const dx = e.clientX - dragStartX;
-      const dy = e.clientY - dragStartY;
-
-      if (multiDrag) {
-        selectedBoxes.forEach(b => {
-          let origLeftPx = parseFloat(b.dataset.origLeft);
-          let origTopPx = parseFloat(b.dataset.origTop);
-          b.style.left = (origLeftPx + dx / scale) + 'px';
-          b.style.top = (origTopPx + dy / scale) + 'px';
-        });
-      } else {
-        box.style.left = (origX + dx / scale) + 'px';
-        box.style.top = (origY + dy / scale) + 'px';
-      }
-      drawConnections();
-    }
-
-    function onDragEnd(e) {
-      if (!dragging) return;
-      dragging = false;
-      window.removeEventListener('pointermove', onDragMove);
-      window.removeEventListener('pointerup', onDragEnd);
-    }
-
-    // Box content editable toggle for edit mode
-    content.contentEditable = editMode;
-
-    // Header click selects/deselects boxes for multi select
-    header.addEventListener('click', e => {
-      if (e.target.closest('.drag-handle')) return; // drag handle click handled above
+    // Double click on header to adjust font size (only change font size, no new box)
+    header.addEventListener('dblclick', e => {
+      e.stopPropagation();
       if (!editMode) return;
+      // Cycle font sizes on double click
+      let currentSize = parseInt(box.style.fontSize) || fontSize;
+      currentSize += 2;
+      if (currentSize > 36) currentSize = 12;
+      box.style.fontSize = currentSize + 'px';
+    });
 
+    // Select box by clicking header + shift for multi-select
+    header.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!editMode) return;
       if (e.shiftKey) {
         if (selectedBoxes.has(box)) {
           selectedBoxes.delete(box);
@@ -626,440 +546,421 @@
       }
     });
 
-    // Resize handle pointer events
-    ['nw', 'ne', 'sw', 'se'].forEach(corner => {
-      const handle = box.querySelector(`.resize-handle.${corner}`);
-      handle.addEventListener('pointerdown', e => {
-        e.preventDefault();
-        if (!editMode) return;
-        resizing = true;
-        resizeCorner = corner;
-        resizeStartX = e.clientX;
-        resizeStartY = e.clientY;
-        origW = box.offsetWidth;
-        origH = box.offsetHeight;
-        origLeft = parseFloat(box.style.left);
-        origTop = parseFloat(box.style.top);
-
-        window.addEventListener('pointermove', onResizeMove);
-        window.addEventListener('pointerup', onResizeEnd);
-      });
+    // Prevent double click on header creating new box
+    header.addEventListener('dblclick', e => {
+      e.stopPropagation();
     });
 
-    function onResizeMove(e) {
-      if (!resizing) return;
-      const dx = (e.clientX - resizeStartX) / scale;
-      const dy = (e.clientY - resizeStartY) / scale;
-
-      let newW = origW;
-      let newH = origH;
-      let newLeft = origLeft;
-      let newTop = origTop;
-
-      switch (resizeCorner) {
-        case 'nw':
-          newW = origW - dx;
-          newH = origH - dy;
-          newLeft = origLeft + dx;
-          newTop = origTop + dy;
-          break;
-        case 'ne':
-          newW = origW + dx;
-          newH = origH - dy;
-          newTop = origTop + dy;
-          break;
-        case 'sw':
-          newW = origW - dx;
-          newH = origH + dy;
-          newLeft = origLeft + dx;
-          break;
-        case 'se':
-          newW = origW + dx;
-          newH = origH + dy;
-          break;
-      }
-
-      newW = Math.max(40, newW);
-      newH = Math.max(24, newH);
-
-      box.style.width = newW + 'px';
-      box.style.height = newH + 'px';
-      box.style.left = newLeft + 'px';
-      box.style.top = newTop + 'px';
-
-      drawConnections();
-    }
-
-    function onResizeEnd(e) {
-      if (!resizing) return;
-      resizing = false;
-      window.removeEventListener('pointermove', onResizeMove);
-      window.removeEventListener('pointerup', onResizeEnd);
-    }
+    canvas.appendChild(box);
+    boxesMap.set(id, box);
+    return box;
   }
 
-  // Delete box by ID
+  // Delete a box
   function deleteBox(id) {
-    if (!boxesMap.has(id)) return;
-    const { element } = boxesMap.get(id);
-    undoStack.push({ type: 'delete', boxData: getBoxData(id) });
-    undoBtn.disabled = false;
+    const box = boxesMap.get(id);
+    if (!box) return;
+    undoStack.push({
+      id: id,
+      x: parseFloat(box.style.left),
+      y: parseFloat(box.style.top),
+      w: box.offsetWidth,
+      h: box.offsetHeight,
+      text: box.querySelector('.box-content').textContent,
+      fontSize: parseInt(box.style.fontSize) || 14,
+    });
+    box.remove();
     boxesMap.delete(id);
-    element.remove();
-
-    // Remove connections involving this box
+    // Remove connections linked to this box
     for (let i = connections.length - 1; i >= 0; i--) {
       if (connections[i].from === id || connections[i].to === id) {
         connections.splice(i, 1);
       }
     }
-    selectedBoxes.delete(element);
     drawConnections();
-  }
-
-  // Get box data to save or undo
-  function getBoxData(id) {
-    if (!boxesMap.has(id)) return null;
-    const { element, content } = boxesMap.get(id);
-    return {
-      id,
-      x: parseFloat(element.style.left),
-      y: parseFloat(element.style.top),
-      w: element.offsetWidth,
-      h: element.offsetHeight,
-      text: content.textContent,
-      fontSize: parseInt(element.style.fontSize) || 14,
-    };
+    undoBtn.disabled = false;
   }
 
   // Undo last delete
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
-    const last = undoStack.pop();
-    if (last.type === 'delete' && last.boxData) {
-      const d = last.boxData;
-      createBox(d.id, d.x, d.y, d.w, d.h, d.text, d.fontSize);
-      undoBtn.disabled = undoStack.length === 0;
-    }
+    const data = undoStack.pop();
+    createBox(data.id, data.x, data.y, data.w, data.h, data.text, data.fontSize);
+    undoBtn.disabled = undoStack.length === 0;
   });
 
-  // Connections management
+  // Dragging logic
+  let dragData = null;
+
+  function startDrag(box, e) {
+    if (!editMode) return;
+    if (selectedBoxes.has(box)) {
+      dragData = {
+        boxes: [...selectedBoxes],
+        startX: e.clientX,
+        startY: e.clientY,
+        startPositions: [...selectedBoxes].map(b => ({
+          box: b,
+          x: parseFloat(b.style.left),
+          y: parseFloat(b.style.top),
+        })),
+      };
+    } else {
+      selectedBoxes.forEach(b => b.classList.remove('selected'));
+      selectedBoxes.clear();
+      selectedBoxes.add(box);
+      box.classList.add('selected');
+      dragData = {
+        boxes: [box],
+        startX: e.clientX,
+        startY: e.clientY,
+        startPositions: [{
+          box: box,
+          x: parseFloat(box.style.left),
+          y: parseFloat(box.style.top),
+        }],
+      };
+    }
+    document.addEventListener('pointermove', onDragMove);
+    document.addEventListener('pointerup', onDragEnd);
+  }
+
+  function onDragMove(e) {
+    if (!dragData) return;
+    e.preventDefault();
+    const dx = e.clientX - dragData.startX;
+    const dy = e.clientY - dragData.startY;
+    dragData.startPositions.forEach(pos => {
+      pos.box.style.left = (pos.x + dx) + 'px';
+      pos.box.style.top = (pos.y + dy) + 'px';
+    });
+    drawConnections();
+  }
+
+  function onDragEnd(e) {
+    if (!dragData) return;
+    dragData = null;
+    document.removeEventListener('pointermove', onDragMove);
+    document.removeEventListener('pointerup', onDragEnd);
+  }
+
+  // Resizing logic
+  let resizeData = null;
+
+  function startResize(box, corner, e) {
+    if (!editMode) return;
+    e.preventDefault();
+    resizeData = {
+      box,
+      corner,
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: box.offsetWidth,
+      startH: box.offsetHeight,
+      startLeft: parseFloat(box.style.left),
+      startTop: parseFloat(box.style.top),
+    };
+    document.addEventListener('pointermove', onResizeMove);
+    document.addEventListener('pointerup', onResizeEnd);
+  }
+
+  function onResizeMove(e) {
+    if (!resizeData) return;
+    e.preventDefault();
+    const dx = e.clientX - resizeData.startX;
+    const dy = e.clientY - resizeData.startY;
+    let newW = resizeData.startW;
+    let newH = resizeData.startH;
+    let newLeft = resizeData.startLeft;
+    let newTop = resizeData.startTop;
+
+    if (resizeData.corner.includes('e')) {
+      newW = Math.max(50, resizeData.startW + dx);
+    }
+    if (resizeData.corner.includes('s')) {
+      newH = Math.max(30, resizeData.startH + dy);
+    }
+    if (resizeData.corner.includes('w')) {
+      newW = Math.max(50, resizeData.startW - dx);
+      newLeft = resizeData.startLeft + dx;
+    }
+    if (resizeData.corner.includes('n')) {
+      newH = Math.max(30, resizeData.startH - dy);
+      newTop = resizeData.startTop + dy;
+    }
+
+    resizeData.box.style.width = newW + 'px';
+    resizeData.box.style.height = newH + 'px';
+    resizeData.box.style.left = newLeft + 'px';
+    resizeData.box.style.top = newTop + 'px';
+    drawConnections();
+  }
+
+  function onResizeEnd(e) {
+    if (!resizeData) return;
+    resizeData = null;
+    document.removeEventListener('pointermove', onResizeMove);
+    document.removeEventListener('pointerup', onResizeEnd);
+  }
+
+  // Add connection between two box ids (no duplicates)
   function addConnection(fromId, toId) {
-    if (!fromId || !toId || fromId === toId) return;
-    // Avoid duplicate connections
-    for (const c of connections) {
-      if ((c.from === fromId && c.to === toId) || (c.from === toId && c.to === fromId)) {
-        return;
-      }
+    if (fromId === toId) return;
+    if (connections.some(c => (c.from === fromId && c.to === toId) || (c.from === toId && c.to === fromId))) {
+      return; // connection exists
     }
     connections.push({ from: fromId, to: toId });
   }
+
+  // Clear connection selection
   function clearConnectionSelection() {
     connectionStartBoxId = null;
-    boxesMap.forEach(({ connectToggle }) => connectToggle.classList.remove('active'));
+    document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
   }
-  // Draw curved connections as SVG paths
+
+  // Draw all connections with slight curves
   function drawConnections() {
-    while (connectionLayer.firstChild) connectionLayer.removeChild(connectionLayer.firstChild);
+    while (connectionLayer.firstChild) {
+      connectionLayer.removeChild(connectionLayer.firstChild);
+    }
     connections.forEach(({ from, to }) => {
       const boxFrom = boxesMap.get(from);
       const boxTo = boxesMap.get(to);
       if (!boxFrom || !boxTo) return;
-      const elFrom = boxFrom.element;
-      const elTo = boxTo.element;
 
-      // Centers of boxes
-      const fromX = parseFloat(elFrom.style.left) + elFrom.offsetWidth / 2;
-      const fromY = parseFloat(elFrom.style.top) + elFrom.offsetHeight / 2;
-      const toX = parseFloat(elTo.style.left) + elTo.offsetWidth / 2;
-      const toY = parseFloat(elTo.style.top) + elTo.offsetHeight / 2;
+      const rectFrom = boxFrom.getBoundingClientRect();
+      const rectTo = boxTo.getBoundingClientRect();
 
-      // Compute control points for curve
-      const dx = toX - fromX;
-      const dy = toY - fromY;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      const normX = dx / dist;
-      const normY = dy / dist;
-      const perpX = -normY;
-      const perpY = normX;
+      // Convert to canvas coords
+      const fromX = parseFloat(boxFrom.style.left) + boxFrom.offsetWidth / 2;
+      const fromY = parseFloat(boxFrom.style.top) + boxFrom.offsetHeight / 2;
+      const toX = parseFloat(boxTo.style.left) + boxTo.offsetWidth / 2;
+      const toY = parseFloat(boxTo.style.top) + boxTo.offsetHeight / 2;
 
-      const curveOffset = Math.min(60, dist / 2);
-      const cp1X = fromX + dx / 3 + perpX * curveOffset;
-      const cp1Y = fromY + dy / 3 + perpY * curveOffset;
-      const cp2X = fromX + 2 * dx / 3 + perpX * curveOffset;
-      const cp2Y = fromY + 2 * dy / 3 + perpY * curveOffset;
-
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      const d = `M${fromX},${fromY} C${cp1X},${cp1Y} ${cp2X},${cp2Y} ${toX},${toY}`;
-      path.setAttribute('d', d);
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('stroke', 'black');
       path.setAttribute('stroke-width', '2');
       path.setAttribute('fill', 'none');
 
+      // Slight curved path with cubic bezier
+      const dx = toX - fromX;
+      const dy = toY - fromY;
+      const cx1 = fromX + dx * 0.25;
+      const cy1 = fromY;
+      const cx2 = fromX + dx * 0.75;
+      const cy2 = toY;
+
+      const d = `M${fromX},${fromY} C${cx1},${cy1} ${cx2},${cy2} ${toX},${toY}`;
+      path.setAttribute('d', d);
       connectionLayer.appendChild(path);
     });
   }
 
-  // Load map list from Firestore
-  async function loadMapList() {
-    const mapsCol = collection(db, "maps");
-    const mapsSnap = await getDocs(mapsCol);
-    mapSelect.innerHTML = '';
-    mapsCache.clear();
-    mapsSnap.forEach(docSnap => {
-      const data = docSnap.data();
-      mapsCache.set(docSnap.id, data);
-      const option = document.createElement('option');
-      option.value = docSnap.id;
-      option.textContent = data.name || docSnap.id;
-      mapSelect.appendChild(option);
+  // Double click on canvas creates new box
+  canvas.addEventListener('dblclick', e => {
+    if (!editMode) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left - panX) / scale;
+    const y = (e.clientY - rect.top - panY) / scale;
+    createBox(generateId(), x, y, 120, 60, '', 14);
+    drawConnections();
+  });
+
+  // Go to marked center button
+  goCenterBtn.addEventListener('click', () => {
+    if (!markedCenter) return;
+    panX = viewport.clientWidth / 2 - markedCenter.x * scale;
+    panY = viewport.clientHeight / 2 - markedCenter.y * scale;
+    updateTransform();
+  });
+
+  // Mark center button
+  markCenterBtn.addEventListener('click', () => {
+    // Calculate canvas coordinates at viewport center
+    const centerX = (viewport.clientWidth / 2 - panX) / scale;
+    const centerY = (viewport.clientHeight / 2 - panY) / scale;
+    markedCenter = { x: centerX, y: centerY };
+    alert(`Marked center at (${centerX.toFixed(1)}, ${centerY.toFixed(1)})`);
+  });
+
+  // Toggle edit mode button
+  toggleEditModeBtn.addEventListener('click', () => {
+    editMode = !editMode;
+    document.querySelectorAll('.box-header').forEach(h => {
+      h.style.display = editMode ? 'flex' : 'none';
     });
-  }
-
-  // Load a map by ID
-  async function loadMap(id) {
-    if (!id) return;
-    currentMapId = id;
-    clearAllBoxes();
-    clearAllConnections();
-
-    const docRef = doc(db, "maps", id);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) {
-      alert("Map data not found.");
-      return;
+    document.querySelectorAll('.box-content').forEach(c => {
+      c.contentEditable = editMode;
+    });
+    if (!editMode) {
+      clearConnectionSelection();
+      selectedBoxes.forEach(b => b.classList.remove('selected'));
+      selectedBoxes.clear();
     }
-    const data = docSnap.data();
-    if (!data) return;
+  });
 
-    // Load boxes
-    if (Array.isArray(data.boxes)) {
+  // Save map to Firestore
+  async function saveMap() {
+    if (!currentMapId) return;
+    const data = {
+      name: mapSelect.options[mapSelect.selectedIndex]?.text || 'Unnamed Map',
+      boxes: [],
+      connections: [...connections],
+      markedCenter: markedCenter || null,
+    };
+    boxesMap.forEach(box => {
+      data.boxes.push({
+        id: box.dataset.id,
+        x: parseFloat(box.style.left),
+        y: parseFloat(box.style.top),
+        w: box.offsetWidth,
+        h: box.offsetHeight,
+        text: box.querySelector('.box-content').textContent,
+        fontSize: parseInt(box.style.fontSize) || 14
+      });
+    });
+    await setDoc(doc(db, 'maps', currentMapId), data);
+    mapsCache.set(currentMapId, data);
+    saveStatus.textContent = `Saved map "${data.name}"`;
+    setTimeout(() => { saveStatus.textContent = ''; }, 1500);
+  }
+  saveMapBtn.addEventListener('click', saveMap);
+
+  // Load map by id
+  async function loadMap(id) {
+    clearAll();
+    if (!id) return;
+    let data = mapsCache.get(id);
+    if (!data) {
+      const docSnap = await getDoc(doc(db, 'maps', id));
+      if (docSnap.exists()) {
+        data = docSnap.data();
+        mapsCache.set(id, data);
+      } else {
+        alert('Map data not found!');
+        return;
+      }
+    }
+    currentMapId = id;
+    if (data.boxes) {
       data.boxes.forEach(b => {
         createBox(b.id, b.x, b.y, b.w, b.h, b.text, b.fontSize);
       });
     }
-    // Load connections
-    if (Array.isArray(data.connections)) {
-      data.connections.forEach(c => {
-        connections.push(c);
-      });
+    if (data.connections) {
+      connections.length = 0;
+      connections.push(...data.connections);
+      drawConnections();
     }
-    if (data.panX !== undefined) panX = data.panX;
-    if (data.panY !== undefined) panY = data.panY;
-    if (data.scale !== undefined) scale = data.scale;
-    updateTransform();
-    drawConnections();
-
-    saveStatus.textContent = `Loaded "${data.name || id}"`;
-    selectMapInDropdown(id);
-  }
-
-  function selectMapInDropdown(id) {
-    for (const option of mapSelect.options) {
-      option.selected = (option.value === id);
+    // Load marked center and pan viewport there
+    if (data.markedCenter) {
+      markedCenter = data.markedCenter;
+      panX = viewport.clientWidth / 2 - markedCenter.x * scale;
+      panY = viewport.clientHeight / 2 - markedCenter.y * scale;
+      updateTransform();
+    } else {
+      markedCenter = null;
     }
+    saveStatus.textContent = `Loaded map "${data.name || id}"`;
+    setTimeout(() => { saveStatus.textContent = ''; }, 1500);
   }
 
-  // Clear all boxes and connections
-  function clearAllBoxes() {
-    boxesMap.forEach(({ element }) => element.remove());
-    boxesMap.clear();
-    selectedBoxes.clear();
-  }
-  function clearAllConnections() {
+  // Clear all boxes and connections from canvas
+  function clearAll() {
+    undoStack.length = 0;
+    undoBtn.disabled = true;
     connections.length = 0;
+    while (canvas.firstChild) canvas.firstChild.remove();
+    boxesMap.clear();
     drawConnections();
-  }
-
-  // Save current map state to Firestore
-  async function saveCurrentMap() {
-    if (!currentMapId) {
-      alert("No map selected.");
-      return;
-    }
-    const boxesData = [];
-    boxesMap.forEach(({ element, content }) => {
-      boxesData.push({
-        id: element.dataset.id,
-        x: parseFloat(element.style.left),
-        y: parseFloat(element.style.top),
-        w: element.offsetWidth,
-        h: element.offsetHeight,
-        text: content.textContent,
-        fontSize: parseInt(element.style.fontSize) || 14,
-      });
-    });
-
-    const data = {
-      boxes: boxesData,
-      connections: [...connections],
-      panX, panY, scale,
-      name: mapsCache.get(currentMapId)?.name || currentMapId,
-      updatedAt: Date.now(),
-    };
-    try {
-      await setDoc(doc(db, "maps", currentMapId), data);
-      saveStatus.textContent = "Saved";
-      setTimeout(() => saveStatus.textContent = '', 2000);
-    } catch (err) {
-      alert("Failed to save map: " + err.message);
-    }
   }
 
   // Rename current map
-  async function renameCurrentMap() {
-    if (!currentMapId) {
-      alert("No map selected.");
-      return;
-    }
-    let newName = prompt("Enter new map name:", mapsCache.get(currentMapId)?.name || "");
+  renameMapBtn.addEventListener('click', async () => {
+    if (!currentMapId) return;
+    const newName = prompt('Enter new map name:', mapSelect.options[mapSelect.selectedIndex].text);
     if (!newName) return;
-    try {
-      const docRef = doc(db, "maps", currentMapId);
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) return;
-      const data = docSnap.data();
-      data.name = newName;
-      await setDoc(docRef, data);
-      await loadMapList();
-      selectMapInDropdown(currentMapId);
-      saveStatus.textContent = "Renamed";
-      setTimeout(() => saveStatus.textContent = '', 2000);
-    } catch (err) {
-      alert("Failed to rename map: " + err.message);
-    }
-  }
+    const data = mapsCache.get(currentMapId) || {};
+    data.name = newName;
+    mapsCache.set(currentMapId, data);
+    await setDoc(doc(db, 'maps', currentMapId), data, { merge: true });
+    refreshMapList();
+  });
 
   // Delete current map
-  async function deleteCurrentMap() {
-    if (!currentMapId) {
-      alert("No map selected.");
-      return;
-    }
-    if (!confirm("Are you sure you want to delete this map?")) return;
-    try {
-      await deleteDoc(doc(db, "maps", currentMapId));
-      mapsCache.delete(currentMapId);
-      await loadMapList();
-      if (mapSelect.options.length > 0) {
-        loadMap(mapSelect.options[0].value);
-      } else {
-        currentMapId = null;
-        clearAllBoxes();
-        clearAllConnections();
-      }
-      saveStatus.textContent = "Deleted";
-      setTimeout(() => saveStatus.textContent = '', 2000);
-    } catch (err) {
-      alert("Failed to delete map: " + err.message);
-    }
-  }
+  deleteMapBtn.addEventListener('click', async () => {
+    if (!currentMapId) return;
+    if (!confirm('Delete this map?')) return;
+    await deleteDoc(doc(db, 'maps', currentMapId));
+    mapsCache.delete(currentMapId);
+    currentMapId = null;
+    clearAll();
+    refreshMapList();
+  });
 
   // Create new map
-  async function createNewMap() {
-    let newName = prompt("Enter name for new map:", "New Map");
-    if (!newName) return;
+  newMapBtn.addEventListener('click', async () => {
+    const name = prompt('Enter new map name:', 'New Map');
+    if (!name) return;
     const newId = generateId();
-    try {
-      await setDoc(doc(db, "maps", newId), {
-        boxes: [],
-        connections: [],
-        panX: 0,
-        panY: 0,
-        scale: 1,
-        name: newName,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      await loadMapList();
-      loadMap(newId);
-    } catch (err) {
-      alert("Failed to create map: " + err.message);
+    await setDoc(doc(db, 'maps', newId), { name, boxes: [], connections: [], markedCenter: null });
+    mapsCache.set(newId, { name, boxes: [], connections: [], markedCenter: null });
+    await refreshMapList();
+    mapSelect.value = newId;
+    loadMap(newId);
+  });
+
+  // Refresh map list dropdown
+  async function refreshMapList() {
+    mapSelect.innerHTML = '';
+    const querySnapshot = await getDocs(collection(db, 'maps'));
+    mapsCache.clear();
+    const items = [];
+    querySnapshot.forEach(docSnap => {
+      const id = docSnap.id;
+      const data = docSnap.data();
+      mapsCache.set(id, data);
+      items.push({ id, name: data.name || id });
+    });
+    items.sort((a,b) => a.name.localeCompare(b.name));
+    for (const item of items) {
+      const opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = item.name;
+      mapSelect.appendChild(opt);
     }
+    // Set default selected map
+    if (!currentMapId && items.length) {
+      currentMapId = items[0].id;
+    }
+    if (currentMapId) mapSelect.value = currentMapId;
   }
 
-  // Go to center
-  goCenterBtn.addEventListener('click', () => {
-    panX = viewport.clientWidth / 2 - 5000 * scale;
-    panY = viewport.clientHeight / 2 - 5000 * scale;
-    updateTransform();
-  });
-
-  // Mark center at current view center in canvas coords
-  markCenterBtn.addEventListener('click', () => {
-    markedCenter = {
-      x: (viewport.clientWidth / 2 - panX) / scale,
-      y: (viewport.clientHeight / 2 - panY) / scale
-    };
-    alert(`Marked center at (${markedCenter.x.toFixed(1)}, ${markedCenter.y.toFixed(1)})`);
-  });
-
-  // Toggle edit mode
-  toggleEditModeBtn.addEventListener('click', () => {
-    editMode = !editMode;
-    boxesMap.forEach(({ element, header, content }) => {
-      header.style.display = editMode ? 'flex' : 'none';
-      content.contentEditable = editMode;
-    });
-  });
-
-  // Map select change
-  mapSelect.addEventListener('change', () => {
-    if (!mapSelect.value) return;
+  // Load selected map on dropdown change
+  mapSelect.addEventListener('change', e => {
     loadMap(mapSelect.value);
   });
 
-  saveMapBtn.addEventListener('click', saveCurrentMap);
-  renameMapBtn.addEventListener('click', renameCurrentMap);
-  deleteMapBtn.addEventListener('click', deleteCurrentMap);
-  newMapBtn.addEventListener('click', createNewMap);
-
-  // Zoom display
-  function updateZoomDisplay() {
-    let zoomDisplay = document.getElementById('zoomDisplay');
-    if (!zoomDisplay) {
-      zoomDisplay = document.createElement('div');
-      zoomDisplay.id = 'zoomDisplay';
-      document.body.appendChild(zoomDisplay);
-    }
-    zoomDisplay.textContent = `Zoom: ${(scale * 100).toFixed(0)}%`;
-  }
-
-  // Create new box on double-click at exact canvas coords
-  viewport.addEventListener('dblclick', e => {
-    if (!editMode) return;
-    const rect = viewport.getBoundingClientRect();
-    const cx = (e.clientX - rect.left - panX) / scale;
-    const cy = (e.clientY - rect.top - panY) / scale;
-    const newId = generateId();
-    createBox(newId, cx, cy);
-  });
-
-  // Initial load and setup
-  async function init() {
-    await loadMapList();
-    if (mapSelect.options.length > 0) {
-      loadMap(mapSelect.options[0].value);
-    } else {
-      // Create default map if none exist
-      const defaultId = "id-19dmwrpql";
+  // Initial load
+  (async () => {
+    await refreshMapList();
+    if (!currentMapId) {
+      // Create a default map if none exists
+      const defaultId = 'id-19dmwrpql';
+      await setDoc(doc(db, 'maps', defaultId), {
+        name: 'Default Map',
+        boxes: [],
+        connections: [],
+        markedCenter: null
+      });
+      mapsCache.set(defaultId, { name: 'Default Map', boxes: [], connections: [], markedCenter: null });
       currentMapId = defaultId;
-      createBox('id-example', 100, 100, 120, 60, 'Example Box');
-      updateTransform();
+      await refreshMapList();
+      mapSelect.value = defaultId;
     }
-    updateZoomDisplay();
-  }
-  init();
+    loadMap(currentMapId);
+  })();
 
-  // Periodic redraw for connections (in case of async)
-  setInterval(drawConnections, 1000);
-
-  // Update zoom display on zoom or pan changes
-  const originalUpdateTransform = updateTransform;
-  updateTransform = function () {
-    originalUpdateTransform();
-    updateZoomDisplay();
-  };
 </script>
 </body>
 </html>
