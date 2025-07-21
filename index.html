@@ -2,21 +2,23 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>stringsnthingsfinal</title>
+<title>stringsnthingsfinal-complete</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
   html, body {
     margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
     touch-action: none;
+    background: #f0f0f0;
   }
   #viewport {
-    width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
+    width: 100%; height: 100%; position: relative; cursor: grab;
     overflow: hidden;
     box-sizing: border-box;
+    user-select: none;
   }
   #canvas {
     position: absolute; top: 0; left: 0;
-    width: 10000px; height: 10000px;
+    width: 10000px; height: 10000px; /* Large canvas for panning */
     transform-origin: 0 0;
     z-index: 10;
   }
@@ -39,7 +41,7 @@
   }
   .box-header {
     background: #ddd;
-    padding-left: 24px;
+    padding-left: 28px;
     min-width: 40px;
     min-height: 18px;
     height: 18px;
@@ -71,6 +73,30 @@
     color: #333;
     white-space: nowrap;
     z-index: 5;
+    user-select: none;
+  }
+  .paint-palette {
+    position: absolute;
+    left: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 16px;
+    cursor: pointer;
+    user-select: none;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #444;
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 0;
+    margin: 0;
+  }
+  .paint-palette:hover {
+    color: #000;
   }
   .delete-btn {
     color: red;
@@ -123,7 +149,7 @@
   }
   .box-content {
     flex: 1;
-    padding: 2px;
+    padding: 4px 6px;
     white-space: pre-wrap;
     font-family: monospace, monospace;
     overflow-wrap: break-word;
@@ -139,6 +165,7 @@
     align-items: center;
     text-align: center;
     word-break: break-word;
+    background-color: transparent;
   }
   .resize-handle {
     width: 16px;
@@ -252,7 +279,7 @@
   }
   #footerInfo {
     position: fixed;
-    bottom: 60px;
+    bottom: 90px;
     left: 50%;
     transform: translateX(-50%);
     font-family: monospace, monospace;
@@ -269,6 +296,41 @@
     max-width: 90vw;
     text-align: center;
   }
+  /* Paint palette popup styling */
+  #colorPickerContainer {
+    position: absolute;
+    display: none;
+    background: white;
+    border: 1px solid #aaa;
+    border-radius: 6px;
+    padding: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    z-index: 10020;
+    user-select: none;
+  }
+  #colorPicker {
+    display: block;
+    width: 160px;
+    height: 130px;
+    border: none;
+    cursor: pointer;
+  }
+  #recentSwatches {
+    margin-top: 8px;
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+  }
+  .swatch {
+    width: 20px;
+    height: 20px;
+    border: 1.5px solid #999;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .swatch:hover {
+    border-color: black;
+  }
 </style>
 </head>
 <body>
@@ -281,7 +343,7 @@
   <div id="saveStatus"></div>
 </div>
 
-<div id="viewport">
+<div id="viewport" tabindex="0">
   <svg id="connectionLayer" width="10000" height="10000"></svg>
   <div id="canvas"></div>
 </div>
@@ -293,10 +355,28 @@
   <button id="toggleEditModeBtn" class="floatingBtn">Toggle Edit Mode</button>
 </div>
 
+<div id="zoomDisplay"></div>
+<div id="footerInfo">stringsnthings mind map tool</div>
+
+<!-- Paint color picker popup -->
+<div id="colorPickerContainer">
+  <input type="color" id="colorPicker" title="Choose a background color" />
+  <div id="recentSwatches" title="Recent colors"></div>
+</div>
+
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
-  import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
+  import {
+    getFirestore,
+    collection,
+    getDocs,
+    doc,
+    setDoc,
+    deleteDoc,
+    getDoc
+  } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
 
+  // Firebase config & initialization
   const firebaseConfig = {
     apiKey: "AIzaSyCpp42OH-1mTZxu5iq44dmMQc8ahQdvnL0",
     authDomain: "stringsnthings-65aa0.firebaseapp.com",
@@ -308,6 +388,7 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
+  // DOM elements
   const canvas = document.getElementById('canvas');
   const viewport = document.getElementById('viewport');
   const undoBtn = document.getElementById('undoBtn');
@@ -322,23 +403,26 @@
   const saveStatus = document.getElementById('saveStatus');
   const connectionLayer = document.getElementById('connectionLayer');
 
+  // Paint palette elements
+  const colorPickerContainer = document.getElementById('colorPickerContainer');
+  const colorPicker = document.getElementById('colorPicker');
+  const recentSwatchesContainer = document.getElementById('recentSwatches');
+
+  // State variables
   let scale = 1, panX = 0, panY = 0;
   let isPanning = false, startX, startY;
-
   const undoStack = [];
   const connections = [];
   const boxesMap = new Map();
-
   let editMode = true;
   let connectionStartBoxId = null;
   const selectedBoxes = new Set();
-
   let currentMapId = null;
   let mapsCache = new Map();
-
   let markedCenter = null; // {x, y} in canvas coords
+  let recentColors = [];
 
-  // Helper to get pointer coords
+  // Helper: Get pointer coords (mouse or touch)
   function getClientCoords(e) {
     if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
     return { x: e.clientX, y: e.clientY };
@@ -349,25 +433,31 @@
     return 'id-' + Math.random().toString(36).slice(2, 11);
   }
 
-  // Update pan and zoom transform on canvas and connections layer
+  // Update pan and zoom transform on canvas and connection layer
   function updateTransform() {
     canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     connectionLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     drawConnections();
+    updateZoomDisplay();
   }
 
-  // Pan handling on empty canvas
+  // Panning logic
   viewport.addEventListener('pointerdown', e => {
-    if (e.target.closest('.box-header') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target) ||
-        [saveMapBtn, renameMapBtn, deleteMapBtn, newMapBtn, mapSelect].includes(e.target)) return;
+    // Ignore if pointer down on UI or box header (no pan)
+    if (e.target.closest('.box-header') || 
+        [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target) ||
+        [saveMapBtn, renameMapBtn, deleteMapBtn, newMapBtn, mapSelect].includes(e.target) ||
+        e.target.closest('#colorPickerContainer')) return;
     isPanning = true;
     const coords = getClientCoords(e);
     startX = coords.x;
     startY = coords.y;
     viewport.setPointerCapture(e.pointerId);
-    // Clear selection on empty space click
-    selectedBoxes.forEach(b => b.classList.remove('selected'));
-    selectedBoxes.clear();
+    // Clear selection on empty canvas click
+    if (!e.shiftKey) {
+      selectedBoxes.forEach(b => b.classList.remove('selected'));
+      selectedBoxes.clear();
+    }
   });
 
   viewport.addEventListener('pointermove', e => {
@@ -385,7 +475,7 @@
     viewport.releasePointerCapture(e.pointerId);
   });
 
-  // Zoom with mouse wheel
+  // Zoom handling with mouse wheel centered on pointer location
   const MIN_SCALE = 0.5;
   const MAX_SCALE = 3;
 
@@ -408,7 +498,7 @@
   }, { passive: false });
 
   // Create new box element
-  function createBox(id, x, y, w = 120, h = 60, text = '', fontSize = 14) {
+  function createBox(id, x, y, w = 120, h = 60, text = '', fontSize = 14, backgroundColor = '') {
     if (boxesMap.has(id)) return;
 
     const box = document.createElement('div');
@@ -418,453 +508,777 @@
     box.style.width = w + 'px';
     box.style.height = h + 'px';
     box.dataset.id = id;
-    box.style.fontSize = fontSize + 'px';
+    box.dataset.fontSize = fontSize;
+    if (backgroundColor) {
+      box.style.backgroundColor = applyOpacity(backgroundColor, 0.1);
+      box.dataset.bgColor = backgroundColor;
+    } else {
+      box.dataset.bgColor = '';
+    }
 
     // Header
     const header = document.createElement('div');
     header.classList.add('box-header');
-    header.style.display = editMode ? 'flex' : 'none';
+    box.appendChild(header);
 
-    // Drag handle "✥"
+    // Drag handle ✥
     const dragHandle = document.createElement('div');
     dragHandle.classList.add('drag-handle');
     dragHandle.textContent = '✥';
+    dragHandle.title = 'Drag to move';
     header.appendChild(dragHandle);
 
-    // Connect toggle
+    // Paint palette icon
+    const paintPaletteBtn = document.createElement('button');
+    paintPaletteBtn.classList.add('paint-palette');
+    paintPaletteBtn.title = 'Change background color';
+    paintPaletteBtn.innerHTML = '🎨';
+    header.appendChild(paintPaletteBtn);
+
+    // Connection toggle button (blue circle)
     const connectToggle = document.createElement('button');
     connectToggle.classList.add('connect-toggle');
-    connectToggle.title = 'Toggle connection for this box';
+    connectToggle.title = 'Toggle connect selection';
+    header.appendChild(connectToggle);
+
+    // Delete button (X)
+    const deleteBtn = document.createElement('button');
+    deleteBtn.classList.add('delete-btn');
+    deleteBtn.title = 'Delete this box';
+    deleteBtn.textContent = '×';
+    header.appendChild(deleteBtn);
+
+    // Content editable text area
+    const content = document.createElement('div');
+    content.classList.add('box-content');
+    content.contentEditable = editMode ? 'true' : 'false';
+    content.spellcheck = false;
+    content.style.fontSize = fontSize + 'px';
+    content.textContent = text;
+    box.appendChild(content);
+
+    // Resize handles
+    ['nw', 'ne', 'sw', 'se'].forEach(pos => {
+      const rh = document.createElement('div');
+      rh.classList.add('resize-handle', pos);
+      box.appendChild(rh);
+    });
+
+    // Append box
+    canvas.appendChild(box);
+    boxesMap.set(id, {element: box, connections: new Set()});
+
+    // Event listeners setup
+
+    // Prevent dragging when editing text
+    content.addEventListener('mousedown', e => e.stopPropagation());
+    content.addEventListener('touchstart', e => e.stopPropagation());
+
+    // Content change autoscale font size
+    content.addEventListener('input', () => {
+      adjustFontSizeToFit(content, box);
+    });
+
+    // Drag box by drag handle or header (Shift to multi-select drag)
+    dragHandle.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      initiateDrag(e, box);
+    });
+    header.addEventListener('pointerdown', e => {
+      if (e.target === dragHandle || e.target === paintPaletteBtn || e.target === connectToggle || e.target === deleteBtn) return;
+      e.preventDefault();
+      if (e.shiftKey) {
+        toggleBoxSelection(box);
+      } else {
+        if (!selectedBoxes.has(box)) {
+          clearSelection();
+          selectBox(box);
+        }
+      }
+      initiateDrag(e, box);
+    });
+
+    // Paint palette click
+    paintPaletteBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      openColorPicker(box, paintPaletteBtn);
+    });
+
+    // Connect toggle
     connectToggle.addEventListener('click', e => {
       e.stopPropagation();
-      connectToggle.classList.toggle('active');
-      if (connectToggle.classList.contains('active')) {
-        if (connectionStartBoxId && connectionStartBoxId !== id) {
-          addConnection(connectionStartBoxId, id);
-          clearConnectionSelection();
-        } else {
+      if (!connectToggle.classList.contains('active')) {
+        connectToggle.classList.add('active');
+        if (!connectionStartBoxId) {
           connectionStartBoxId = id;
+          // highlight start box
+          box.classList.add('connecting');
+        } else if (connectionStartBoxId !== id) {
+          createConnection(connectionStartBoxId, id);
+          clearConnectionSelections();
         }
       } else {
-        if (connectionStartBoxId === id) connectionStartBoxId = null;
+        connectToggle.classList.remove('active');
+        if (connectionStartBoxId === id) {
+          connectionStartBoxId = null;
+          box.classList.remove('connecting');
+        }
       }
       drawConnections();
     });
-    header.appendChild(connectToggle);
-
-    // Font size buttons
-    const fontDecrease = document.createElement('button');
-    fontDecrease.classList.add('font-size-btn');
-    fontDecrease.textContent = '−';
-    fontDecrease.title = 'Decrease font size';
-    fontDecrease.addEventListener('click', e => {
-      e.stopPropagation();
-      let currentSize = parseInt(box.style.fontSize) || fontSize;
-      currentSize = Math.max(8, currentSize - 1);
-      box.style.fontSize = currentSize + 'px';
-    });
-    header.appendChild(fontDecrease);
-
-    const fontIncrease = document.createElement('button');
-    fontIncrease.classList.add('font-size-btn');
-    fontIncrease.textContent = '+';
-    fontIncrease.title = 'Increase font size';
-    fontIncrease.addEventListener('click', e => {
-      e.stopPropagation();
-      let currentSize = parseInt(box.style.fontSize) || fontSize;
-      currentSize = Math.min(72, currentSize + 1);
-      box.style.fontSize = currentSize + 'px';
-    });
-    header.appendChild(fontIncrease);
 
     // Delete button
-    const deleteBtn = document.createElement('button');
-    deleteBtn.classList.add('delete-btn');
-    deleteBtn.title = 'Delete box';
-    deleteBtn.textContent = '×';
     deleteBtn.addEventListener('click', e => {
       e.stopPropagation();
       deleteBox(id);
     });
-    header.appendChild(deleteBtn);
 
-    box.appendChild(header);
-
-    // Content editable div
-    const content = document.createElement('div');
-    content.classList.add('box-content');
-    content.contentEditable = editMode;
-    content.textContent = text;
-    content.addEventListener('input', () => {
-      // save content on change if you want (manual save preferred)
-    });
-    box.appendChild(content);
-
-    // Resize handle bottom-right
-    const resizeHandle = document.createElement('div');
-    resizeHandle.classList.add('resize-handle', 'se');
-    box.appendChild(resizeHandle);
-
-    // Dragging state
-    let dragging = false;
-    let dragStartX, dragStartY, boxStartLeft, boxStartTop;
-    dragHandle.addEventListener('pointerdown', e => {
-      e.stopPropagation();
-      dragging = true;
-      const rect = box.getBoundingClientRect();
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      boxStartLeft = rect.left;
-      boxStartTop = rect.top;
-      viewport.setPointerCapture(e.pointerId);
-    });
-
-    viewport.addEventListener('pointermove', e => {
-      if (!dragging) return;
-      e.preventDefault();
-      const dx = (e.clientX - dragStartX) / scale;
-      const dy = (e.clientY - dragStartY) / scale;
-
-      // If multi-select and this box is selected, drag all selected boxes
-      if (selectedBoxes.has(box)) {
-        selectedBoxes.forEach(b => {
-          const startPos = b.dataset.dragStartPos ? JSON.parse(b.dataset.dragStartPos) : null;
-          if (!startPos) {
-            b.dataset.dragStartPos = JSON.stringify({ left: parseFloat(b.style.left), top: parseFloat(b.style.top) });
-          }
-        });
-        selectedBoxes.forEach(b => {
-          const startPos = JSON.parse(b.dataset.dragStartPos);
-          b.style.left = startPos.left + dx + 'px';
-          b.style.top = startPos.top + dy + 'px';
-        });
-      } else {
-        box.style.left = boxStartLeft / scale + dx + 'px';
-        box.style.top = boxStartTop / scale + dy + 'px';
-      }
-      drawConnections();
-    });
-
-    viewport.addEventListener('pointerup', e => {
-      if (!dragging) return;
-      dragging = false;
-      viewport.releasePointerCapture(e.pointerId);
-      // Clear stored drag start positions
-      selectedBoxes.forEach(b => delete b.dataset.dragStartPos);
-      // Save positions if desired (manual save)
-    });
-
-    // Resize handling
-    let resizing = false;
-    let resizeStartX, resizeStartY, boxStartW, boxStartH;
-    resizeHandle.addEventListener('pointerdown', e => {
-      e.stopPropagation();
-      resizing = true;
-      resizeStartX = e.clientX;
-      resizeStartY = e.clientY;
-      boxStartW = box.offsetWidth;
-      boxStartH = box.offsetHeight;
-      viewport.setPointerCapture(e.pointerId);
-    });
-    viewport.addEventListener('pointermove', e => {
-      if (!resizing) return;
-      e.preventDefault();
-      const dx = (e.clientX - resizeStartX) / scale;
-      const dy = (e.clientY - resizeStartY) / scale;
-      let newW = Math.max(40, boxStartW + dx);
-      let newH = Math.max(30, boxStartH + dy);
-      box.style.width = newW + 'px';
-      box.style.height = newH + 'px';
-      drawConnections();
-    });
-    viewport.addEventListener('pointerup', e => {
-      if (!resizing) return;
-      resizing = false;
-      viewport.releasePointerCapture(e.pointerId);
-      // Save size if desired (manual save)
-    });
-
-    // Selection handling (Shift + click on header or drag handle)
-    function handleSelectionToggle() {
-      if (selectedBoxes.has(box)) {
-        box.classList.remove('selected');
-        selectedBoxes.delete(box);
-      } else {
-        selectedBoxes.add(box);
-        box.classList.add('selected');
-      }
-    }
-    header.addEventListener('click', e => {
-      if (!e.shiftKey) return;
-      e.stopPropagation();
-      handleSelectionToggle();
-    });
-    dragHandle.addEventListener('click', e => {
-      if (!e.shiftKey) return;
-      e.stopPropagation();
-      handleSelectionToggle();
-    });
-
-    // Prevent text selection on header drag handles, delete buttons etc.
-    header.addEventListener('mousedown', e => {
-      if (e.target === dragHandle || e.target === deleteBtn || e.target === connectToggle ||
-          e.target === fontIncrease || e.target === fontDecrease) {
+    // Resize handles drag
+    ['nw', 'ne', 'sw', 'se'].forEach(pos => {
+      const rh = box.querySelector(`.resize-handle.${pos}`);
+      rh.addEventListener('pointerdown', e => {
         e.preventDefault();
-      }
+        e.stopPropagation();
+        initiateResize(e, box, pos);
+      });
     });
 
-    // Double click to create new box is handled globally
+    // Double click on content to enable editing if disabled
+    box.addEventListener('dblclick', e => {
+      if (!editMode) return;
+      content.focus();
+      selectAllText(content);
+    });
 
-    canvas.appendChild(box);
-    boxesMap.set(id, box);
-    return box;
+    // Prevent scrolling on wheel inside content div
+    content.addEventListener('wheel', e => {
+      e.stopPropagation();
+    });
+
+    adjustFontSizeToFit(content, box);
   }
 
-  function deleteBox(id) {
-    const box = boxesMap.get(id);
-    if (!box) return;
-    undoStack.push({
-      type: 'deleteBox',
-      data: {
-        id,
-        left: parseFloat(box.style.left),
-        top: parseFloat(box.style.top),
-        width: box.offsetWidth,
-        height: box.offsetHeight,
-        text: box.querySelector('.box-content').textContent,
-        fontSize: parseInt(box.style.fontSize) || 14
-      }
-    });
-    undoBtn.disabled = false;
+  // Adjust font size so text fits box with padding
+  function adjustFontSizeToFit(contentEl, boxEl) {
+    if (!editMode) return;
+    let fontSize = parseInt(boxEl.dataset.fontSize) || 14;
+    contentEl.style.fontSize = fontSize + 'px';
 
-    // Remove connections involving this box
-    for (let i = connections.length - 1; i >= 0; i--) {
-      if (connections[i].from === id || connections[i].to === id) {
-        connections.splice(i, 1);
-      }
+    // Try shrinking font size if overflow
+    let tries = 5;
+    while (tries-- > 0) {
+      const overflows = contentEl.scrollHeight > boxEl.clientHeight || contentEl.scrollWidth > boxEl.clientWidth;
+      if (!overflows) break;
+      fontSize = Math.max(8, fontSize - 1);
+      contentEl.style.fontSize = fontSize + 'px';
     }
 
+    boxEl.dataset.fontSize = fontSize;
+  }
+
+  // Select all text inside an element
+  function selectAllText(el) {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  // Drag variables
+  let dragging = false;
+  let dragStartX, dragStartY;
+  let dragOrigX, dragOrigY;
+  let dragBoxesOrigPos = [];
+
+  // Drag initiation
+  function initiateDrag(e, box) {
+    dragging = true;
+    const pointer = getClientCoords(e);
+    dragStartX = pointer.x;
+    dragStartY = pointer.y;
+
+    if (!selectedBoxes.has(box)) {
+      clearSelection();
+      selectBox(box);
+    }
+
+    dragBoxesOrigPos = [];
+    selectedBoxes.forEach(b => {
+      dragBoxesOrigPos.push({
+        box: b,
+        x: parseFloat(b.style.left),
+        y: parseFloat(b.style.top)
+      });
+    });
+
+    function onPointerMove(ev) {
+      ev.preventDefault();
+      const p = getClientCoords(ev);
+      const dx = (p.x - dragStartX) / scale;
+      const dy = (p.y - dragStartY) / scale;
+      dragBoxesOrigPos.forEach(pos => {
+        pos.box.style.left = (pos.x + dx) + 'px';
+        pos.box.style.top = (pos.y + dy) + 'px';
+      });
+      drawConnections();
+    }
+
+    function onPointerUp(ev) {
+      ev.preventDefault();
+      dragging = false;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      // Save after drag
+      saveCurrentMapDebounced();
+    }
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  }
+
+  // Resize variables
+  let resizing = false;
+  let resizeBox = null;
+  let resizeStartX, resizeStartY;
+  let resizeStartW, resizeStartH;
+  let resizeStartLeft, resizeStartTop;
+  let resizeHandlePos = '';
+
+  // Resize initiation
+  function initiateResize(e, box, pos) {
+    resizing = true;
+    resizeBox = box;
+    resizeHandlePos = pos;
+    const pointer = getClientCoords(e);
+    resizeStartX = pointer.x;
+    resizeStartY = pointer.y;
+    resizeStartW = parseFloat(box.style.width);
+    resizeStartH = parseFloat(box.style.height);
+    resizeStartLeft = parseFloat(box.style.left);
+    resizeStartTop = parseFloat(box.style.top);
+
+    function onPointerMove(ev) {
+      ev.preventDefault();
+      const p = getClientCoords(ev);
+      let dx = (p.x - resizeStartX) / scale;
+      let dy = (p.y - resizeStartY) / scale;
+      let newW = resizeStartW;
+      let newH = resizeStartH;
+      let newL = resizeStartLeft;
+      let newT = resizeStartTop;
+      if (pos.includes('n')) {
+        newH = resizeStartH - dy;
+        newT = resizeStartTop + dy;
+      }
+      if (pos.includes('s')) {
+        newH = resizeStartH + dy;
+      }
+      if (pos.includes('w')) {
+        newW = resizeStartW - dx;
+        newL = resizeStartLeft + dx;
+      }
+      if (pos.includes('e')) {
+        newW = resizeStartW + dx;
+      }
+      newW = Math.max(60, newW);
+      newH = Math.max(40, newH);
+      resizeBox.style.width = newW + 'px';
+      resizeBox.style.height = newH + 'px';
+      resizeBox.style.left = newL + 'px';
+      resizeBox.style.top = newT + 'px';
+      drawConnections();
+    }
+
+    function onPointerUp(ev) {
+      ev.preventDefault();
+      resizing = false;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      // Save after resize
+      saveCurrentMapDebounced();
+    }
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  }
+
+  // Toggle box selection (Shift + click)
+  function toggleBoxSelection(box) {
+    if (selectedBoxes.has(box)) {
+      selectedBoxes.delete(box);
+      box.classList.remove('selected');
+    } else {
+      selectedBoxes.add(box);
+      box.classList.add('selected');
+    }
+  }
+
+  // Select a single box
+  function selectBox(box) {
+    selectedBoxes.add(box);
+    box.classList.add('selected');
+  }
+
+  // Clear all selected boxes
+  function clearSelection() {
+    selectedBoxes.forEach(b => b.classList.remove('selected'));
+    selectedBoxes.clear();
+  }
+
+  // Delete box and store undo info
+  function deleteBox(id) {
+    const boxInfo = boxesMap.get(id);
+    if (!boxInfo) return;
+    const box = boxInfo.element;
+    undoStack.push({
+      action: 'deleteBox',
+      boxData: serializeBox(box),
+      connections: getConnectionsOfBox(id)
+    });
+    undoBtn.disabled = false;
+    // Remove connections involving this box
+    removeConnectionsOfBox(id);
     box.remove();
     boxesMap.delete(id);
     drawConnections();
+    saveCurrentMapDebounced();
   }
 
+  // Undo last deletion
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
-    const action = undoStack.pop();
-    if (action.type === 'deleteBox') {
-      const d = action.data;
-      createBox(d.id, d.left, d.top, d.width, d.height, d.text, d.fontSize);
+    const last = undoStack.pop();
+    if (last.action === 'deleteBox') {
+      // Restore box
+      const b = last.boxData;
+      createBox(b.id, b.left, b.top, b.width, b.height, b.text, b.fontSize, b.bgColor);
+      // Restore connections
+      last.connections.forEach(conn => {
+        createConnection(conn.from, conn.to);
+      });
+      drawConnections();
+      saveCurrentMapDebounced();
     }
     undoBtn.disabled = undoStack.length === 0;
   });
 
-  // Draw connections as curved lines
-  function drawConnections() {
-    connectionLayer.innerHTML = '';
-    connections.forEach(({from, to}) => {
-      const boxA = boxesMap.get(from);
-      const boxB = boxesMap.get(to);
-      if (!boxA || !boxB) return;
-
-      const rectA = boxA.getBoundingClientRect();
-      const rectB = boxB.getBoundingClientRect();
-
-      // Compute box centers relative to canvas (not viewport screen)
-      const leftA = parseFloat(boxA.style.left);
-      const topA = parseFloat(boxA.style.top);
-      const leftB = parseFloat(boxB.style.left);
-      const topB = parseFloat(boxB.style.top);
-      const x1 = leftA + boxA.offsetWidth / 2;
-      const y1 = topA + boxA.offsetHeight / 2;
-      const x2 = leftB + boxB.offsetWidth / 2;
-      const y2 = topB + boxB.offsetHeight / 2;
-
-      // Calculate control points for cubic Bezier (curved line)
-      const dx = Math.abs(x2 - x1);
-      const dy = Math.abs(y2 - y1);
-      const cx1 = x1 + dx / 2;
-      const cy1 = y1;
-      const cx2 = x2 - dx / 2;
-      const cy2 = y2;
-
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute('d', `M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`);
-      path.setAttribute('stroke', 'black');
-      path.setAttribute('stroke-width', '2');
-      path.setAttribute('fill', 'none');
-      connectionLayer.appendChild(path);
-    });
+  // Serialize box data for undo/save
+  function serializeBox(box) {
+    return {
+      id: box.dataset.id,
+      left: parseFloat(box.style.left),
+      top: parseFloat(box.style.top),
+      width: parseFloat(box.style.width),
+      height: parseFloat(box.style.height),
+      text: box.querySelector('.box-content').textContent,
+      fontSize: parseInt(box.dataset.fontSize) || 14,
+      bgColor: box.dataset.bgColor || ''
+    };
   }
 
-  function addConnection(fromId, toId) {
-    // Prevent duplicates and self connections
+  // Connections format: {from: id, to: id}
+  function getConnectionsOfBox(id) {
+    return connections.filter(c => c.from === id || c.to === id);
+  }
+  function removeConnectionsOfBox(id) {
+    for (let i = connections.length -1; i >= 0; i--) {
+      if (connections[i].from === id || connections[i].to === id) {
+        connections.splice(i, 1);
+      }
+    }
+  }
+
+  // Create connection between two boxes, avoid duplicates
+  function createConnection(fromId, toId) {
     if (fromId === toId) return;
     if (connections.find(c => (c.from === fromId && c.to === toId) || (c.from === toId && c.to === fromId))) return;
     connections.push({from: fromId, to: toId});
   }
-  function clearConnectionSelection() {
+
+  // Clear connection toggle buttons and state
+  function clearConnectionSelections() {
     connectionStartBoxId = null;
-    boxesMap.forEach(box => {
-      const btn = box.querySelector('.connect-toggle');
-      if (btn) btn.classList.remove('active');
+    boxesMap.forEach(({element}) => {
+      const ct = element.querySelector('.connect-toggle');
+      ct.classList.remove('active');
+      element.classList.remove('connecting');
     });
   }
 
-  // Double-click to create new box exactly at pointer position relative to canvas coordinates
-  viewport.addEventListener('dblclick', e => {
+  // Draw connections as curved SVG paths
+  function drawConnections() {
+    while (connectionLayer.firstChild) {
+      connectionLayer.removeChild(connectionLayer.firstChild);
+    }
+    connections.forEach(({from, to}) => {
+      const fromBox = boxesMap.get(from)?.element;
+      const toBox = boxesMap.get(to)?.element;
+      if (!fromBox || !toBox) return;
+
+      const p1 = getBoxCenter(fromBox);
+      const p2 = getBoxCenter(toBox);
+
+      // Calculate control points for curve
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const curveIntensity = 0.3; // between 0 and 1
+      const cp1 = { x: p1.x + dx * curveIntensity, y: p1.y };
+      const cp2 = { x: p2.x - dx * curveIntensity, y: p2.y };
+
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", `M${p1.x},${p1.y} C${cp1.x},${cp1.y} ${cp2.x},${cp2.y} ${p2.x},${p2.y}`);
+      path.setAttribute("stroke", "#333");
+      path.setAttribute("stroke-width", "2");
+      path.setAttribute("fill", "none");
+      connectionLayer.appendChild(path);
+    });
+  }
+
+  // Get center point of box in canvas coords
+  function getBoxCenter(box) {
+    const left = parseFloat(box.style.left);
+    const top = parseFloat(box.style.top);
+    const w = parseFloat(box.style.width);
+    const h = parseFloat(box.style.height);
+    return {x: left + w/2, y: top + h/2};
+  }
+
+  // Double click on canvas creates new box at that position
+  canvas.addEventListener('dblclick', e => {
+    if (!editMode) return;
     const rect = canvas.getBoundingClientRect();
-    const pointerX = (e.clientX - rect.left) / scale;
-    const pointerY = (e.clientY - rect.top) / scale;
-
-    const newId = generateId();
-    createBox(newId, pointerX, pointerY, 120, 60, '', 14);
-
-    e.preventDefault();
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
+    const id = generateId();
+    createBox(id, x - 60, y - 30);
+    saveCurrentMapDebounced();
   });
 
-  // Save/load mind maps to Firebase
-  async function saveMap() {
-    if (!currentMapId) return;
-    const data = {
-      boxes: [],
-      connections: connections,
-      meta: { savedAt: new Date().toISOString() }
+  // Centering controls
+  goCenterBtn.addEventListener('click', () => {
+    if (!markedCenter) return;
+    // Calculate panX and panY to center markedCenter on viewport center
+    const vw = viewport.clientWidth;
+    const vh = viewport.clientHeight;
+    panX = vw / 2 - markedCenter.x * scale;
+    panY = vh / 2 - markedCenter.y * scale;
+    updateTransform();
+  });
+
+  markCenterBtn.addEventListener('click', () => {
+    // Mark current viewport center in canvas coords
+    const vw = viewport.clientWidth;
+    const vh = viewport.clientHeight;
+    markedCenter = {
+      x: (vw / 2 - panX) / scale,
+      y: (vh / 2 - panY) / scale
     };
-    boxesMap.forEach(box => {
-      data.boxes.push({
-        id: box.dataset.id,
-        left: parseFloat(box.style.left),
-        top: parseFloat(box.style.top),
-        width: box.offsetWidth,
-        height: box.offsetHeight,
-        text: box.querySelector('.box-content').textContent,
-        fontSize: parseInt(box.style.fontSize) || 14
-      });
+    alert(`Center marked at x=${markedCenter.x.toFixed(1)}, y=${markedCenter.y.toFixed(1)}`);
+  });
+
+  // Undo button disabled initially
+  undoBtn.disabled = true;
+
+  // Toggle edit mode (enable/disable content editable)
+  toggleEditModeBtn.addEventListener('click', () => {
+    editMode = !editMode;
+    boxesMap.forEach(({element}) => {
+      const content = element.querySelector('.box-content');
+      content.contentEditable = editMode ? 'true' : 'false';
+      if (!editMode) {
+        element.classList.remove('selected');
+        selectedBoxes.clear();
+      }
     });
-    try {
-      await setDoc(doc(db, 'mindmaps', currentMapId), data);
-      saveStatus.textContent = 'Saved ✓';
-      setTimeout(() => { saveStatus.textContent = ''; }, 3000);
-    } catch (e) {
-      saveStatus.textContent = 'Save failed';
-      console.error(e);
+    toggleEditModeBtn.textContent = editMode ? 'Toggle Edit Mode' : 'View Mode';
+  });
+
+  // Save / Load Maps logic using Firestore
+
+  // Map structure:
+  // collections: "maps"
+  // doc id = map id
+  // fields: name, boxes: array of box data, connections: array of connections, markedCenter: optional
+
+  // Load maps list
+  async function loadMapsList() {
+    const mapsCol = collection(db, 'maps');
+    const snapshot = await getDocs(mapsCol);
+    mapsCache.clear();
+    mapSelect.innerHTML = '';
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      mapsCache.set(doc.id, data);
+      const option = document.createElement('option');
+      option.value = doc.id;
+      option.textContent = data.name || doc.id;
+      mapSelect.appendChild(option);
+    });
+    if (mapsCache.size === 0) {
+      // Create a new map by default
+      const newId = generateId();
+      currentMapId = newId;
+      await saveMap(newId, 'Default Map', [], [], null);
+      loadMapsList();
+    } else {
+      // Select last used or first
+      if (!currentMapId || !mapsCache.has(currentMapId)) {
+        currentMapId = mapSelect.options[0].value;
+      }
+      mapSelect.value = currentMapId;
+      loadMap(currentMapId);
     }
   }
 
-  async function loadMap(id) {
-    clearConnectionSelection();
+  // Load map data and render boxes and connections
+  async function loadMap(mapId) {
+    clearSelection();
     undoStack.length = 0;
     undoBtn.disabled = true;
-    connections.length = 0;
-    boxesMap.forEach(box => box.remove());
+    clearConnectionSelections();
+    // Clear boxes and connections
+    boxesMap.forEach(({element}) => element.remove());
     boxesMap.clear();
+    connections.length = 0;
+    drawConnections();
+    saveStatus.textContent = 'Loading...';
 
-    currentMapId = id;
-    saveStatus.textContent = '';
-    const docSnap = await getDoc(doc(db, 'mindmaps', id));
+    const docSnap = await getDoc(doc(db, 'maps', mapId));
     if (!docSnap.exists()) {
-      alert('Map data not found');
+      alert('Map not found.');
+      saveStatus.textContent = 'Map not found.';
       return;
     }
     const data = docSnap.data();
-    if (!data.boxes) return;
-
-    data.boxes.forEach(boxData => {
-      createBox(boxData.id, boxData.left, boxData.top, boxData.width, boxData.height, boxData.text, boxData.fontSize);
-    });
-    if (data.connections) {
-      connections.push(...data.connections);
+    // Load boxes
+    if (data.boxes && Array.isArray(data.boxes)) {
+      data.boxes.forEach(b => {
+        createBox(b.id, b.left, b.top, b.width, b.height, b.text, b.fontSize, b.bgColor);
+      });
+    }
+    // Load connections
+    if (data.connections && Array.isArray(data.connections)) {
+      data.connections.forEach(c => connections.push({from: c.from, to: c.to}));
+    }
+    // Load marked center
+    if (data.markedCenter) {
+      markedCenter = data.markedCenter;
+    } else {
+      markedCenter = null;
     }
     drawConnections();
+    saveStatus.textContent = 'Loaded.';
   }
 
-  async function loadMapList() {
-    const querySnapshot = await getDocs(collection(db, 'mindmaps'));
-    mapSelect.innerHTML = '';
-    querySnapshot.forEach(docSnap => {
-      const option = document.createElement('option');
-      option.value = docSnap.id;
-      option.textContent = docSnap.id;
-      mapSelect.appendChild(option);
-      mapsCache.set(docSnap.id, docSnap.data());
+  // Save current map
+  async function saveMap(id, name, boxesData, connectionsData, center) {
+    const mapDoc = doc(db, 'maps', id);
+    await setDoc(mapDoc, {
+      name: name,
+      boxes: boxesData,
+      connections: connectionsData,
+      markedCenter: center || null
     });
-    if (mapSelect.options.length > 0) {
-      currentMapId = mapSelect.options[0].value;
-      mapSelect.value = currentMapId;
-      await loadMap(currentMapId);
+    mapsCache.set(id, {name, boxes: boxesData, connections: connectionsData, markedCenter: center || null});
+    saveStatus.textContent = 'Saved.';
+    // Update map select UI
+    if (!Array.from(mapSelect.options).some(o => o.value === id)) {
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = name;
+      mapSelect.appendChild(option);
     }
+    mapSelect.value = id;
   }
 
-  mapSelect.addEventListener('change', async e => {
-    const id = e.target.value;
-    await loadMap(id);
-  });
-  saveMapBtn.addEventListener('click', saveMap);
+  // Save current map debounced
+  let saveTimeout = null;
+  function saveCurrentMapDebounced() {
+    if (!currentMapId) return;
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(saveCurrentMap, 1000);
+  }
+
+  // Save current map function
+  async function saveCurrentMap() {
+    if (!currentMapId) return;
+    const name = mapsCache.get(currentMapId)?.name || currentMapId;
+    const boxesData = [];
+    boxesMap.forEach(({element}) => {
+      boxesData.push(serializeBox(element));
+    });
+    const connectionsData = [...connections];
+    await saveMap(currentMapId, name, boxesData, connectionsData, markedCenter);
+  }
+
+  // Rename current map
   renameMapBtn.addEventListener('click', async () => {
     if (!currentMapId) return;
-    const newName = prompt('Enter new map name:', currentMapId);
-    if (!newName || newName === currentMapId) return;
-    // Rename in Firestore (not straightforward, requires copy & delete)
-    const oldDocRef = doc(db, 'mindmaps', currentMapId);
-    const newDocRef = doc(db, 'mindmaps', newName);
-    const oldDoc = await getDoc(oldDocRef);
-    if (!oldDoc.exists()) return alert('Old map does not exist');
-    await setDoc(newDocRef, oldDoc.data());
-    await deleteDoc(oldDocRef);
-    currentMapId = newName;
-    await loadMapList();
-    mapSelect.value = newName;
+    const newName = prompt('Enter new name for the map:', mapsCache.get(currentMapId)?.name || '');
+    if (!newName) return;
+    const mapData = mapsCache.get(currentMapId);
+    if (!mapData) return;
+    await saveMap(currentMapId, newName, mapData.boxes || [], mapData.connections || [], mapData.markedCenter || null);
+    await loadMapsList();
   });
+
+  // Delete current map
   deleteMapBtn.addEventListener('click', async () => {
     if (!currentMapId) return;
-    if (!confirm(`Delete map ${currentMapId}?`)) return;
-    await deleteDoc(doc(db, 'mindmaps', currentMapId));
-    await loadMapList();
+    if (!confirm('Are you sure you want to delete this map? This action cannot be undone.')) return;
+    await deleteDoc(doc(db, 'maps', currentMapId));
+    mapsCache.delete(currentMapId);
+    currentMapId = null;
+    await loadMapsList();
   });
+
+  // New map creation
   newMapBtn.addEventListener('click', async () => {
-    let newId = prompt('Enter new map ID (unique short string):');
-    if (!newId) return;
-    if (mapsCache.has(newId)) return alert('Map ID already exists.');
+    const name = prompt('Enter name for the new map:', 'New Map');
+    if (!name) return;
+    const newId = generateId();
+    await saveMap(newId, name, [], [], null);
     currentMapId = newId;
-    boxesMap.forEach(box => box.remove());
-    boxesMap.clear();
-    connections.length = 0;
-    drawConnections();
-    mapSelect.value = newId;
-    await saveMap();
-    await loadMapList();
-    mapSelect.value = newId;
+    await loadMapsList();
+    await loadMap(newId);
   });
 
-  goCenterBtn.addEventListener('click', () => {
-    if (!markedCenter) return;
-    panX = viewport.clientWidth / 2 - markedCenter.x * scale;
-    panY = viewport.clientHeight / 2 - markedCenter.y * scale;
-    updateTransform();
-  });
-  markCenterBtn.addEventListener('click', () => {
-    // Mark current center in canvas coords
-    markedCenter = {
-      x: (viewport.clientWidth / 2 - panX) / scale,
-      y: (viewport.clientHeight / 2 - panY) / scale
-    };
-    alert('Center marked at (' + markedCenter.x.toFixed(0) + ', ' + markedCenter.y.toFixed(0) + ')');
+  // Map select change
+  mapSelect.addEventListener('change', async () => {
+    currentMapId = mapSelect.value;
+    await loadMap(currentMapId);
   });
 
-  toggleEditModeBtn.addEventListener('click', () => {
-    editMode = !editMode;
-    boxesMap.forEach(box => {
-      box.querySelector('.box-header').style.display = editMode ? 'flex' : 'none';
-      box.querySelector('.box-content').contentEditable = editMode;
+  // Utility to apply 10% opacity on RGB color string
+  function applyOpacity(rgb, opacity) {
+    if (!rgb) return '';
+    // If color is hex or named color, just return hex with opacity using rgba approximation
+    // For simplicity assume input is hex #rrggbb
+    if (rgb.startsWith('#')) {
+      const r = parseInt(rgb.substr(1, 2), 16);
+      const g = parseInt(rgb.substr(3, 2), 16);
+      const b = parseInt(rgb.substr(5, 2), 16);
+      return `rgba(${r},${g},${b},${opacity})`;
+    }
+    // If rgb(...) string
+    const match = rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+    if (match) {
+      return `rgba(${match[1]},${match[2]},${match[3]},${opacity})`;
+    }
+    return rgb; // fallback
+  }
+
+  // Paint palette popup logic
+
+  let activeColorBox = null;
+  let activeColorBtn = null;
+
+  function openColorPicker(box, btn) {
+    activeColorBox = box;
+    activeColorBtn = btn;
+    // Position color picker near button
+    const btnRect = btn.getBoundingClientRect();
+    const containerRect = viewport.getBoundingClientRect();
+    const left = btnRect.left - containerRect.left;
+    const top = btnRect.bottom - containerRect.top + 4;
+
+    colorPickerContainer.style.left = `${left}px`;
+    colorPickerContainer.style.top = `${top}px`;
+    colorPickerContainer.style.display = 'block';
+
+    // Set color picker value to current box color or default
+    const currentColor = box.dataset.bgColor || '#ffffff';
+    colorPicker.value = toHexColor(currentColor);
+
+    // Populate recent swatches
+    updateRecentSwatches();
+
+    // Focus color picker for keyboard input
+    colorPicker.focus();
+  }
+
+  // Convert color to hex string for input[type=color]
+  function toHexColor(color) {
+    if (!color) return '#ffffff';
+    if (color.startsWith('#')) return color;
+    // If rgb or rgba, convert
+    let m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (!m) return '#ffffff';
+    let r = parseInt(m[1]);
+    let g = parseInt(m[2]);
+    let b = parseInt(m[3]);
+    return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Update recent swatches UI
+  function updateRecentSwatches() {
+    recentSwatchesContainer.innerHTML = '';
+    recentColors.forEach(c => {
+      const sw = document.createElement('div');
+      sw.classList.add('swatch');
+      sw.style.backgroundColor = c;
+      sw.title = c;
+      sw.addEventListener('click', () => {
+        applyColorToActiveBox(c);
+        colorPicker.value = toHexColor(c);
+      });
+      recentSwatchesContainer.appendChild(sw);
     });
+  }
+
+  // Apply chosen color to active box with 10% opacity background
+  function applyColorToActiveBox(color) {
+    if (!activeColorBox) return;
+    activeColorBox.dataset.bgColor = color;
+    activeColorBox.style.backgroundColor = applyOpacity(color, 0.1);
+    // Add to recent colors (avoid duplicates)
+    if (!recentColors.includes(color)) {
+      recentColors.unshift(color);
+      if (recentColors.length > 8) recentColors.pop();
+      updateRecentSwatches();
+    }
+    saveCurrentMapDebounced();
+  }
+
+  // Color picker change handler
+  colorPicker.addEventListener('input', e => {
+    applyColorToActiveBox(e.target.value);
   });
 
-  // Initial load of maps list
-  loadMapList();
+  // Close color picker on click outside
+  document.addEventListener('click', e => {
+    if (!colorPickerContainer.contains(e.target) && e.target !== activeColorBtn) {
+      closeColorPicker();
+    }
+  });
 
-  // Initial transform update
-  updateTransform();
+  // Close color picker function
+  function closeColorPicker() {
+    colorPickerContainer.style.display = 'none';
+    activeColorBox = null;
+    activeColorBtn = null;
+  }
+
+  // Keyboard shortcuts for undo (Ctrl+Z)
+  window.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      if (!undoBtn.disabled) undoBtn.click();
+    }
+  });
+
+  // Zoom display update
+  const zoomDisplay = document.getElementById('zoomDisplay');
+  function updateZoomDisplay() {
+    zoomDisplay.textContent = `Zoom: ${(scale * 100).toFixed(0)}%`;
+  }
+  updateZoomDisplay();
+
+  // Initial load
+  loadMapsList();
 
 </script>
 </body>
