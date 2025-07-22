@@ -358,7 +358,7 @@
 
   // Pan handling on empty canvas
   viewport.addEventListener('pointerdown', e => {
-    if (e.target.closest('.box-header') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target) ||
+    if (e.target.closest('.box-header') || e.target.closest('.drag-handle') || e.target.closest('.resize-handle') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target) ||
         [saveMapBtn, renameMapBtn, deleteMapBtn, newMapBtn, mapSelect].includes(e.target)) return;
     isPanning = true;
     const coords = getClientCoords(e);
@@ -507,18 +507,15 @@
       setupResize(handle, box, pos);
     });
 
-    // Append to canvas
     canvas.appendChild(box);
 
-    // Save box data in map
     boxesMap.set(id, {
       id, x, y, w, h, text, fontSize, dom: box
     });
 
-    // Setup drag on drag handle
     setupDrag(dragHandle, box);
 
-    // Selection logic
+    // Selection logic on header click
     header.addEventListener('click', e => {
       e.stopPropagation();
       if (!editMode) return;
@@ -538,7 +535,7 @@
       }
     });
 
-    // Content change save
+    // Content input update
     content.addEventListener('input', () => {
       const d = boxesMap.get(id);
       if (!d) return;
@@ -546,14 +543,13 @@
     });
   }
 
-  // Delete box by id
   function deleteBox(id) {
     const data = boxesMap.get(id);
     if (!data) return;
     canvas.removeChild(data.dom);
     boxesMap.delete(id);
 
-    // Remove connections with this box
+    // Remove connections related to this box
     for (let i = connections.length - 1; i >= 0; i--) {
       if (connections[i].from === id || connections[i].to === id) {
         connections.splice(i, 1);
@@ -566,7 +562,6 @@
     drawConnections();
   }
 
-  // Undo last delete
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
     const action = undoStack.pop();
@@ -577,12 +572,15 @@
     undoBtn.disabled = undoStack.length === 0;
   });
 
-  // Setup drag function fixed to avoid jump when dragging top-left handle
+  // Dragging logic fix - no jump, smooth drag with multiple selection support
   function setupDrag(handle, box) {
     let dragging = false;
     let pointerStartX, pointerStartY;
     let boxStartX, boxStartY;
     let offsetX, offsetY;
+
+    // Store initial positions for multi-select drag
+    let initialPositions = new Map();
 
     handle.addEventListener('pointerdown', e => {
       if (!editMode) return;
@@ -602,7 +600,25 @@
       offsetX = (pointerStartX - rect.left);
       offsetY = (pointerStartY - rect.top);
 
-      box.setPointerCapture(e.pointerId);
+      // Store initial positions of all selected boxes
+      initialPositions.clear();
+      if (selectedBoxes.has(box)) {
+        selectedBoxes.forEach(b => {
+          const bRect = b.getBoundingClientRect();
+          const bx = (bRect.left - canvasRect.left) / scale;
+          const by = (bRect.top - canvasRect.top) / scale;
+          initialPositions.set(b, { x: bx, y: by });
+        });
+      } else {
+        initialPositions.set(box, { x: boxStartX, y: boxStartY });
+        // Clear selection and select only this box
+        selectedBoxes.forEach(b => b.classList.remove('selected'));
+        selectedBoxes.clear();
+        selectedBoxes.add(box);
+        box.classList.add('selected');
+      }
+
+      handle.setPointerCapture(e.pointerId);
     });
 
     handle.addEventListener('pointermove', e => {
@@ -617,14 +633,18 @@
         const dx = newX - boxStartX;
         const dy = newY - boxStartY;
         selectedBoxes.forEach(b => {
-          const id = b.dataset.id;
-          const d = boxesMap.get(id);
-          const updatedX = d.x + dx;
-          const updatedY = d.y + dy;
+          const initPos = initialPositions.get(b);
+          if (!initPos) return;
+          const updatedX = initPos.x + dx;
+          const updatedY = initPos.y + dy;
           b.style.left = `${updatedX}px`;
           b.style.top = `${updatedY}px`;
-          d.x = updatedX;
-          d.y = updatedY;
+          const id = b.dataset.id;
+          const d = boxesMap.get(id);
+          if (d) {
+            d.x = updatedX;
+            d.y = updatedY;
+          }
         });
       } else {
         box.style.left = `${newX}px`;
@@ -646,7 +666,7 @@
     });
   }
 
-  // Setup resize handles
+  // Resize handles setup
   function setupResize(handle, box, pos) {
     let resizing = false;
     let startX, startY;
@@ -695,10 +715,12 @@
 
       const id = box.dataset.id;
       const d = boxesMap.get(id);
-      d.w = newW;
-      d.h = newH;
-      d.x = newLeft;
-      d.y = newTop;
+      if (d) {
+        d.w = newW;
+        d.h = newH;
+        d.x = newLeft;
+        d.y = newTop;
+      }
 
       drawConnections();
     });
@@ -711,7 +733,7 @@
     });
   }
 
-  // Drawing connections as curved lines
+  // Draw connections as curved lines
   function drawConnections() {
     while (connectionLayer.firstChild) {
       connectionLayer.removeChild(connectionLayer.firstChild);
@@ -776,10 +798,8 @@
     createBox(id, clickX - 60, clickY - 30);
   });
 
-  // Undo button disabled at start
   undoBtn.disabled = true;
 
-  // Go to center and mark center buttons
   goCenterBtn.addEventListener('click', () => {
     if (!markedCenter) {
       alert('No center marked yet.');
@@ -798,7 +818,6 @@
     alert(`Center marked at canvas coords (${markedCenter.x.toFixed(1)}, ${markedCenter.y.toFixed(1)})`);
   });
 
-  // Toggle edit mode
   toggleEditModeBtn.addEventListener('click', () => {
     editMode = !editMode;
     boxesMap.forEach(d => {
@@ -806,7 +825,6 @@
       content.contentEditable = editMode;
       d.dom.querySelector('.box-header').style.display = editMode ? 'flex' : 'none';
       if (!editMode) {
-        // Clear any selections and connection toggles
         selectedBoxes.forEach(b => b.classList.remove('selected'));
         selectedBoxes.clear();
         clearConnectionSelection();
@@ -954,7 +972,6 @@
   });
 
   function clearCanvas() {
-    // Remove all boxes
     boxesMap.forEach(d => {
       if (d.dom.parentNode) d.dom.parentNode.removeChild(d.dom);
     });
@@ -970,7 +987,6 @@
   // Load map list at start
   loadMapList();
 
-  // Initial transform update
   updateTransform();
 </script>
 </body>
