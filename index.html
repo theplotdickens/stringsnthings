@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>stringsnthingsfinal-with-colors</title>
+<title>stringsnthingsmorework</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
   html, body {
@@ -13,6 +13,14 @@
     width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
     overflow: hidden;
     box-sizing: border-box;
+  }
+  #connectionLayer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 10000px; height: 10000px;
+    pointer-events: none;
+    z-index: 0; /* behind boxes */
+    transform-origin: 0 0;
   }
   #canvas {
     position: absolute; top: 0; left: 0;
@@ -32,7 +40,7 @@
     flex-direction: column;
     cursor: text;
     overflow: hidden;
-    transition: width 0.1s ease, height 0.1s ease, background-color 0.3s ease;
+    transition: width 0.1s ease, height 0.1s ease;
   }
   .box.selected {
     outline: 2px dashed blue;
@@ -153,6 +161,48 @@
   .resize-handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
   .resize-handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
 
+  /* Paint palette icon style */
+  .palette-btn {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    background: url('data:image/svg+xml;utf8,<svg fill="%23333" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="none" fill="%23ccc"/><circle cx="8.5" cy="11.5" r="1.5" fill="%23777"/><circle cx="15.5" cy="8.5" r="1.5" fill="%23777"/><circle cx="14" cy="15" r="1.5" fill="%23777"/><circle cx="10" cy="14" r="1.5" fill="%23777"/></svg>') no-repeat center center;
+    background-size: contain;
+    cursor: pointer;
+    user-select: none;
+    z-index: 10;
+  }
+
+  /* Palette popup */
+  #colorPickerPopup {
+    position: absolute;
+    background: white;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    box-shadow: 0 0 8px rgba(0,0,0,0.15);
+    padding: 8px;
+    display: none;
+    z-index: 100000;
+  }
+  #colorPickerPopup .swatches {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  #colorPickerPopup .swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid #999;
+  }
+  #colorPickerPopup .swatch:hover {
+    border-color: black;
+  }
+
   #topMenu {
     position: fixed;
     top: 8px;
@@ -242,14 +292,6 @@
     padding: 4px 8px; border-radius: 4px;
     user-select: none; pointer-events: none; z-index: 1001;
   }
-  #connectionLayer {
-    position: absolute;
-    top: 0; left: 0;
-    width: 10000px; height: 10000px;
-    pointer-events: none;
-    z-index: 1;
-    transform-origin: 0 0;
-  }
   #footerInfo {
     position: fixed;
     bottom: 60px;
@@ -268,45 +310,6 @@
     width: max-content;
     max-width: 90vw;
     text-align: center;
-  }
-  /* Color picker popup styles */
-  .color-picker-popup {
-    position: absolute;
-    z-index: 100000;
-    background: white;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    padding: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    width: 240px;
-  }
-  .color-picker-popup input[type="color"] {
-    width: 100%;
-    height: 32px;
-    border: none;
-    padding: 0;
-    margin: 0;
-    cursor: pointer;
-  }
-  .color-swatches {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .color-swatch {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    border: 1px solid #aaa;
-    cursor: pointer;
-    box-sizing: border-box;
-    transition: border-color 0.2s ease;
-  }
-  .color-swatch:hover {
-    border-color: black;
   }
 </style>
 </head>
@@ -330,6 +333,12 @@
   <button id="goCenterBtn" class="floatingBtn">Go to Center</button>
   <button id="markCenterBtn" class="floatingBtn">Mark Center</button>
   <button id="toggleEditModeBtn" class="floatingBtn">Toggle Edit Mode</button>
+</div>
+
+<!-- Color picker popup -->
+<div id="colorPickerPopup">
+  <div class="swatches"></div>
+  <input type="color" id="nativeColorInput" style="display:none" />
 </div>
 
 <script type="module">
@@ -361,6 +370,10 @@
   const saveStatus = document.getElementById('saveStatus');
   const connectionLayer = document.getElementById('connectionLayer');
 
+  const colorPickerPopup = document.getElementById('colorPickerPopup');
+  const nativeColorInput = document.getElementById('nativeColorInput');
+  const swatchesContainer = colorPickerPopup.querySelector('.swatches');
+
   let scale = 1, panX = 0, panY = 0;
   let isPanning = false, startX, startY;
 
@@ -377,9 +390,8 @@
 
   let markedCenter = null; // {x, y} in canvas coords
 
-  // COLOR PALETTE MANAGEMENT
-  let recentColors = []; // Last 8 used colors, hex strings
-  // Stored per map, in Firestore as part of mapData.recentColors
+  // Recent colors for swatches (max 8)
+  const recentColors = [];
 
   // Helper to get pointer coords
   function getClientCoords(e) {
@@ -411,6 +423,7 @@
     // Clear selection on empty space click
     selectedBoxes.forEach(b => b.classList.remove('selected'));
     selectedBoxes.clear();
+    hideColorPicker();
   });
 
   viewport.addEventListener('pointermove', e => {
@@ -451,476 +464,350 @@
   }, { passive: false });
 
   // Create new box element
-  function createBox(id, x, y, w = 120, h = 60, text = '', fontSize = 14, bgColor = '') {
-    if (boxesMap.has(id)) return;
+  function createBox(id, x, y, w = 120, h = 60, text = '', fontSize = 14, color = null) {
+    if (boxesMap.has(id)) return boxesMap.get(id);
 
     const box = document.createElement('div');
     box.classList.add('box');
-    box.style.left = `${x}px`;
-    box.style.top = `${y}px`;
+    box.style.left = x + 'px';
+    box.style.top = y + 'px';
     box.style.width = w + 'px';
     box.style.height = h + 'px';
     box.dataset.id = id;
-    box.style.fontSize = fontSize + 'px';
-    if (bgColor) {
-      box.style.backgroundColor = hexToRGBA(bgColor, 0.1);
-      box.dataset.bgColor = bgColor;
-    } else {
-      box.style.backgroundColor = '';
-      box.dataset.bgColor = '';
+
+    if (color) {
+      box.style.backgroundColor = hexToRgba(color, 0.1);
+      box.dataset.color = color;
     }
 
     // Header
     const header = document.createElement('div');
-    header.classList.add('box-header');
-    header.style.display = editMode ? 'flex' : 'none';
+    header.className = 'box-header';
+    box.appendChild(header);
 
-    // Drag handle "✥"
+    // Drag handle symbol ✥
     const dragHandle = document.createElement('div');
-    dragHandle.classList.add('drag-handle');
+    dragHandle.className = 'drag-handle';
     dragHandle.textContent = '✥';
     header.appendChild(dragHandle);
 
-    // Connect toggle
+    // Palette icon button
+    const paletteBtn = document.createElement('div');
+    paletteBtn.className = 'palette-btn';
+    header.appendChild(paletteBtn);
+
+    // Connect toggle button
     const connectToggle = document.createElement('button');
-    connectToggle.classList.add('connect-toggle');
-    connectToggle.title = 'Toggle connection';
-    connectToggle.addEventListener('click', e => {
-      e.stopPropagation();
-      if (!connectionStartBoxId) {
-        connectionStartBoxId = id;
-        connectToggle.classList.add('active');
-      } else if (connectionStartBoxId === id) {
-        connectionStartBoxId = null;
-        connectToggle.classList.remove('active');
-      } else {
-        addConnection(connectionStartBoxId, id);
-        clearConnectionSelection();
-      }
-      drawConnections();
-    });
+    connectToggle.className = 'connect-toggle';
+    connectToggle.title = 'Toggle connect';
     header.appendChild(connectToggle);
-
-    // Font size controls
-    const fontDec = document.createElement('button');
-    fontDec.classList.add('font-size-btn');
-    fontDec.title = 'Decrease font size';
-    fontDec.textContent = 'A-';
-    fontDec.addEventListener('click', e => {
-      e.stopPropagation();
-      let fs = parseInt(box.style.fontSize) || 14;
-      if (fs > 6) {
-        fs--;
-        box.style.fontSize = fs + 'px';
-      }
-    });
-    header.appendChild(fontDec);
-
-    const fontInc = document.createElement('button');
-    fontInc.classList.add('font-size-btn');
-    fontInc.title = 'Increase font size';
-    fontInc.textContent = 'A+';
-    fontInc.addEventListener('click', e => {
-      e.stopPropagation();
-      let fs = parseInt(box.style.fontSize) || 14;
-      if (fs < 72) {
-        fs++;
-        box.style.fontSize = fs + 'px';
-      }
-    });
-    header.appendChild(fontInc);
-
-    // Color palette icon
-    const colorPaletteBtn = document.createElement('button');
-    colorPaletteBtn.title = "Pick box background color";
-    colorPaletteBtn.style.border = 'none';
-    colorPaletteBtn.style.background = 'transparent';
-    colorPaletteBtn.style.cursor = 'pointer';
-    colorPaletteBtn.style.width = '18px';
-    colorPaletteBtn.style.height = '18px';
-    colorPaletteBtn.style.padding = '0';
-    colorPaletteBtn.style.margin = '0 2px';
-    colorPaletteBtn.style.display = 'flex';
-    colorPaletteBtn.style.alignItems = 'center';
-    colorPaletteBtn.style.justifyContent = 'center';
-    colorPaletteBtn.style.color = '#555';
-    colorPaletteBtn.innerHTML = `
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2a7 7 0 0 1 7 7c0 3.866-3.134 7-7 7a7 7 0 1 1 0-14zm0 2a5 5 0 0 0-4.546 2.916L17.25 17.25A5 5 0 0 0 12 4z"/>
-      </svg>
-    `;
-    header.appendChild(colorPaletteBtn);
 
     // Delete button
     const deleteBtn = document.createElement('button');
-    deleteBtn.classList.add('delete-btn');
+    deleteBtn.className = 'delete-btn';
     deleteBtn.title = 'Delete box';
     deleteBtn.textContent = '×';
-    deleteBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      deleteBox(id);
-    });
     header.appendChild(deleteBtn);
 
-    box.appendChild(header);
+    // Font size controls
+    const fontDecreaseBtn = document.createElement('button');
+    fontDecreaseBtn.className = 'font-size-btn';
+    fontDecreaseBtn.title = 'Decrease font size';
+    fontDecreaseBtn.textContent = 'A-';
+    header.appendChild(fontDecreaseBtn);
 
-    // Content editable text area
+    const fontIncreaseBtn = document.createElement('button');
+    fontIncreaseBtn.className = 'font-size-btn';
+    fontIncreaseBtn.title = 'Increase font size';
+    fontIncreaseBtn.textContent = 'A+';
+    header.appendChild(fontIncreaseBtn);
+
+    // Content editable area
     const content = document.createElement('div');
-    content.classList.add('box-content');
+    content.className = 'box-content';
     content.contentEditable = editMode;
     content.spellcheck = false;
+    content.style.fontSize = fontSize + 'px';
     content.textContent = text;
     box.appendChild(content);
 
     // Resize handles
-    ['nw', 'ne', 'sw', 'se'].forEach(pos => {
-      const handle = document.createElement('div');
-      handle.classList.add('resize-handle', pos);
-      box.appendChild(handle);
-      handle.addEventListener('pointerdown', e => {
-        e.stopPropagation();
-        startResize(e, box, pos);
-      });
+    ['nw','ne','sw','se'].forEach(pos => {
+      const rh = document.createElement('div');
+      rh.className = 'resize-handle ' + pos;
+      box.appendChild(rh);
     });
 
-    // Dragging logic on drag handle
+    // Events and interactions
+
+    // Dragging boxes
+    let dragInfo = null;
     dragHandle.addEventListener('pointerdown', e => {
+      if (!editMode) return;
       e.stopPropagation();
-      startDrag(e, box);
+      dragInfo = {
+        startX: e.clientX,
+        startY: e.clientY,
+        origX: parseFloat(box.style.left),
+        origY: parseFloat(box.style.top),
+      };
+      document.addEventListener('pointermove', onDrag);
+      document.addEventListener('pointerup', onDragEnd);
     });
 
-    // Click to select box for multi-select with Shift
-    header.addEventListener('click', e => {
+    function onDrag(e) {
+      if (!dragInfo) return;
+      const dx = e.clientX - dragInfo.startX;
+      const dy = e.clientY - dragInfo.startY;
+      box.style.left = dragInfo.origX + dx + 'px';
+      box.style.top = dragInfo.origY + dy + 'px';
+      updateTransform(); // Redraw connections during drag
+      drawConnections();
+    }
+
+    function onDragEnd(e) {
+      if (!dragInfo) return;
+      dragInfo = null;
+      document.removeEventListener('pointermove', onDrag);
+      document.removeEventListener('pointerup', onDragEnd);
+      drawConnections();
+      saveCurrentMapDebounced();
+    }
+
+    // Resize boxes
+    box.querySelectorAll('.resize-handle').forEach(rh => {
+      let resizeInfo = null;
+
+      rh.addEventListener('pointerdown', e => {
+        if (!editMode) return;
+        e.stopPropagation();
+        resizeInfo = {
+          startX: e.clientX,
+          startY: e.clientY,
+          origW: box.offsetWidth,
+          origH: box.offsetHeight,
+          origLeft: parseFloat(box.style.left),
+          origTop: parseFloat(box.style.top),
+          handle: rh.classList[1] // nw, ne, sw, se
+        };
+        document.addEventListener('pointermove', onResize);
+        document.addEventListener('pointerup', onResizeEnd);
+      });
+
+      function onResize(e) {
+        if (!resizeInfo) return;
+        const dx = e.clientX - resizeInfo.startX;
+        const dy = e.clientY - resizeInfo.startY;
+
+        let newW = resizeInfo.origW;
+        let newH = resizeInfo.origH;
+        let newLeft = resizeInfo.origLeft;
+        let newTop = resizeInfo.origTop;
+
+        switch(resizeInfo.handle) {
+          case 'nw':
+            newW = resizeInfo.origW - dx;
+            newH = resizeInfo.origH - dy;
+            newLeft = resizeInfo.origLeft + dx;
+            newTop = resizeInfo.origTop + dy;
+            break;
+          case 'ne':
+            newW = resizeInfo.origW + dx;
+            newH = resizeInfo.origH - dy;
+            newTop = resizeInfo.origTop + dy;
+            break;
+          case 'sw':
+            newW = resizeInfo.origW - dx;
+            newH = resizeInfo.origH + dy;
+            newLeft = resizeInfo.origLeft + dx;
+            break;
+          case 'se':
+            newW = resizeInfo.origW + dx;
+            newH = resizeInfo.origH + dy;
+            break;
+        }
+        newW = Math.max(40, newW);
+        newH = Math.max(30, newH);
+
+        if (newLeft < 0) newLeft = 0;
+        if (newTop < 0) newTop = 0;
+
+        box.style.width = newW + 'px';
+        box.style.height = newH + 'px';
+        box.style.left = newLeft + 'px';
+        box.style.top = newTop + 'px';
+        drawConnections();
+      }
+      function onResizeEnd(e) {
+        if (!resizeInfo) return;
+        resizeInfo = null;
+        document.removeEventListener('pointermove', onResize);
+        document.removeEventListener('pointerup', onResizeEnd);
+        saveCurrentMapDebounced();
+      }
+    });
+
+    // Connect toggle
+    connectToggle.addEventListener('click', e => {
       e.stopPropagation();
       if (!editMode) return;
+
+      if (connectionStartBoxId === null) {
+        connectionStartBoxId = id;
+        connectToggle.classList.add('active');
+      } else if (connectionStartBoxId === id) {
+        // Same box clicked, cancel connect mode
+        connectionStartBoxId = null;
+        connectToggle.classList.remove('active');
+      } else {
+        // Create connection from connectionStartBoxId to id
+        connections.push({ from: connectionStartBoxId, to: id, label: '' });
+        connectionStartBoxId = null;
+        // Clear all connectToggle active states
+        document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
+        drawConnections();
+        saveCurrentMapDebounced();
+      }
+    });
+
+    // Delete button
+    deleteBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      deleteBox(id);
+    });
+
+    // Font size buttons
+    fontIncreaseBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const fs = parseInt(content.style.fontSize) || 14;
+      content.style.fontSize = (fs + 1) + 'px';
+      saveCurrentMapDebounced();
+    });
+    fontDecreaseBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const fs = parseInt(content.style.fontSize) || 14;
+      if (fs > 6) {
+        content.style.fontSize = (fs - 1) + 'px';
+        saveCurrentMapDebounced();
+      }
+    });
+
+    // Content editable changes
+    content.addEventListener('input', e => {
+      saveCurrentMapDebounced();
+    });
+
+    // Select box by clicking header with shift for multi-select
+    header.addEventListener('click', e => {
+      e.stopPropagation();
+      if (e.target === dragHandle || e.target === paletteBtn) return; // exclude drag & palette icon clicks
       if (e.shiftKey) {
         if (selectedBoxes.has(box)) {
-          box.classList.remove('selected');
           selectedBoxes.delete(box);
+          box.classList.remove('selected');
         } else {
-          box.classList.add('selected');
           selectedBoxes.add(box);
+          box.classList.add('selected');
         }
       } else {
         selectedBoxes.forEach(b => b.classList.remove('selected'));
         selectedBoxes.clear();
-        box.classList.add('selected');
         selectedBoxes.add(box);
+        box.classList.add('selected');
       }
     });
 
-    // Text change to save changes (no autosave)
-    content.addEventListener('input', () => {
-      // Optionally debounce save or mark dirty
-    });
-
-    // COLOR PICKER LOGIC
-    let colorPickerPopup = null;
-
-    colorPaletteBtn.addEventListener('click', e => {
+    // Palette button opens color picker popup
+    paletteBtn.addEventListener('click', e => {
       e.stopPropagation();
-      // Close existing
-      if (colorPickerPopup) {
-        colorPickerPopup.remove();
-        colorPickerPopup = null;
-        return;
-      }
-      // Create popup
-      colorPickerPopup = document.createElement('div');
-      colorPickerPopup.classList.add('color-picker-popup');
-
-      // Native color input
-      const nativeColorInput = document.createElement('input');
-      nativeColorInput.type = 'color';
-      nativeColorInput.value = box.dataset.bgColor || '#ffffff';
-
-      nativeColorInput.addEventListener('input', e => {
-        const col = e.target.value;
-        applyBoxColor(box, col);
-        updateRecentColors(col);
-        saveMap(); // Save after color pick
-        renderSwatches();
-      });
-      colorPickerPopup.appendChild(nativeColorInput);
-
-      // Swatches container
-      const swatchesContainer = document.createElement('div');
-      swatchesContainer.classList.add('color-swatches');
-      colorPickerPopup.appendChild(swatchesContainer);
-
-      // Render swatches function
-      function renderSwatches() {
-        swatchesContainer.innerHTML = '';
-        recentColors.forEach(c => {
-          const swatch = document.createElement('div');
-          swatch.classList.add('color-swatch');
-          swatch.style.backgroundColor = c;
-          swatch.title = c;
-          swatch.addEventListener('click', () => {
-            applyBoxColor(box, c);
-            updateRecentColors(c);
-            saveMap();
-            renderSwatches();
-          });
-          swatchesContainer.appendChild(swatch);
-        });
-      }
-      renderSwatches();
-
-      // Position popup near button
-      const rect = colorPaletteBtn.getBoundingClientRect();
-      colorPickerPopup.style.top = (rect.bottom + window.scrollY + 4) + 'px';
-      colorPickerPopup.style.left = (rect.left + window.scrollX) + 'px';
-
-      document.body.appendChild(colorPickerPopup);
-
-      // Close popup if clicking outside
-      const onClickOutside = evt => {
-        if (!colorPickerPopup.contains(evt.target) && evt.target !== colorPaletteBtn) {
-          colorPickerPopup.remove();
-          colorPickerPopup = null;
-          window.removeEventListener('click', onClickOutside);
-        }
-      };
-      window.addEventListener('click', onClickOutside);
+      showColorPickerForBox(box, paletteBtn);
     });
 
-    canvas.appendChild(box);
     boxesMap.set(id, box);
+    canvas.appendChild(box);
     return box;
   }
 
-  // Apply box color with 10% opacity background
-  function applyBoxColor(box, hexColor) {
-    box.style.backgroundColor = hexToRGBA(hexColor, 0.1);
-    box.dataset.bgColor = hexColor;
-  }
-
-  // Convert hex color to rgba with opacity
-  function hexToRGBA(hex, opacity) {
-    let r = 255, g = 255, b = 255;
-    if (hex[0] === '#') {
-      if (hex.length === 7) {
-        r = parseInt(hex.slice(1, 3), 16);
-        g = parseInt(hex.slice(3, 5), 16);
-        b = parseInt(hex.slice(5, 7), 16);
-      } else if (hex.length === 4) {
-        r = parseInt(hex[1] + hex[1], 16);
-        g = parseInt(hex[2] + hex[2], 16);
-        b = parseInt(hex[3] + hex[3], 16);
-      }
-    }
-    return `rgba(${r},${g},${b},${opacity})`;
-  }
-
-  // Update recent colors list, keep last 8 unique
-  function updateRecentColors(color) {
-    const idx = recentColors.indexOf(color);
-    if (idx !== -1) recentColors.splice(idx, 1);
-    recentColors.unshift(color);
-    if (recentColors.length > 8) recentColors.pop();
-  }
-
-  // Delete a box by id
+  // Delete box by id
   function deleteBox(id) {
     const box = boxesMap.get(id);
     if (!box) return;
     undoStack.push({
-      action: 'deleteBox',
-      data: {
+      boxes: [{
         id,
         x: parseFloat(box.style.left),
         y: parseFloat(box.style.top),
-        w: parseFloat(box.style.width),
-        h: parseFloat(box.style.height),
+        w: box.offsetWidth,
+        h: box.offsetHeight,
         text: box.querySelector('.box-content').textContent,
-        fontSize: parseInt(box.style.fontSize) || 14,
-        bgColor: box.dataset.bgColor || ''
-      }
+        fontSize: parseInt(box.querySelector('.box-content').style.fontSize) || 14,
+        color: box.dataset.color || null
+      }],
+      connections: connections.filter(c => c.from === id || c.to === id)
     });
+    undoBtn.disabled = false;
+
+    // Remove connections involving this box
+    for (let i = connections.length -1; i >= 0; i--) {
+      if (connections[i].from === id || connections[i].to === id) {
+        connections.splice(i,1);
+      }
+    }
     box.remove();
     boxesMap.delete(id);
-    removeConnectionsWithBox(id);
-    undoBtn.disabled = false;
+    selectedBoxes.delete(box);
     drawConnections();
+    saveCurrentMapDebounced();
   }
 
-  // Undo last delete
+  // Undo delete
   undoBtn.addEventListener('click', () => {
     if (undoStack.length === 0) return;
     const last = undoStack.pop();
-    if (last.action === 'deleteBox') {
-      const { id, x, y, w, h, text, fontSize, bgColor } = last.data;
-      createBox(id, x, y, w, h, text, fontSize, bgColor);
-      drawConnections();
+    for (const bdata of last.boxes) {
+      createBox(bdata.id, bdata.x, bdata.y, bdata.w, bdata.h, bdata.text, bdata.fontSize, bdata.color);
+    }
+    for (const c of last.connections) {
+      connections.push(c);
     }
     undoBtn.disabled = undoStack.length === 0;
+    drawConnections();
+    saveCurrentMapDebounced();
   });
 
-  // Dragging logic
-  let dragData = null;
-  function startDrag(e, box) {
-    if (!editMode) return;
-    if (!selectedBoxes.has(box)) {
-      selectedBoxes.forEach(b => b.classList.remove('selected'));
-      selectedBoxes.clear();
-      box.classList.add('selected');
-      selectedBoxes.add(box);
-    }
-
-    const coords = getClientCoords(e);
-    dragData = {
-      startX: coords.x,
-      startY: coords.y,
-      boxesStartPos: Array.from(selectedBoxes).map(b => ({
-        box: b,
-        x: parseFloat(b.style.left),
-        y: parseFloat(b.style.top)
-      }))
-    };
-    window.addEventListener('pointermove', onDrag);
-    window.addEventListener('pointerup', endDrag);
-  }
-  function onDrag(e) {
-    if (!dragData) return;
-    e.preventDefault();
-    const coords = getClientCoords(e);
-    const dx = (coords.x - dragData.startX) / scale;
-    const dy = (coords.y - dragData.startY) / scale;
-    dragData.boxesStartPos.forEach(({ box, x, y }) => {
-      box.style.left = (x + dx) + 'px';
-      box.style.top = (y + dy) + 'px';
-    });
-    drawConnections();
-  }
-  function endDrag() {
-    dragData = null;
-    window.removeEventListener('pointermove', onDrag);
-    window.removeEventListener('pointerup', endDrag);
-  }
-
-  // Resize logic
-  let resizeData = null;
-  function startResize(e, box, corner) {
-    if (!editMode) return;
-    const rect = box.getBoundingClientRect();
-    const coords = getClientCoords(e);
-    resizeData = {
-      box,
-      corner,
-      startX: coords.x,
-      startY: coords.y,
-      startLeft: parseFloat(box.style.left),
-      startTop: parseFloat(box.style.top),
-      startWidth: rect.width / scale,
-      startHeight: rect.height / scale
-    };
-    window.addEventListener('pointermove', onResize);
-    window.addEventListener('pointerup', endResize);
-  }
-  function onResize(e) {
-    if (!resizeData) return;
-    e.preventDefault();
-    const coords = getClientCoords(e);
-    const dx = (coords.x - resizeData.startX) / scale;
-    const dy = (coords.y - resizeData.startY) / scale;
-
-    let newLeft = resizeData.startLeft;
-    let newTop = resizeData.startTop;
-    let newWidth = resizeData.startWidth;
-    let newHeight = resizeData.startHeight;
-
-    switch (resizeData.corner) {
-      case 'nw':
-        newLeft += dx;
-        newTop += dy;
-        newWidth -= dx;
-        newHeight -= dy;
-        break;
-      case 'ne':
-        newTop += dy;
-        newWidth += dx;
-        newHeight -= dy;
-        break;
-      case 'sw':
-        newLeft += dx;
-        newWidth -= dx;
-        newHeight += dy;
-        break;
-      case 'se':
-        newWidth += dx;
-        newHeight += dy;
-        break;
-    }
-
-    // Minimum size
-    newWidth = Math.max(40, newWidth);
-    newHeight = Math.max(30, newHeight);
-
-    // Adjust left/top if width or height changed by resizing from top/left edges
-    if (newWidth !== resizeData.startWidth) {
-      if (resizeData.corner === 'nw' || resizeData.corner === 'sw') {
-        resizeData.box.style.left = newLeft + 'px';
-      }
-      resizeData.box.style.width = newWidth + 'px';
-    }
-    if (newHeight !== resizeData.startHeight) {
-      if (resizeData.corner === 'nw' || resizeData.corner === 'ne') {
-        resizeData.box.style.top = newTop + 'px';
-      }
-      resizeData.box.style.height = newHeight + 'px';
-    }
-    drawConnections();
-  }
-  function endResize() {
-    resizeData = null;
-    window.removeEventListener('pointermove', onResize);
-    window.removeEventListener('pointerup', endResize);
-  }
-
-  // Connection handling
-  function addConnection(fromId, toId) {
-    if (fromId === toId) return;
-    if (connections.some(c => (c.from === fromId && c.to === toId) || (c.from === toId && c.to === fromId))) return;
-    connections.push({ from: fromId, to: toId });
-  }
-  function removeConnectionsWithBox(boxId) {
-    for (let i = connections.length -1; i >= 0; i--) {
-      if (connections[i].from === boxId || connections[i].to === boxId) {
-        connections.splice(i, 1);
-      }
-    }
-    drawConnections();
-  }
-  function clearConnectionSelection() {
-    connectionStartBoxId = null;
-    document.querySelectorAll('.connect-toggle.active').forEach(btn => btn.classList.remove('active'));
-  }
-
-  // Draw connections as curved SVG paths
+  // Draw connections using quadratic Bezier curves with soft middle curve
   function drawConnections() {
-    connectionLayer.innerHTML = '';
+    while (connectionLayer.firstChild) connectionLayer.removeChild(connectionLayer.firstChild);
     connections.forEach(conn => {
       const fromBox = boxesMap.get(conn.from);
       const toBox = boxesMap.get(conn.to);
       if (!fromBox || !toBox) return;
 
-      const fromX = parseFloat(fromBox.style.left) + fromBox.offsetWidth / 2;
-      const fromY = parseFloat(fromBox.style.top) + fromBox.offsetHeight / 2;
-      const toX = parseFloat(toBox.style.left) + toBox.offsetWidth / 2;
-      const toY = parseFloat(toBox.style.top) + toBox.offsetHeight / 2;
+      const fromRect = fromBox.getBoundingClientRect();
+      const toRect = toBox.getBoundingClientRect();
 
-      const dx = toX - fromX;
-      const dy = toY - fromY;
-      const dr = Math.sqrt(dx*dx + dy*dy) * 0.5;
+      // Convert screen coords to canvas coords (account for pan/zoom)
+      const vpRect = viewport.getBoundingClientRect();
+
+      // Center of from box bottom middle
+      const fromX = (fromRect.left + fromRect.right) / 2 - vpRect.left - panX;
+      const fromY = (fromRect.top + fromRect.bottom) / 2 - vpRect.top - panY;
+
+      // Center of to box top middle
+      const toX = (toRect.left + toRect.right) / 2 - vpRect.left - panX;
+      const toY = (toRect.top + toRect.bottom) / 2 - vpRect.top - panY;
 
       const path = document.createElementNS('http://www.w3.org/2000/svg','path');
-      path.setAttribute('stroke', '#333');
-      path.setAttribute('stroke-width', '2');
+      path.setAttribute('stroke', '#007');
       path.setAttribute('fill', 'none');
+      path.setAttribute('stroke-width', '2');
 
+      // Calculate control point for quadratic curve for soft arch
+      const dx = toX - fromX;
+      const dy = toY - fromY;
+      const dr = Math.sqrt(dx*dx + dy*dy);
       const cx = fromX + dx / 2;
-      const cy = fromY + dy / 2 - dr * 0.4;
+      const cy = fromY + dy / 2 - dr * 0.7; // stronger curve upward
 
       path.setAttribute('d', `M${fromX},${fromY} Q${cx},${cy} ${toX},${toY}`);
 
@@ -928,208 +815,336 @@
     });
   }
 
-  // Double-click to create new box at pointer position (fixed)
-  viewport.addEventListener('dblclick', e => {
+  // Convert hex to rgba string with alpha
+  function hexToRgba(hex, alpha) {
+    let c = hex.replace('#','');
+    if(c.length === 3){
+      c = c.split('').map(ch => ch+ch).join('');
+    }
+    const bigint = parseInt(c,16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
+  // Show color picker popup next to palette icon
+  function showColorPickerForBox(box, paletteBtn) {
+    const rect = paletteBtn.getBoundingClientRect();
+
+    colorPickerPopup.style.top = (rect.bottom + window.scrollY) + 'px'; // flush below
+    colorPickerPopup.style.left = (rect.left + window.scrollX) + 'px';
+    colorPickerPopup.style.display = 'block';
+
+    colorPickerPopup.currentBox = box;
+
+    // Populate swatches
+    swatchesContainer.innerHTML = '';
+    for (const c of recentColors) {
+      const swatch = document.createElement('div');
+      swatch.className = 'swatch';
+      swatch.style.backgroundColor = c;
+      swatch.title = c;
+      swatch.addEventListener('click', () => {
+        applyColorToBox(box, c);
+        addRecentColor(c);
+        hideColorPicker();
+        saveCurrentMapDebounced();
+      });
+      swatchesContainer.appendChild(swatch);
+    }
+
+    // Setup native color input
+    nativeColorInput.value = box.dataset.color || '#ffffff';
+    nativeColorInput.oninput = e => {
+      const c = e.target.value;
+      applyColorToBox(box, c);
+      addRecentColor(c);
+      saveCurrentMapDebounced();
+    };
+    nativeColorInput.onchange = () => {
+      hideColorPicker();
+    };
+
+    // Open native color spectrum immediately
+    nativeColorInput.style.display = 'block';
+    nativeColorInput.focus();
+    nativeColorInput.click();
+  }
+
+  function hideColorPicker() {
+    colorPickerPopup.style.display = 'none';
+    nativeColorInput.style.display = 'none';
+    colorPickerPopup.currentBox = null;
+  }
+
+  // Apply color to box background with 10% opacity
+  function applyColorToBox(box, color) {
+    box.dataset.color = color;
+    box.style.backgroundColor = hexToRgba(color, 0.1);
+  }
+
+  // Manage recent colors
+  function addRecentColor(color) {
+    const idx = recentColors.indexOf(color);
+    if (idx !== -1) {
+      recentColors.splice(idx, 1);
+    }
+    recentColors.unshift(color);
+    if (recentColors.length > 8) recentColors.pop();
+  }
+
+  // Clicking outside color picker closes it
+  document.body.addEventListener('pointerdown', e => {
+    if (!colorPickerPopup.contains(e.target) && !e.target.classList.contains('palette-btn')) {
+      hideColorPicker();
+    }
+  });
+
+  // Create new box at canvas position where double clicked
+  canvas.addEventListener('dblclick', e => {
     if (!editMode) return;
-
-    if (e.target.closest('.box') || e.target.closest('#topMenu') || e.target.closest('#buttonContainer')) return;
-
-    const rect = viewport.getBoundingClientRect();
+    const rect = canvas.getBoundingClientRect();
+    // Convert screen coords to canvas coords
     const x = (e.clientX - rect.left - panX) / scale;
     const y = (e.clientY - rect.top - panY) / scale;
-
     const id = generateId();
     createBox(id, x, y);
+    saveCurrentMapDebounced();
   });
 
   // Save map to Firestore
-  async function saveMap() {
+  async function saveCurrentMap() {
     if (!currentMapId) return;
-    const boxes = [];
+    const data = {
+      boxes: [],
+      connections: connections,
+      markedCenter: markedCenter,
+      updated: Date.now()
+    };
     boxesMap.forEach(box => {
-      boxes.push({
+      data.boxes.push({
         id: box.dataset.id,
         x: parseFloat(box.style.left),
         y: parseFloat(box.style.top),
-        w: parseFloat(box.style.width),
-        h: parseFloat(box.style.height),
+        w: box.offsetWidth,
+        h: box.offsetHeight,
         text: box.querySelector('.box-content').textContent,
-        fontSize: parseInt(box.style.fontSize) || 14,
-        bgColor: box.dataset.bgColor || ''
+        fontSize: parseInt(box.querySelector('.box-content').style.fontSize) || 14,
+        color: box.dataset.color || null
       });
     });
-
-    const mapData = {
-      boxes,
-      connections,
-      markedCenter,
-      recentColors,
-      updatedAt: Date.now()
-    };
-
-    await setDoc(doc(db, "maps", currentMapId), mapData);
-    saveStatus.textContent = 'Saved ✓';
-    setTimeout(() => { saveStatus.textContent = ''; }, 2000);
+    await setDoc(doc(db, 'mindmaps', currentMapId), data);
+    saveStatus.textContent = 'Saved ' + new Date().toLocaleTimeString();
+    setTimeout(() => { if(saveStatus.textContent.startsWith('Saved')) saveStatus.textContent = ''; }, 3000);
   }
-  saveMapBtn.addEventListener('click', saveMap);
+  const saveCurrentMapDebounced = debounce(saveCurrentMap, 700);
 
   // Load map from Firestore by id
   async function loadMap(id) {
-    if (!id) return;
+    clearCanvas();
     currentMapId = id;
-    clearAllBoxes();
-    clearAllConnections();
-    clearConnectionSelection();
-    saveStatus.textContent = 'Loading...';
-
-    const docSnap = await getDoc(doc(db, "maps", id));
+    const docSnap = await getDoc(doc(db, 'mindmaps', id));
     if (!docSnap.exists()) {
-      saveStatus.textContent = 'Map not found';
+      alert('Map not found: ' + id);
       return;
     }
     const data = docSnap.data();
-
-    recentColors = data.recentColors || [];
-
-    if (data.boxes) {
-      data.boxes.forEach(b => {
-        createBox(b.id, b.x, b.y, b.w, b.h, b.text, b.fontSize, b.bgColor);
-      });
-    }
-    if (data.connections) {
-      connections.length = 0;
-      data.connections.forEach(c => connections.push(c));
-    }
-    markedCenter = data.markedCenter || null;
-    saveStatus.textContent = 'Loaded ✓';
-    drawConnections();
-  }
-
-  // Clear all boxes
-  function clearAllBoxes() {
-    boxesMap.forEach(b => b.remove());
-    boxesMap.clear();
-  }
-  // Clear all connections
-  function clearAllConnections() {
+    if (!data) return;
     connections.length = 0;
+    boxesMap.clear();
+    data.boxes.forEach(b => createBox(b.id, b.x, b.y, b.w, b.h, b.text, b.fontSize, b.color));
+    connections.push(...(data.connections || []));
+    markedCenter = data.markedCenter || null;
+    panX = 0; panY = 0; scale = 1;
+    updateTransform();
+    drawConnections();
+    saveStatus.textContent = 'Loaded map: ' + id;
+    setTimeout(() => { if(saveStatus.textContent.startsWith('Loaded')) saveStatus.textContent = ''; }, 3000);
+  }
+
+  // Clear all boxes and connections
+  function clearCanvas() {
+    connections.length = 0;
+    boxesMap.forEach(box => box.remove());
+    boxesMap.clear();
     drawConnections();
   }
 
-  // Map selection and management
+  // Load list of maps into select dropdown
   async function loadMapList() {
-    const querySnapshot = await getDocs(collection(db, "maps"));
     mapSelect.innerHTML = '';
+    const mapsSnapshot = await getDocs(collection(db, 'mindmaps'));
     mapsCache.clear();
-    querySnapshot.forEach(docSnap => {
-      const id = docSnap.id;
-      mapsCache.set(id, docSnap.data());
-      const option = document.createElement('option');
-      option.value = id;
-      option.textContent = docSnap.data().name || id;
-      mapSelect.appendChild(option);
+    mapsSnapshot.forEach(docSnap => {
+      const opt = document.createElement('option');
+      opt.value = docSnap.id;
+      opt.textContent = docSnap.id;
+      mapSelect.appendChild(opt);
+      mapsCache.set(docSnap.id, docSnap.data());
     });
-    // If currentMapId is valid, select it, else pick first
-    if (currentMapId && mapsCache.has(currentMapId)) {
-      mapSelect.value = currentMapId;
-    } else if (mapSelect.options.length > 0) {
-      mapSelect.value = mapSelect.options[0].value;
-      currentMapId = mapSelect.value;
+    if(mapsCache.has('id-19dmwrpql')){
+      mapSelect.value = 'id-19dmwrpql';
+      loadMap('id-19dmwrpql');
+    } else if(mapsCache.size > 0) {
+      mapSelect.selectedIndex = 0;
+      loadMap(mapSelect.value);
     }
   }
-  mapSelect.addEventListener('change', async () => {
-    await loadMap(mapSelect.value);
+
+  // Select map from dropdown change
+  mapSelect.addEventListener('change', e => {
+    if(!confirm('Load map "'+mapSelect.value+'"? Unsaved changes will be lost.')) {
+      // revert selection
+      mapSelect.value = currentMapId || '';
+      return;
+    }
+    loadMap(mapSelect.value);
   });
 
-  // Rename map prompt
+  // Save button
+  saveMapBtn.addEventListener('click', () => {
+    saveCurrentMap();
+  });
+
+  // Rename map
   renameMapBtn.addEventListener('click', async () => {
     if (!currentMapId) return;
-    const newName = prompt('Enter new map name:', mapsCache.get(currentMapId)?.name || '');
+    const newName = prompt('Enter new map name:', currentMapId);
     if (!newName) return;
-    const docRef = doc(db, "maps", currentMapId);
-    await setDoc(docRef, { name: newName }, { merge: true });
+    if (mapsCache.has(newName)) {
+      alert('Map with that name already exists.');
+      return;
+    }
+    // Copy current data to new doc then delete old
+    const dataDoc = await getDoc(doc(db, 'mindmaps', currentMapId));
+    if (!dataDoc.exists()) return;
+    await setDoc(doc(db, 'mindmaps', newName), dataDoc.data());
+    await deleteDoc(doc(db, 'mindmaps', currentMapId));
+    currentMapId = newName;
     await loadMapList();
+    mapSelect.value = newName;
+    saveStatus.textContent = 'Renamed map to ' + newName;
+    setTimeout(() => { if(saveStatus.textContent.startsWith('Renamed')) saveStatus.textContent = ''; }, 3000);
   });
 
-  // Delete map confirmation
+  // Delete map
   deleteMapBtn.addEventListener('click', async () => {
     if (!currentMapId) return;
-    if (!confirm(`Delete map "${mapsCache.get(currentMapId)?.name || currentMapId}"?`)) return;
-    await deleteDoc(doc(db, "maps", currentMapId));
+    if (!confirm('Delete map "' + currentMapId + '"? This cannot be undone.')) return;
+    await deleteDoc(doc(db, 'mindmaps', currentMapId));
+    currentMapId = null;
     await loadMapList();
-    if (mapSelect.options.length > 0) {
-      mapSelect.value = mapSelect.options[0].value;
-      await loadMap(mapSelect.value);
-    } else {
-      clearAllBoxes();
-      clearAllConnections();
-      currentMapId = null;
-    }
+    saveStatus.textContent = 'Deleted map';
+    setTimeout(() => { if(saveStatus.textContent.startsWith('Deleted')) saveStatus.textContent = ''; }, 3000);
   });
 
-  // New map creation prompt
+  // New map button
   newMapBtn.addEventListener('click', async () => {
-    const newName = prompt('Enter new map name:', '');
-    if (!newName) return;
-    const id = generateId();
-    await setDoc(doc(db, "maps", id), {
-      name: newName,
-      boxes: [],
-      connections: [],
-      markedCenter: null,
-      recentColors: []
-    });
+    const newId = prompt('Enter new map name:', generateId());
+    if (!newId) return;
+    if (mapsCache.has(newId)) {
+      alert('Map with that name already exists.');
+      return;
+    }
+    clearCanvas();
+    currentMapId = newId;
+    panX = 0; panY = 0; scale = 1;
+    updateTransform();
+    drawConnections();
+    saveCurrentMap();
     await loadMapList();
-    mapSelect.value = id;
-    await loadMap(id);
+    mapSelect.value = newId;
   });
 
-  // Save on window unload (optional)
-  window.addEventListener('beforeunload', e => {
-    // Uncomment if you want to auto-save on unload
-    // saveMap();
-  });
-
-  // Mark center button logic
+  // Mark center sets pan/scale to current view center point in canvas coords
   markCenterBtn.addEventListener('click', () => {
-    const centerX = (-panX + viewport.clientWidth / 2) / scale;
-    const centerY = (-panY + viewport.clientHeight / 2) / scale;
+    const rect = viewport.getBoundingClientRect();
+    const centerX = (rect.width / 2 - panX) / scale;
+    const centerY = (rect.height / 2 - panY) / scale;
     markedCenter = { x: centerX, y: centerY };
-    saveStatus.textContent = 'Center marked';
-    setTimeout(() => { saveStatus.textContent = ''; }, 1500);
+    saveCurrentMapDebounced();
+    alert('Center marked at (' + centerX.toFixed(0) + ',' + centerY.toFixed(0) + ')');
   });
 
-  // Go to center button logic
+  // Go center pans view to markedCenter
   goCenterBtn.addEventListener('click', () => {
-    if (!markedCenter) return;
-    panX = viewport.clientWidth / 2 - markedCenter.x * scale;
-    panY = viewport.clientHeight / 2 - markedCenter.y * scale;
+    if (!markedCenter) {
+      alert('No center marked yet.');
+      return;
+    }
+    const rect = viewport.getBoundingClientRect();
+    panX = rect.width / 2 - markedCenter.x * scale;
+    panY = rect.height / 2 - markedCenter.y * scale;
     updateTransform();
   });
 
-  // Toggle edit mode
+  // Toggle edit mode disables/enables editing, dragging, and resizing
   toggleEditModeBtn.addEventListener('click', () => {
     editMode = !editMode;
     boxesMap.forEach(box => {
-      const header = box.querySelector('.box-header');
-      const content = box.querySelector('.box-content');
-      header.style.display = editMode ? 'flex' : 'none';
-      content.contentEditable = editMode;
+      box.querySelector('.box-content').contentEditable = editMode;
+      // Show/hide drag handles and resize handles by pointer-events and opacity
+      box.querySelector('.drag-handle').style.pointerEvents = editMode ? 'auto' : 'none';
+      box.querySelectorAll('.resize-handle').forEach(rh => {
+        rh.style.pointerEvents = editMode ? 'auto' : 'none';
+        rh.style.opacity = editMode ? '1' : '0';
+      });
+      // Disable connect toggles when not editing
+      box.querySelector('.connect-toggle').disabled = !editMode;
     });
   });
 
-  // Initialize app
-  (async function init() {
-    await loadMapList();
-    if (mapsCache.has('id-19dmwrpql')) {
-      mapSelect.value = 'id-19dmwrpql';
-      await loadMap('id-19dmwrpql');
-    } else if (mapSelect.options.length > 0) {
-      mapSelect.value = mapSelect.options[0].value;
-      await loadMap(mapSelect.value);
+  // Debounce helper
+  function debounce(fn, delay) {
+    let timer;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), delay);
+    };
+  }
+
+  // Initial load map list & map
+  loadMapList();
+
+  // Redraw connections on window resize
+  window.addEventListener('resize', drawConnections);
+
+  // Keyboard shortcuts for multi-select move with arrow keys when boxes selected
+  window.addEventListener('keydown', e => {
+    if (!editMode) return;
+    if (selectedBoxes.size === 0) return;
+
+    const step = e.shiftKey ? 10 : 1;
+    let moved = false;
+    selectedBoxes.forEach(box => {
+      let left = parseFloat(box.style.left);
+      let top = parseFloat(box.style.top);
+      switch(e.key) {
+        case 'ArrowLeft':
+          box.style.left = (left - step) + 'px'; moved = true; break;
+        case 'ArrowRight':
+          box.style.left = (left + step) + 'px'; moved = true; break;
+        case 'ArrowUp':
+          box.style.top = (top - step) + 'px'; moved = true; break;
+        case 'ArrowDown':
+          box.style.top = (top + step) + 'px'; moved = true; break;
+      }
+    });
+    if (moved) {
+      e.preventDefault();
+      drawConnections();
+      saveCurrentMapDebounced();
     }
-    updateTransform();
-  })();
+  });
+
+  // Deselect all boxes on Escape
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      selectedBoxes.forEach(b => b.classList.remove('selected'));
+      selectedBoxes.clear();
+    }
+  });
 
 </script>
 </body>
