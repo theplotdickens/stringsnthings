@@ -333,6 +333,7 @@
 
   let scale = 1, panX = 0, panY = 0;
   let isPanning = false, startX, startY;
+  let isDragging = false; // Flag to prevent box creation during a drag/move action
 
   const undoStack = [];
   const connections = [];
@@ -347,13 +348,14 @@
 
   let markedCenter = null; // {x, y} in canvas coords
   
-  // Variables for touch-to-double-click logic
+  // Variables for double-tap logic
   let lastTap = 0; 
   const tapDelay = 300; // max delay between taps for double-tap
 
   // Helper to get pointer coords
   function getClientCoords(e) {
     if (e.touches && e.touches.length > 0) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (e.changedTouches && e.changedTouches.length > 0) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
     return { x: e.clientX, y: e.clientY };
   }
   
@@ -377,6 +379,9 @@
   
   // Touch-end listener for double-tap (to simulate double-click)
   viewport.addEventListener('touchend', e => {
+    // If we were dragging/panning, ignore the tap
+    if (isDragging) return; 
+    
     // Only proceed if a touch was released on the viewport background
     if (e.target.closest('.box') || e.target.closest('#topMenu') || e.target.closest('#buttonContainer')) return;
     
@@ -384,7 +389,7 @@
     if (now - lastTap < tapDelay) {
       // This is a double-tap
       e.preventDefault();
-      createBoxAt(e.changedTouches[0]); // Pass the location of the touch
+      createBoxAt(e); // Pass the event for coordinate calculation
       lastTap = 0; // Reset tap tracking
     } else {
       lastTap = now;
@@ -406,7 +411,7 @@
 
   // Pan handling on empty canvas
   viewport.addEventListener('pointerdown', e => {
-    // Only pan if the target is the viewport itself (not a button, box, etc.)
+    // Only pan if the target is the viewport itself or the connections layer
     if (e.target === viewport || e.target === connectionLayer) {
       isPanning = true;
       const coords = getClientCoords(e);
@@ -634,6 +639,7 @@
 
   // Drag state
   let dragState = null;
+  let dragMoved = false;
 
   // Drag only if pointerdown on dragHandle
   function dragPointerDown(e) {
@@ -648,8 +654,10 @@
       startX: e.clientX,
       startY: e.clientY,
       origPositions: [],
-      pointerId: e.pointerId // Store pointer ID for release
+      pointerId: e.pointerId
     };
+    dragMoved = false;
+    isDragging = true;
 
     dragState.boxesToMove.forEach(b => {
       dragState.origPositions.push({
@@ -659,22 +667,23 @@
       });
     });
 
-    // FIX: Revert to attaching listeners to window for robustness
     window.addEventListener('pointermove', dragPointerMove);
     window.addEventListener('pointerup', dragPointerUp);
     
-    // Crucial for touch: Capture pointer on the element that initiated the drag
     e.target.setPointerCapture(e.pointerId); 
   }
 
   function dragPointerMove(e) {
     if (!dragState) return;
-    // Check pointerId for multi-touch safety, though we stick to one drag
-    // if (e.pointerId !== dragState.pointerId) return; 
     e.preventDefault();
 
     const dx = (e.clientX - dragState.startX) / scale;
     const dy = (e.clientY - dragState.startY) / scale;
+    
+    // Set dragMoved flag if movement exceeds a threshold (for touch)
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        dragMoved = true;
+    }
 
     dragState.origPositions.forEach(({ box, left, top }) => {
       box.style.left = (left + dx) + 'px';
@@ -688,12 +697,12 @@
     if (!dragState) return;
     e.preventDefault();
     
-    // FIX: Release the captured pointer
     if (e.target.hasPointerCapture(e.pointerId)) {
         e.target.releasePointerCapture(e.pointerId);
     }
     
     dragState = null;
+    isDragging = false;
     window.removeEventListener('pointermove', dragPointerMove);
     window.removeEventListener('pointerup', dragPointerUp);
   }
@@ -726,12 +735,11 @@
       origHeight: parseFloat(box.style.height),
       pointerId: e.pointerId
     };
+    isDragging = true;
 
-    // FIX: Revert to attaching listeners to window for robustness
     window.addEventListener('pointermove', resizePointerMove);
     window.addEventListener('pointerup', resizePointerUp);
 
-    // Crucial for touch: Capture pointer on the element that initiated the resize
     handle.setPointerCapture(e.pointerId); 
   }
 
@@ -786,12 +794,12 @@
     if (!resizeState) return;
     e.preventDefault();
     
-    // FIX: Release the captured pointer
     if (e.target.hasPointerCapture(e.pointerId)) {
         e.target.releasePointerCapture(e.pointerId);
     }
 
     resizeState = null;
+    isDragging = false;
     window.removeEventListener('pointermove', resizePointerMove);
     window.removeEventListener('pointerup', resizePointerUp);
   }
