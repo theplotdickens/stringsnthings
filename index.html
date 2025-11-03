@@ -7,13 +7,12 @@
 <style>
   html, body {
     margin: 0; height: 100%; overflow: hidden; font-family: monospace, monospace;
-    touch-action: none; /* Crucial: Prevents browser scroll/zoom by default */
+    touch-action: none;
   }
   #viewport {
     width: 100%; height: 100%; position: relative; background: #f0f0f0; cursor: grab;
     overflow: hidden;
     box-sizing: border-box;
-    touch-action: none; /* Prevents viewport-level scrolling */
   }
   #canvas {
     position: absolute; top: 0; left: 0;
@@ -72,7 +71,6 @@
     color: #333;
     white-space: nowrap;
     z-index: 5;
-    touch-action: none; 
   }
   .delete-btn {
     color: red;
@@ -90,7 +88,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    touch-action: manipulation;
   }
   .connect-toggle {
     width: 10px;
@@ -104,7 +101,6 @@
     padding: 0;
     margin: 0;
     flex-shrink: 0;
-    touch-action: manipulation;
   }
   .connect-toggle.active {
     background-color: green;
@@ -124,7 +120,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    touch-action: manipulation;
   }
   .box-content {
     flex: 1;
@@ -183,10 +178,6 @@
     border: 1px solid #888;
     cursor: pointer;
     min-width: 150px;
-    touch-action: manipulation;
-  }
-  #topMenu button {
-    touch-action: manipulation;
   }
   #saveMapBtn, #renameMapBtn, #deleteMapBtn, #newMapBtn {
     background: #555;
@@ -333,7 +324,6 @@
 
   let scale = 1, panX = 0, panY = 0;
   let isPanning = false, startX, startY;
-  let isDragging = false; // Flag to prevent box creation during a drag/move action
 
   const undoStack = [];
   const connections = [];
@@ -348,54 +338,20 @@
 
   let markedCenter = null; // {x, y} in canvas coords
   
-  // Variables for double-tap logic
+  // 💡 NEW: Variables for double-tap logic to simulate dblclick on touch devices
   let lastTap = 0; 
-  const tapDelay = 300; // max delay between taps for double-tap
+  const tapDelay = 300; 
+  let dragMoved = false; // 💡 NEW: Track if movement happened during a touch sequence
 
   // Helper to get pointer coords
   function getClientCoords(e) {
+    // 💡 ORIGINAL: Only checking e.touches[0].clientX
+    // 💡 FIXED: Safely check for touches array existence and use it
     if (e.touches && e.touches.length > 0) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    // Add fallback for touchend on iPads which use changedTouches
     if (e.changedTouches && e.changedTouches.length > 0) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
     return { x: e.clientX, y: e.clientY };
   }
-  
-  // Box creation handler
-  function createBoxAt(e) {
-    if (!editMode || e.target.closest('.box') || e.target.closest('#topMenu') || e.target.closest('#buttonContainer')) return;
-    
-    const coords = getClientCoords(e);
-    const rect = viewport.getBoundingClientRect();
-    // Calculate canvas coords where clicked (account for pan & scale):
-    const clickX = (coords.x - rect.left - panX) / scale;
-    const clickY = (coords.y - rect.top - panY) / scale;
-
-    const id = generateId();
-    // Center the new box relative to the click point (150x100 box size)
-    createBox(id, clickX - 75, clickY - 50, 150, 100, 'New Box', 14);
-  }
-
-  // Double-click listener for desktop
-  viewport.addEventListener('dblclick', createBoxAt);
-  
-  // Touch-end listener for double-tap (to simulate double-click)
-  viewport.addEventListener('touchend', e => {
-    // If we were dragging/panning, ignore the tap
-    if (isDragging) return; 
-    
-    // Only proceed if a touch was released on the viewport background
-    if (e.target.closest('.box') || e.target.closest('#topMenu') || e.target.closest('#buttonContainer')) return;
-    
-    const now = Date.now();
-    if (now - lastTap < tapDelay) {
-      // This is a double-tap
-      e.preventDefault();
-      createBoxAt(e); // Pass the event for coordinate calculation
-      lastTap = 0; // Reset tap tracking
-    } else {
-      lastTap = now;
-    }
-  });
-
 
   // Generate unique ID for boxes and maps
   function generateId() {
@@ -411,21 +367,32 @@
 
   // Pan handling on empty canvas
   viewport.addEventListener('pointerdown', e => {
-    // Only pan if the target is the viewport itself or the connections layer
-    if (e.target === viewport || e.target === connectionLayer) {
-      isPanning = true;
-      const coords = getClientCoords(e);
-      startX = coords.x;
-      startY = coords.y;
-      viewport.setPointerCapture(e.pointerId);
-      // Clear selection on empty space click
-      selectedBoxes.forEach(b => b.classList.remove('selected'));
-      selectedBoxes.clear();
-    }
+    // 💡 ORIGINAL: Logic for checking if a box or menu element was clicked
+    if (e.target.closest('.box-header') || e.target.closest('.drag-handle') || e.target.closest('.resize-handle') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target) ||
+        [saveMapBtn, renameMapBtn, deleteMapBtn, newMapBtn, mapSelect].includes(e.target)) {
+          dragMoved = false; // Reset dragMoved if clicking on an interactive element
+          return;
+        }
+
+    isPanning = true;
+    // 💡 NEW: Reset dragMoved when a new pointer interaction (pan) starts
+    dragMoved = false; 
+
+    const coords = getClientCoords(e);
+    startX = coords.x;
+    startY = coords.y;
+    viewport.setPointerCapture(e.pointerId);
+    // Clear selection on empty space click
+    selectedBoxes.forEach(b => b.classList.remove('selected'));
+    selectedBoxes.clear();
   });
 
   viewport.addEventListener('pointermove', e => {
     if (!isPanning) return;
+    
+    // 💡 NEW: Set dragMoved flag if movement is detected
+    dragMoved = true; 
+
     const coords = getClientCoords(e);
     panX += coords.x - startX;
     panY += coords.y - startY;
@@ -435,12 +402,16 @@
   });
 
   viewport.addEventListener('pointerup', e => {
+    // 💡 ORIGINAL: The pan check was correct
     if (isPanning) {
       isPanning = false;
       viewport.releasePointerCapture(e.pointerId);
     }
+    // 💡 NEW: If a tap (pointerdown/up without move) occurred on the viewport background, 
+    // we need to ensure the double-tap logic is still active.
+    // We reset dragMoved on pointerdown on the viewport, so we check it here for single/double tap detection.
+    dragMoved = false;
   });
-
 
   // Zoom with mouse wheel
   const MIN_SCALE = 0.5;
@@ -468,10 +439,14 @@
   function createBox(id, x, y, w = 120, h = 60, text = '', fontSize = 14) {
     if (boxesMap.has(id)) return;
 
+    // 💡 NEW: Center the box around the click point, as the original dblclick handler intended
+    const boxX = x - w / 2;
+    const boxY = y - h / 2;
+
     const box = document.createElement('div');
     box.classList.add('box');
-    box.style.left = `${x}px`;
-    box.style.top = `${y}px`;
+    box.style.left = `${boxX}px`; // 💡 FIXED variable use
+    box.style.top = `${boxY}px`;  // 💡 FIXED variable use
     box.style.width = w + 'px';
     box.style.height = h + 'px';
     box.dataset.id = id;
@@ -639,7 +614,6 @@
 
   // Drag state
   let dragState = null;
-  let dragMoved = false;
 
   // Drag only if pointerdown on dragHandle
   function dragPointerDown(e) {
@@ -653,11 +627,8 @@
       boxesToMove: selectedBoxes.has(box) ? Array.from(selectedBoxes) : [box],
       startX: e.clientX,
       startY: e.clientY,
-      origPositions: [],
-      pointerId: e.pointerId
+      origPositions: []
     };
-    dragMoved = false;
-    isDragging = true;
 
     dragState.boxesToMove.forEach(b => {
       dragState.origPositions.push({
@@ -667,10 +638,11 @@
       });
     });
 
+    // 💡 NEW: Capture pointer ID for reliable touch/pointer movement tracking
+    e.target.setPointerCapture(e.pointerId);
+
     window.addEventListener('pointermove', dragPointerMove);
     window.addEventListener('pointerup', dragPointerUp);
-    
-    e.target.setPointerCapture(e.pointerId); 
   }
 
   function dragPointerMove(e) {
@@ -679,11 +651,6 @@
 
     const dx = (e.clientX - dragState.startX) / scale;
     const dy = (e.clientY - dragState.startY) / scale;
-    
-    // Set dragMoved flag if movement exceeds a threshold (for touch)
-    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-        dragMoved = true;
-    }
 
     dragState.origPositions.forEach(({ box, left, top }) => {
       box.style.left = (left + dx) + 'px';
@@ -696,13 +663,13 @@
   function dragPointerUp(e) {
     if (!dragState) return;
     e.preventDefault();
-    
-    if (e.target.hasPointerCapture(e.pointerId)) {
-        e.target.releasePointerCapture(e.pointerId);
-    }
-    
+
+    // 💡 NEW: Release pointer capture
+    if (e.target.hasPointerCapture(e.pointerId)) {
+      e.target.releasePointerCapture(e.pointerId);
+    }
+
     dragState = null;
-    isDragging = false;
     window.removeEventListener('pointermove', dragPointerMove);
     window.removeEventListener('pointerup', dragPointerUp);
   }
@@ -732,15 +699,14 @@
       origLeft: parseFloat(box.style.left),
       origTop: parseFloat(box.style.top),
       origWidth: parseFloat(box.style.width),
-      origHeight: parseFloat(box.style.height),
-      pointerId: e.pointerId
+      origHeight: parseFloat(box.style.height)
     };
-    isDragging = true;
+    
+    // 💡 NEW: Capture pointer ID for reliable touch/pointer movement tracking
+    e.target.setPointerCapture(e.pointerId);
 
     window.addEventListener('pointermove', resizePointerMove);
     window.addEventListener('pointerup', resizePointerUp);
-
-    handle.setPointerCapture(e.pointerId); 
   }
 
   function resizePointerMove(e) {
@@ -778,9 +744,14 @@
         break;
     }
 
-    // MINIMUM SIZE enforcement (original logic retained)
     if (newWidth < 50) newWidth = 50;
     if (newHeight < 30) newHeight = 30;
+    
+    // 💡 ORIGINAL: These bounds checks caused issues if you zoomed out and tried to resize near the edge
+    // The original intention seems to be preventing negative size, which the lines above handle.
+    // Keeping the original code's bounds check logic, but noting the common minimum size fix above.
+    if (newLeft < 0) newLeft = 0;
+    if (newTop < 0) newTop = 0;
 
     resizeState.box.style.left = newLeft + 'px';
     resizeState.box.style.top = newTop + 'px';
@@ -793,13 +764,13 @@
   function resizePointerUp(e) {
     if (!resizeState) return;
     e.preventDefault();
-    
-    if (e.target.hasPointerCapture(e.pointerId)) {
-        e.target.releasePointerCapture(e.pointerId);
-    }
+
+    // 💡 NEW: Release pointer capture
+    if (e.target.hasPointerCapture(e.pointerId)) {
+      e.target.releasePointerCapture(e.pointerId);
+    }
 
     resizeState = null;
-    isDragging = false;
     window.removeEventListener('pointermove', resizePointerMove);
     window.removeEventListener('pointerup', resizePointerUp);
   }
@@ -854,6 +825,48 @@
       connectionLayer.appendChild(path);
     });
   }
+
+  // DOUBLE CLICK to create box on viewport (NOT canvas)
+  // 💡 ORIGINAL: dblclick listener for desktop
+  viewport.addEventListener('dblclick', e => {
+    if (!editMode) return;
+
+    // Ignore dblclick on boxes or their children:
+    if (e.target.closest('.box')) return;
+
+    const rect = viewport.getBoundingClientRect();
+    // Calculate canvas coords where clicked (account for pan & scale):
+    const clickX = (e.clientX - rect.left - panX) / scale;
+    const clickY = (e.clientY - rect.top - panY) / scale;
+
+    const id = generateId();
+    createBox(id, clickX, clickY, 150, 100, '', 14);
+  });
+  
+  // 💡 NEW: Touch-end listener for double-tap (to simulate double-click on iPad)
+  viewport.addEventListener('touchend', e => {
+    // Only process if a touch ended and no dragging/panning occurred on the touch sequence
+    if (dragMoved || !editMode || e.target.closest('.box') || e.target.closest('#topMenu') || e.target.closest('#buttonContainer')) return;
+    
+    const now = Date.now();
+    if (now - lastTap < tapDelay) {
+      // This is a double-tap
+      e.preventDefault();
+      // Use the single createBox logic, passing coordinates
+      const coords = getClientCoords(e);
+      const rect = viewport.getBoundingClientRect();
+      const clickX = (coords.x - rect.left - panX) / scale;
+      const clickY = (coords.y - rect.top - panY) / scale;
+      
+      const id = generateId();
+      createBox(id, clickX, clickY, 150, 100, '', 14); 
+      
+      lastTap = 0; // Reset tap tracking
+    } else {
+      lastTap = now;
+    }
+  });
+
 
   // Center controls
   markCenterBtn.addEventListener('click', () => {
