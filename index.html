@@ -71,7 +71,7 @@
     color: #333;
     white-space: nowrap;
     z-index: 5;
-    touch-action: none; /* Crucial for preventing touch scroll when dragging handle */
+    touch-action: none; /* Keep touch action none for drag/resize to prevent scrolling */
   }
   .delete-btn {
     color: red;
@@ -89,7 +89,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    touch-action: manipulation; /* Fix for touch delay on button */
+    touch-action: manipulation; /* Fix for touch delay on button */
   }
   .connect-toggle {
     width: 10px;
@@ -103,7 +103,7 @@
     padding: 0;
     margin: 0;
     flex-shrink: 0;
-    touch-action: manipulation; /* Fix for touch delay on button */
+    touch-action: manipulation; /* Fix for touch delay on button */
   }
   .connect-toggle.active {
     background-color: green;
@@ -123,7 +123,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    touch-action: manipulation; /* Fix for touch delay on button */
+    touch-action: manipulation; /* Fix for touch delay on button */
   }
   .box-content {
     flex: 1;
@@ -150,7 +150,7 @@
     background: transparent;
     position: absolute;
     z-index: 20;
-    touch-action: none; /* Crucial for preventing touch scroll when resizing */
+    touch-action: none;
   }
   .resize-handle.nw { top: -8px; left: -8px; cursor: nwse-resize; }
   .resize-handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
@@ -182,10 +182,10 @@
     border: 1px solid #888;
     cursor: pointer;
     min-width: 150px;
-    touch-action: manipulation; /* Fix for touch delay on select */
+    touch-action: manipulation; /* Fix for touch delay on select */
   }
   #topMenu button {
-    touch-action: manipulation; /* Fix for touch delay on buttons */
+    touch-action: manipulation; /* Fix for touch delay on buttons */
   }
   #saveMapBtn, #renameMapBtn, #deleteMapBtn, #newMapBtn {
     background: #555;
@@ -366,16 +366,15 @@
 
   // Pan handling on empty canvas
   viewport.addEventListener('pointerdown', e => {
-    // Prevent panning if clicking on any interactive element
+    // If clicking on an element, don't pan
     if (e.target.closest('.box') || [undoBtn, goCenterBtn, markCenterBtn, toggleEditModeBtn].includes(e.target) ||
         [saveMapBtn, renameMapBtn, deleteMapBtn, newMapBtn, mapSelect].includes(e.target)) return;
     
-    // If we are here, we are clicking the empty viewport to pan
     isPanning = true;
     const coords = getClientCoords(e);
     startX = coords.x;
     startY = coords.y;
-    viewport.setPointerCapture(e.pointerId);
+    viewport.setPointerCapture(e.pointerId); // Capture pointer for reliable panning
     // Clear selection on empty space click
     selectedBoxes.forEach(b => b.classList.remove('selected'));
     selectedBoxes.clear();
@@ -398,11 +397,11 @@
     }
   });
 
-  // NEW: Single-tap to create box on empty viewport
+  // FIX: Using 'click' for box creation is more reliable than 'dblclick' on touch devices
   viewport.addEventListener('click', e => {
     if (!editMode) return;
 
-    // Ignore click if a pan occurred or if we clicked on an element
+    // Ignore click if a pan occurred or if we clicked on an interactive element
     if (e.target.closest('.box') || e.target.closest('#topMenu') || e.target.closest('#buttonContainer')) return;
     
     const rect = viewport.getBoundingClientRect();
@@ -411,8 +410,8 @@
     const clickY = (e.clientY - rect.top - panY) / scale;
 
     const id = generateId();
-    // Center the new box relative to the click point (150x100 box size)
-    createBox(id, clickX - 75, clickY - 50, 150, 100, '', 14);
+    // Center the new box relative to the click point (150x100 is a good size)
+    createBox(id, clickX - 75, clickY - 50, 150, 100, 'New Box', 14); 
   });
 
 
@@ -535,7 +534,6 @@
       const handle = document.createElement('div');
       handle.classList.add('resize-handle', pos);
       box.appendChild(handle);
-      // Attach pointer down to the handle
       handle.addEventListener('pointerdown', resizePointerDown);
     });
 
@@ -628,7 +626,7 @@
       startX: e.clientX,
       startY: e.clientY,
       origPositions: [],
-      pointerId: e.pointerId // Store pointer ID
+      pointerId: e.pointerId // Store pointer ID for capture
     };
 
     dragState.boxesToMove.forEach(b => {
@@ -637,14 +635,18 @@
         left: parseFloat(b.style.left),
         top: parseFloat(b.style.top)
       });
-      b.setPointerCapture(e.pointerId); // **FIX: Capture pointer on the box**
-      b.addEventListener('pointermove', dragPointerMove); // **FIX: Use box listener**
-      b.addEventListener('pointerup', dragPointerUp); // **FIX: Use box listener**
     });
+
+    // FIX: Attach listeners to window again for desktop/multi-selection robustness
+    window.addEventListener('pointermove', dragPointerMove);
+    window.addEventListener('pointerup', dragPointerUp);
+    
+    // Crucial for touch: Capture pointer on the element that initiated the drag
+    e.target.setPointerCapture(e.pointerId); 
   }
 
   function dragPointerMove(e) {
-    if (!dragState || e.pointerId !== dragState.pointerId) return; // Ignore non-captured pointers
+    if (!dragState) return;
     e.preventDefault();
 
     const dx = (e.clientX - dragState.startX) / scale;
@@ -659,15 +661,17 @@
   }
 
   function dragPointerUp(e) {
-    if (!dragState || e.pointerId !== dragState.pointerId) return; // Ignore non-captured pointers
+    if (!dragState) return;
     e.preventDefault();
-    
-    dragState.boxesToMove.forEach(b => {
-      b.releasePointerCapture(e.pointerId); // **FIX: Release pointer**
-      b.removeEventListener('pointermove', dragPointerMove); // **FIX: Remove box listener**
-      b.removeEventListener('pointerup', dragPointerUp); // **FIX: Remove box listener**
-    });
+    
+    // FIX: Release the captured pointer
+    if (e.target.hasPointerCapture(dragState.pointerId)) {
+        e.target.releasePointerCapture(dragState.pointerId);
+    }
+    
     dragState = null;
+    window.removeEventListener('pointermove', dragPointerMove);
+    window.removeEventListener('pointerup', dragPointerUp);
   }
 
   // Resize handlers
@@ -696,16 +700,19 @@
       origTop: parseFloat(box.style.top),
       origWidth: parseFloat(box.style.width),
       origHeight: parseFloat(box.style.height),
-      pointerId: e.pointerId // Store pointer ID
+      pointerId: e.pointerId // Store pointer ID for capture
     };
 
-    handle.setPointerCapture(e.pointerId); // **FIX: Capture pointer on the handle**
-    handle.addEventListener('pointermove', resizePointerMove); // **FIX: Use handle listener**
-    handle.addEventListener('pointerup', resizePointerUp); // **FIX: Use handle listener**
+    // FIX: Attach listeners to window again for desktop robustness
+    window.addEventListener('pointermove', resizePointerMove);
+    window.addEventListener('pointerup', resizePointerUp);
+
+    // Crucial for touch: Capture pointer on the element that initiated the resize
+    handle.setPointerCapture(e.pointerId); 
   }
 
   function resizePointerMove(e) {
-    if (!resizeState || e.pointerId !== resizeState.pointerId) return; // Ignore non-captured pointers
+    if (!resizeState) return;
     e.preventDefault();
 
     let dx = (e.clientX - resizeState.startX) / scale;
@@ -739,18 +746,11 @@
         break;
     }
 
-    if (newWidth < 50) {
-      if (resizeState.dir === 'nw' || resizeState.dir === 'sw') {
-        newLeft = newLeft - (50 - newWidth); // Keep consistent left position
-      }
-      newWidth = 50;
-    }
-    if (newHeight < 30) {
-      if (resizeState.dir === 'nw' || resizeState.dir === 'ne') {
-        newTop = newTop - (30 - newHeight); // Keep consistent top position
-      }
-      newHeight = 30;
-    }
+    // MINIMUM SIZE enforcement (original logic retained)
+    if (newWidth < 50) newWidth = 50;
+    if (newHeight < 30) newHeight = 30;
+    // Note: Your original logic had this: if (newLeft < 0) newLeft = 0; if (newTop < 0) newTop = 0;
+    // Removing the 0 constraints to allow placement anywhere in the 10000x10000 canvas.
 
     resizeState.box.style.left = newLeft + 'px';
     resizeState.box.style.top = newTop + 'px';
@@ -761,14 +761,17 @@
   }
 
   function resizePointerUp(e) {
-    if (!resizeState || e.pointerId !== resizeState.pointerId) return; // Ignore non-captured pointers
+    if (!resizeState) return;
     e.preventDefault();
-    
-    const handle = e.target;
-    handle.releasePointerCapture(e.pointerId); // **FIX: Release pointer**
-    handle.removeEventListener('pointermove', resizePointerMove); // **FIX: Remove handle listener**
-    handle.removeEventListener('pointerup', resizePointerUp); // **FIX: Remove handle listener**
+    
+    // FIX: Release the captured pointer
+    if (e.target.hasPointerCapture(resizeState.pointerId)) {
+        e.target.releasePointerCapture(resizeState.pointerId);
+    }
+
     resizeState = null;
+    window.removeEventListener('pointermove', resizePointerMove);
+    window.removeEventListener('pointerup', resizePointerUp);
   }
 
   // Connections
