@@ -350,6 +350,17 @@ deleteMapBtn.addEventListener('click', async ()=>{
 
 loadMaps();
 updateTransform();
+// DOUBLE-CLICK TO CREATE BOX
+viewport.addEventListener('dblclick', e => {
+  if(!editMode) return;
+  // ignore double-clicks on boxes
+  if(e.target.closest('.box')) return;
+  const rect = viewport.getBoundingClientRect();
+  const x = (e.clientX - rect.left - panX) / scale;
+  const y = (e.clientY - rect.top - panY) / scale;
+  createBox(generateId(), x, y);
+});
+
 </script>
 </body>
 </html>
