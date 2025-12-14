@@ -195,15 +195,33 @@ function createBox(id,x,y,w=120,h=60,text='',fontSize=14){
   const dragHandle=document.createElement('div'); dragHandle.classList.add('drag-handle'); dragHandle.textContent='✥';
   header.appendChild(dragHandle);
   const connectToggle=document.createElement('button'); connectToggle.classList.add('connect-toggle');
-  connectToggle.addEventListener('click', e=>{
-    e.stopPropagation();
-    connectToggle.classList.toggle('active');
-    if(connectToggle.classList.contains('active')){
-      if(connectionStartBoxId&&connectionStartBoxId!==id){addConnection(connectionStartBoxId,id); clearConnectionSelection();}
-      else connectionStartBoxId=id;
-    } else{if(connectionStartBoxId===id)connectionStartBoxId=null;}
-    drawConnections();
-  });
+connectToggle.addEventListener('click', e=>{
+  e.stopPropagation();
+
+  // If starting a connection
+  if(!connectToggle.classList.contains('active')){
+    // Remove active from all toggles first
+    document.querySelectorAll('.connect-toggle').forEach(btn => btn.classList.remove('active'));
+    connectToggle.classList.add('active');
+
+    if(connectionStartBoxId && connectionStartBoxId !== id){
+      addConnection(connectionStartBoxId, id);
+      connectionStartBoxId = null;
+
+      // Remove active from all toggles after connection is made
+      document.querySelectorAll('.connect-toggle').forEach(btn => btn.classList.remove('active'));
+    } else {
+      connectionStartBoxId = id;
+    }
+  } else {
+    // Clicking again cancels the selection
+    connectToggle.classList.remove('active');
+    connectionStartBoxId = null;
+  }
+
+  drawConnections();
+});
+
   header.appendChild(connectToggle);
   const fontDecrease=document.createElement('button'); fontDecrease.classList.add('font-size-btn'); fontDecrease.textContent='−';
   fontDecrease.addEventListener('click', e=>{e.stopPropagation(); let s=parseInt(box.style.fontSize)||fontSize; s=Math.max(8,s-1); box.style.fontSize=s+'px';});
